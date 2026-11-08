@@ -7,7 +7,6 @@ using System.Text.Json;
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.Ai.Providers.Usage;
-using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.AI;
 using MeisterDev.ProPR.Runner.Contracts;
 using MeisterDev.ProPR.Runner.Execution;
@@ -90,27 +89,27 @@ public sealed class RelayChatClientTests
         Assert.True(sent.GetProperty("captureReasoning").GetBoolean());
     }
 
-    // The neutral reasoning request has no word for the effort none, so a pass that asks a model accepting it for
-    // no reasoning has to name the effort on the wire. The control plane then rebuilds it as the effort none for
-    // both OpenAI transports. A model without that capability is sent no effort, as before.
+    // A pass that asks for the level none names it on the wire when the levels of the model hold it, and the control
+    // plane rebuilds it as the effort none for both OpenAI transports. A model whose levels do not hold it is sent no
+    // level.
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task NoReasoning_TravelsAsTheEffortNoneOnlyForAModelThatAcceptsIt(bool supportsReasoningEffortNone)
+    public async Task NoReasoning_TravelsAsTheEffortNoneOnlyForAModelThatAcceptsIt(bool acceptsNone)
     {
         var handler = new CapturingHandler(HttpStatusCode.OK, Envelope(softCapReached: false));
         var client = Create(handler, new RunnerBudgetSignal());
         var options = new ChatOptions { MaxOutputTokens = 9000 }
-            .ApplyReasoning(false, ReviewReasoningEffort.None, supportsReasoningEffortNone);
+            .ApplyReasoning(false, "none", acceptsNone ? ["none", "low", "medium", "high"] : ["low", "medium", "high"]);
 
         await client.GetResponseAsync([new ChatMessage(ChatRole.User, "review this")], options);
 
         using var body = JsonDocument.Parse(handler.LastBody!);
         var wire = body.RootElement.GetProperty("options").Deserialize<RunnerChatOptions>(new JsonSerializerOptions(JsonSerializerDefaults.Web));
         Assert.NotNull(wire);
-        Assert.Equal(supportsReasoningEffortNone ? "none" : null, wire.ReasoningEffort);
+        Assert.Equal(acceptsNone ? "none" : null, wire.ReasoningEffort);
         var rebuilt = RunnerRelayedChatOptions.ToChatOptions(wire, captureReasoning: false);
-        Assert.Equal(supportsReasoningEffortNone ? ReasoningEffort.None : null, rebuilt!.Reasoning?.Effort);
+        Assert.Equal(acceptsNone ? ReasoningEffort.None : null, rebuilt!.Reasoning?.Effort);
     }
 
     [Fact]

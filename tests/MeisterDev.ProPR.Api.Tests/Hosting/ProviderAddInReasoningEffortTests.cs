@@ -7,10 +7,15 @@ using System.Text.Json;
 using MeisterDev.Ai.Providers.AddIns;
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Drivers;
+using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.Ai.Providers.Hosting;
 using MeisterDev.ProPR.Infrastructure.AI;
 using MeisterDev.ProPR.Runner.Contracts;
 using Microsoft.Extensions.AI;
+using OpenAI.Responses;
+
+// The Responses options of the OpenAI library are marked for evaluation only.
+#pragma warning disable OPENAI001
 
 namespace MeisterDev.ProPR.Api.Tests.Hosting;
 
@@ -35,8 +40,7 @@ public sealed class ProviderAddInReasoningEffortTests
         }
         """;
 
-    // For a model called through the Responses API, the effort reaches the request of the add-in through the reasoning
-    // setting that the host shares with every add-in.
+    // For a model called through the Responses API, a relayed effort reaches the request of the add-in.
     [Fact]
     public async Task ARelayedEffort_ReachesTheResponsesApiThroughTheBundledOpenAiAddIn()
     {
@@ -50,19 +54,37 @@ public sealed class ProviderAddInReasoningEffortTests
         Assert.Equal("high", sentEffort);
     }
 
-    // The OpenAI options that the host builds do not carry the effort into the add-in, which is why the effort is also
-    // stated in the shared setting.
+    // OpenAI options that the host builds are a foreign type for the add-in, which loads its own copy of the OpenAI
+    // library, so they do not carry the effort into the add-in. The add-in reads the neutral request instead.
     [Fact]
     public async Task TheOpenAiOptionsOfTheHostAlone_DoNotCarryTheEffortThroughTheBundledOpenAiAddIn()
     {
-        var options = RunnerRelayedChatOptions.ToChatOptions(
-            new RunnerChatOptions(ReasoningEffort: "high"),
-            captureReasoning: false,
-            usesResponsesApi: false);
+        var options = new ChatOptions
+        {
+            RawRepresentationFactory = _ => new CreateResponseOptions
+            {
+                ReasoningOptions = new ResponseReasoningOptions { ReasoningEffortLevel = ResponseReasoningEffortLevel.High },
+            },
+        };
 
         var sentEffort = await SendThroughTheBundledOpenAiAddInAsync(options);
 
         Assert.Null(sentEffort);
+    }
+
+    // The add-in reads the level by its name, so a level that the shared reasoning setting has no value for, such as
+    // max, reaches the Responses API.
+    [Fact]
+    public async Task ALevelByName_ReachesTheResponsesApiThroughTheBundledOpenAiAddIn()
+    {
+        var options = new ChatOptions
+        {
+            RawRepresentationFactory = _ => new ProviderReasoningRequest(ProviderReasoningEffort.High, false) { Level = "max" },
+        };
+
+        var sentEffort = await SendThroughTheBundledOpenAiAddInAsync(options);
+
+        Assert.Equal("max", sentEffort);
     }
 
     // Loads the bundled OpenAI add-in from the directory the build copies it to, in a load context of its own, and

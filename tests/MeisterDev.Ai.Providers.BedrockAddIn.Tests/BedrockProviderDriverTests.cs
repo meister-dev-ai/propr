@@ -270,6 +270,36 @@ public sealed class BedrockProviderDriverTests
         Assert.Contains("thinking", thinking.AsDictionary().Keys);
     }
 
+    // The levels xhigh and max think as ExtraHigh does, the highest effort this family maps, which the AWS adapter
+    // turns into a larger share of the output cap than High.
+    [Fact]
+    public async Task TheLevelsXhighAndMax_AskForMoreThinkingThanHigh()
+    {
+        var high = await ThinkingBudgetFor(new ProviderReasoningRequest(ProviderReasoningEffort.High, false) { Level = "high" });
+        var xhigh = await ThinkingBudgetFor(new ProviderReasoningRequest(ProviderReasoningEffort.High, false) { Level = "xhigh" });
+        var max = await ThinkingBudgetFor(new ProviderReasoningRequest(ProviderReasoningEffort.High, false) { Level = "max" });
+
+        Assert.True(xhigh > high, $"xhigh asked for a budget of {xhigh} tokens and high for {high}");
+        Assert.Equal(xhigh, max);
+    }
+
+    // The level minimal thinks as Low does, the lowest effort this family maps, whatever the neutral effort.
+    [Fact]
+    public async Task TheLevelMinimal_ThinksAsTheLevelLowDoes()
+    {
+        var minimal = await ThinkingBudgetFor(new ProviderReasoningRequest(ProviderReasoningEffort.Medium, false) { Level = "minimal" });
+        var low = await ThinkingBudgetFor(new ProviderReasoningRequest(ProviderReasoningEffort.Low, false) { Level = "low" });
+
+        Assert.NotNull(minimal);
+        Assert.Equal(low, minimal);
+    }
+
+    [Fact]
+    public async Task TheLevelNone_LeavesExtendedThinkingOffWhateverTheNeutralEffort()
+    {
+        Assert.Null(await ThinkingBudgetFor(new ProviderReasoningRequest(ProviderReasoningEffort.High, true) { Level = "none" }));
+    }
+
     // Caching is the model's property, not the provider's, and getting it wrong is not a missed optimisation: a
     // cache point sent to a model that cannot cache is a request Bedrock refuses outright.
     [Fact]
@@ -349,6 +379,29 @@ public sealed class BedrockProviderDriverTests
             .Select(call => call.GetArguments()[0])
             .OfType<ConverseRequest>()
             .Single();
+    }
+
+    // The thinking budget of the request a reasoning request produces under an output cap of 4000 tokens, or null when
+    // the request carries no extended thinking.
+    private static async Task<int?> ThinkingBudgetFor(ProviderReasoningRequest reasoning)
+    {
+        var runtime = Substitute.For<IAmazonBedrockRuntime>();
+        runtime.ConverseAsync(Arg.Any<ConverseRequest>(), Arg.Any<CancellationToken>()).Returns(TextAnswer("ok"));
+
+        using var client = Driver(runtime: runtime).CreateChatClient(Endpoint(), Model(), ProviderDeclaredProtocolModes.Auto);
+        await client.GetResponseAsync(
+            [new ChatMessage(ChatRole.User, "hello")],
+            new ChatOptions { MaxOutputTokens = 4000, RawRepresentationFactory = _ => reasoning });
+
+        var fields = runtime.ReceivedCalls()
+            .Select(call => call.GetArguments()[0])
+            .OfType<ConverseRequest>()
+            .Single()
+            .AdditionalModelRequestFields;
+
+        return fields.IsDictionary() && fields.AsDictionary().TryGetValue("thinking", out var thinking)
+            ? thinking.AsDictionary()["budget_tokens"].AsInt()
+            : null;
     }
 
     private static List<ChatMessage> Conversation(string userText)

@@ -15,7 +15,7 @@ public sealed record ResolvedLogicalModelChatRuntime(
     IResolvedAiChatRuntime Runtime,
     string RoleName,
     LogicalModelLayer Layer,
-    ReviewReasoningEffort ReasoningEffort);
+    string? ReasoningLevel);
 
 /// <summary>
 ///     The result of resolving a named logical model to an embedding runtime: the runtime plus the role name and the

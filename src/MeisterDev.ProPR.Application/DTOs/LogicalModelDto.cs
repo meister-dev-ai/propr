@@ -17,7 +17,7 @@ public sealed record LogicalModelDto(
     AiOperationKind Capability,
     Guid ConnectionId,
     Guid ConfiguredModelId,
-    ReviewReasoningEffort ReasoningEffort,
+    string? ReasoningLevel,
     string ProtocolMode)
 {
     /// <summary>

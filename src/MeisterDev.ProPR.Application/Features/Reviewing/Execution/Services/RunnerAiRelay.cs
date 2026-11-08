@@ -103,7 +103,7 @@ public sealed class RunnerAiRelay(
                 + "resolved to a configured connection.");
         }
 
-        var options = request.OptionsFor(new RunnerRelayResolution(capturesReasoning, model.UsesResponsesApi));
+        var options = request.OptionsFor(new RunnerRelayResolution(capturesReasoning, model.UsesResponsesApi, model.AcceptedLevels));
 
         // The call reports its usage under the review it belongs to. A stop the execution authority answers with
         // marks the review stopped, and the authorizer then refuses the runner's next call for it.

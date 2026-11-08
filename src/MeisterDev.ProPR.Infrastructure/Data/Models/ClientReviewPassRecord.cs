@@ -47,10 +47,10 @@ public sealed class ClientReviewPassRecord
     public bool Shadow { get; set; }
 
     /// <summary>
-    ///     Reasoning effort this pass asks the model to spend. <see langword="null" /> is the default and means
-    ///     <see cref="ReviewReasoningEffort.None" /> (no effort sent — current behavior).
+    ///     Reasoning level this pass asks the model for, by the provider's name. <see langword="null" /> leaves the pass to
+    ///     the level of its logical model and the default level of its configured model.
     /// </summary>
-    public ReviewReasoningEffort? ReasoningEffort { get; set; }
+    public string? ReasoningLevel { get; set; }
 
     public ClientRecord? Client { get; set; }
 }

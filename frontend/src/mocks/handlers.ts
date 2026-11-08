@@ -616,6 +616,7 @@ function buildMockClient(id: string, displayName = `Mocked Client ${id}`, overri
     reviewEveryIncrementEnabled: false,
     withholdOutOfScopeFindings: false,
     outputLanguage: 'en',
+    baselineReasoningLevel: null,
     // Client "3" (Umbrella) is intentionally uncapped to exercise the no-budget state; others carry caps.
     budgetConfig: id === '3'
       ? null
@@ -2107,8 +2108,8 @@ let aiConnectionsByClient: Record<string, any[]> = {
       discoveryMode: 'providerCatalog',
       isActive: true,
       configuredModels: [
-        { id: 'm-gpt4o', displayName: 'GPT-4o', remoteModelId: 'gpt-4o', supportsChat: true, supportsEmbedding: false, supportedProtocolModes: ['Auto', 'meisterdev/azureOpenAi:Responses'] },
-        { id: 'm-gpt4o-mini', displayName: 'GPT-4o mini', remoteModelId: 'gpt-4o-mini', supportsChat: true, supportsEmbedding: false, supportedProtocolModes: ['Auto', 'meisterdev/azureOpenAi:Responses'] },
+        { id: 'm-gpt4o', displayName: 'GPT-4o', remoteModelId: 'gpt-4o', supportsChat: true, supportsEmbedding: false, supportedProtocolModes: ['Auto', 'meisterdev/azureOpenAi:Responses'], reasoningLevels: ['none', 'low', 'medium', 'high'], reasoningLevelsSource: 'catalog', defaultReasoningLevel: 'none' },
+        { id: 'm-gpt4o-mini', displayName: 'GPT-4o mini', remoteModelId: 'gpt-4o-mini', supportsChat: true, supportsEmbedding: false, supportedProtocolModes: ['Auto', 'meisterdev/azureOpenAi:Responses'], reasoningLevels: ['low', 'medium', 'high'], reasoningLevelsSource: 'addIn', defaultReasoningLevel: null },
         { id: 'm-embed3', displayName: 'text-embedding-3-large', remoteModelId: 'text-embedding-3-large', supportsChat: false, supportsEmbedding: true, supportedProtocolModes: ['Auto', 'Embeddings'], tokenizerName: 'cl100k_base', maxInputTokens: 8192, embeddingDimensions: 3072 },
       ],
       purposeBindings: [],
@@ -2126,7 +2127,7 @@ let aiConnectionsByClient: Record<string, any[]> = {
       discoveryMode: 'providerCatalog',
       isActive: true,
       configuredModels: [
-        { id: 'm-opus', displayName: 'claude-opus-4-5', remoteModelId: 'claude-opus-4-5', supportsChat: true, supportsEmbedding: false, supportedProtocolModes: ['Auto', 'meisterdev/anthropic:AnthropicMessages'], supportsPromptCaching: true, supportsReasoning: true, inputCostPer1MUsd: 5, outputCostPer1MUsd: 25 },
+        { id: 'm-opus', displayName: 'claude-opus-4-5', remoteModelId: 'claude-opus-4-5', supportsChat: true, supportsEmbedding: false, supportedProtocolModes: ['Auto', 'meisterdev/anthropic:AnthropicMessages'], supportsPromptCaching: true, supportsReasoning: true, inputCostPer1MUsd: 5, outputCostPer1MUsd: 25, reasoningLevels: ['none', 'low', 'medium', 'high', 'xhigh', 'max'], reasoningLevelsSource: 'addIn', defaultReasoningLevel: null },
       ],
       purposeBindings: [],
       verification: { status: 'verified', summary: "Verified Anthropic connectivity for 'https://api.anthropic.com/v1'." },
@@ -2639,8 +2640,8 @@ let mockTenantConnections: any[] = [
     discoveryMode: 'manualOnly',
     isActive: false,
     configuredModels: [
-      { id: 'tc-gpt4o', displayName: 'GPT-4o', remoteModelId: 'gpt-4o', supportsChat: true, supportsEmbedding: false },
-      { id: 'tc-gpt4o-mini', displayName: 'GPT-4o mini', remoteModelId: 'gpt-4o-mini', supportsChat: true, supportsEmbedding: false },
+      { id: 'tc-gpt4o', displayName: 'GPT-4o', remoteModelId: 'gpt-4o', supportsChat: true, supportsEmbedding: false, reasoningLevels: ['none', 'low', 'medium', 'high'], reasoningLevelsSource: 'catalog', defaultReasoningLevel: null },
+      { id: 'tc-gpt4o-mini', displayName: 'GPT-4o mini', remoteModelId: 'gpt-4o-mini', supportsChat: true, supportsEmbedding: false, reasoningLevels: ['low', 'medium', 'high'], reasoningLevelsSource: 'addIn', defaultReasoningLevel: 'low' },
       { id: 'tc-embed3', displayName: 'text-embedding-3-large', remoteModelId: 'text-embedding-3-large', supportsChat: false, supportsEmbedding: true },
     ],
     purposeBindings: [],
@@ -2651,30 +2652,56 @@ let mockTenantConnections: any[] = [
 ]
 
 // The tenant-catalog logical models a tenant's clients inherit — each points at a tenant connection above.
-let mockTenantLogicalModels = [
-  { id: 'lm-deep', name: 'deep-review', capability: 'chat', connectionId: 'tc-azure', configuredModelId: 'tc-gpt4o', reasoningEffort: 'high', protocolMode: 'Auto', scope: 'tenant' },
-  { id: 'lm-fast', name: 'fast-triage', capability: 'chat', connectionId: 'tc-azure', configuredModelId: 'tc-gpt4o-mini', reasoningEffort: 'low', protocolMode: 'Auto', scope: 'tenant' },
-  { id: 'lm-embed', name: 'embed-default', capability: 'embedding', connectionId: 'tc-azure', configuredModelId: 'tc-embed3', reasoningEffort: 'none', protocolMode: 'Embeddings', scope: 'tenant' },
+let mockTenantLogicalModels: any[] = [
+  { id: 'lm-deep', name: 'deep-review', capability: 'chat', connectionId: 'tc-azure', configuredModelId: 'tc-gpt4o', reasoningLevel: 'high', protocolMode: 'Auto', scope: 'tenant' },
+  { id: 'lm-fast', name: 'fast-triage', capability: 'chat', connectionId: 'tc-azure', configuredModelId: 'tc-gpt4o-mini', reasoningLevel: null, protocolMode: 'Auto', scope: 'tenant' },
+  { id: 'lm-embed', name: 'embed-default', capability: 'embedding', connectionId: 'tc-azure', configuredModelId: 'tc-embed3', reasoningLevel: null, protocolMode: 'Embeddings', scope: 'tenant' },
 ]
 
-// A per-client override that shadows the tenant "deep-review" with a different reasoning effort.
-let mockClientLogicalOverrides = [
-  { id: 'ov-deep', name: 'deep-review', capability: 'chat', connectionId: 'ai-1', configuredModelId: 'm-gpt4o', reasoningEffort: 'medium', protocolMode: 'Auto', scope: 'client' },
+// A per-client override that shadows the tenant "deep-review" with a different reasoning level.
+let mockClientLogicalOverrides: any[] = [
+  { id: 'ov-deep', name: 'deep-review', capability: 'chat', connectionId: 'ai-1', configuredModelId: 'm-gpt4o', reasoningLevel: 'medium', protocolMode: 'Auto', scope: 'client' },
 ]
 
-// The client's purpose → logical-model map.
-let mockClientPurposeRoles: Record<string, string> = {
-  reviewTriage: 'fast-triage',
-  embeddingDefault: 'embed-default',
+// The client's purpose → logical-model map, with the reasoning level of each assignment.
+let mockClientPurposeRoles: Record<string, { logicalModelName: string; reasoningLevel: string | null }> = {
+  reviewTriage: { logicalModelName: 'fast-triage', reasoningLevel: 'medium' },
+  embeddingDefault: { logicalModelName: 'embed-default', reasoningLevel: null },
 }
 
-// The client's effective logical models: its overrides plus the tenant-catalog entries an override does not shadow.
+// The configured model a logical model points at, looked up on the client's and the tenant's connections.
+function referencedModelOf(entry: any): any {
+  const connections = [...Object.values(aiConnectionsByClient).flat(), ...mockTenantConnections]
+  const connection = connections.find((candidate) => candidate.id === entry.connectionId)
+  const model = connection?.configuredModels?.find((candidate: any) => candidate.id === entry.configuredModelId)
+  if (!connection || !model) {
+    return { availability: 'unavailable' }
+  }
+
+  return {
+    availability: 'available',
+    remoteModelId: model.remoteModelId,
+    connectionDisplayName: connection.displayName,
+    operationKinds: model.supportsEmbedding ? ['embedding'] : ['chat'],
+    supportedProtocolModes: model.supportedProtocolModes ?? ['Auto'],
+    tokenizerName: model.tokenizerName ?? null,
+    maxInputTokens: model.maxInputTokens ?? null,
+    embeddingDimensions: model.embeddingDimensions ?? null,
+    isActive: connection.isActive,
+    verificationStatus: connection.verification?.status,
+    reasoningLevels: model.reasoningLevels ?? null,
+    defaultReasoningLevel: model.defaultReasoningLevel ?? null,
+  }
+}
+
+// The client's effective logical models: its overrides plus the tenant-catalog entries an override does not shadow,
+// each with the model it points at.
 function effectiveLogicalModels(): unknown[] {
   const overrideNames = new Set(mockClientLogicalOverrides.map((entry) => entry.name))
   return [
     ...mockClientLogicalOverrides,
     ...mockTenantLogicalModels.filter((entry) => !overrideNames.has(entry.name)),
-  ]
+  ].map((entry) => ({ ...entry, referencedModel: referencedModelOf(entry) }))
 }
 
 function logicalModelFromBody(body: any, scope: string): any {
@@ -2684,7 +2711,7 @@ function logicalModelFromBody(body: any, scope: string): any {
     capability: body.capability ?? 'chat',
     connectionId: body.connectionId ?? '',
     configuredModelId: body.configuredModelId ?? '',
-    reasoningEffort: body.reasoningEffort ?? 'none',
+    reasoningLevel: body.reasoningLevel || null,
     protocolMode: body.protocolMode ?? 'Auto',
     scope,
   }
@@ -2696,7 +2723,8 @@ function updatedMapping(entry: any, body: any): any {
     capability: body.capability ?? entry.capability,
     connectionId: body.connectionId ?? entry.connectionId,
     configuredModelId: body.configuredModelId ?? entry.configuredModelId,
-    reasoningEffort: body.reasoningEffort ?? entry.reasoningEffort,
+    // The request states the whole mapping, so a missing level clears the stored one.
+    reasoningLevel: body.reasoningLevel || null,
     protocolMode: body.protocolMode ?? entry.protocolMode,
   }
 }
@@ -3399,6 +3427,10 @@ export const handlers = [
     await delay(300)
     const id = String(params.id)
     const body = await request.json() as any
+    // An empty baseline level clears the stored one, which the API then reports as null.
+    if (body.baselineReasoningLevel === '') {
+      body.baselineReasoningLevel = null
+    }
     patchedClientFields[id] = { ...(patchedClientFields[id] ?? {}), ...body }
     return HttpResponse.json(buildMockClient(id, body.displayName ?? `Mocked Client ${id}`, body))
   }),
@@ -4006,7 +4038,7 @@ export const handlers = [
   http.get(`${base}/clients/:clientId/logical-models/purposes`, async () => {
     await delay(150)
     return HttpResponse.json(
-      Object.entries(mockClientPurposeRoles).map(([purpose, logicalModelName]) => ({ purpose, logicalModelName })),
+      Object.entries(mockClientPurposeRoles).map(([purpose, assignment]) => ({ purpose, ...assignment })),
     )
   }),
 
@@ -4014,7 +4046,26 @@ export const handlers = [
     await delay(200)
     const purpose = String(params.purpose)
     const body = await request.json() as any
-    mockClientPurposeRoles = { ...mockClientPurposeRoles, [purpose]: body.logicalModelName }
+    const level = body.reasoningLevel || null
+    // The API refuses a level the model behind the logical model does not accept.
+    const entry = (effectiveLogicalModels() as any[]).find((candidate) => candidate.name === body.logicalModelName)
+    const accepted: string[] | null = entry?.referencedModel?.reasoningLevels ?? null
+    if (level && accepted && !accepted.includes(level)) {
+      return HttpResponse.json(
+        {
+          title: 'One or more validation errors occurred.',
+          status: 400,
+          errors: {
+            reasoningLevel: [
+              `The model '${entry.referencedModel.remoteModelId}' does not accept the reasoning level '${level}'. It accepts ${accepted.join(', ')}.`,
+            ],
+          },
+        },
+        { status: 400 },
+      )
+    }
+
+    mockClientPurposeRoles = { ...mockClientPurposeRoles, [purpose]: { logicalModelName: body.logicalModelName, reasoningLevel: level } }
     return new HttpResponse(null, { status: 204 })
   }),
 

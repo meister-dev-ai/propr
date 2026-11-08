@@ -5,7 +5,6 @@ using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Infrastructure.Data;
-using MeisterDev.ProPR.Infrastructure.Data.Models;
 using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess.Persistence;
 using MeisterDev.ProPR.Infrastructure.Repositories;
 using MeisterDev.ProPR.TestSupport;
@@ -401,6 +400,9 @@ public sealed class ProvisionedUserServicePostgresTests(PostgresContainerFixture
              """);
     }
 
+    // The rows are written with SQL and name only columns that exist at the migration the test database is created at.
+    // The current model maps columns that later migrations add to these tables, so an insert through the model fails on
+    // such a database.
     private static async Task<(Guid TenantId, Guid ClientId)> InsertTenantWithClientAsync(MeisterProPRDbContext context)
     {
         var tenantId = Guid.NewGuid();
@@ -411,16 +413,11 @@ public sealed class ProvisionedUserServicePostgresTests(PostgresContainerFixture
              INSERT INTO tenants (id, slug, display_name, is_active, created_at, updated_at)
              VALUES ({tenantId}, {tenantId.ToString("N")}, 'Customer organization', true, {now}, {now});
              """);
-        context.Clients.Add(
-            new ClientRecord
-            {
-                Id = clientId,
-                TenantId = tenantId,
-                DisplayName = "Workspace",
-                IsActive = true,
-                CreatedAt = now,
-            });
-        await context.SaveChangesAsync();
+        await context.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+             INSERT INTO clients (id, tenant_id, display_name, is_active, created_at)
+             VALUES ({clientId}, {tenantId}, 'Workspace', true, {now});
+             """);
         return (tenantId, clientId);
     }
 

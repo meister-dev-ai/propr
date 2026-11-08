@@ -9,12 +9,15 @@ namespace MeisterDev.ProPR.Application.DTOs;
 /// <summary>
 ///     One configured or discovered model that belongs to an AI connection profile.
 /// </summary>
-/// <param name="SupportsReasoningEffortNone">
-///     Whether ProPR sends the reasoning effort <c>none</c> to this model. For a review pass, an evidence judge call
-///     or a contradiction check with the effort None, ProPR sends <c>none</c> to a model with this flag and leaves
-///     the effort out for any other model, which then uses its own default. An operator sets the flag when the
-///     provider documents the effort <c>none</c> for the model, because some reasoning models refuse it.
+/// <param name="DefaultReasoningLevel">
+///     The level ProPR sends to this model for a call that no other place chooses a level for, or null to leave the
+///     choice to the provider's own default. It is one of <paramref name="ReasoningLevels" />.
 /// </param>
+/// <param name="ReasoningLevels">
+///     The reasoning levels the model accepts, by the provider's names and from the lowest to the highest effort. An
+///     empty list means that the model accepts no level; null means that no source knows the levels yet.
+/// </param>
+/// <param name="ReasoningLevelsSource">Where <paramref name="ReasoningLevels" /> come from, or null when no source knows them.</param>
 public sealed record AiConfiguredModelDto(
     Guid Id,
     string RemoteModelId,
@@ -36,7 +39,9 @@ public sealed record AiConfiguredModelDto(
     bool SupportsReasoning = false,
     bool SupportsPromptCaching = false,
     string? ReasoningContentField = null,
-    bool SupportsReasoningEffortNone = false)
+    string? DefaultReasoningLevel = null,
+    IReadOnlyList<string>? ReasoningLevels = null,
+    AiReasoningLevelSource? ReasoningLevelsSource = null)
 {
     /// <summary>Returns <see langword="true" /> when the model supports chat workloads.</summary>
     public bool SupportsChat => this.OperationKinds.Contains(AiOperationKind.Chat);

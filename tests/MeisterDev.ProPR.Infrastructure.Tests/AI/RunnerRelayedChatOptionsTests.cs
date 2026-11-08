@@ -115,15 +115,22 @@ public sealed class RunnerRelayedChatOptionsTests
         Assert.True(request.CaptureReasoning);
     }
 
-    // A newer runner naming a level this build does not know still gets its completion, at the provider's
-    // default effort, and keeps its temperature, because no effort was applied.
+    // A newer runner can name a level that the resolved model does not list and that has no place in the shared order
+    // of levels. The completion still runs, at the provider's default effort, and keeps its temperature, because the
+    // request names no level.
     [Fact]
-    public void AnUnknownEffort_FallsBackToTheProviderDefault()
+    public void ALevelTheModelDoesNotList_FallsBackToTheProviderDefault()
     {
-        var options = RunnerRelayedChatOptions.ToChatOptions(new RunnerChatOptions(Temperature: 0.4f, ReasoningEffort: "galactic"));
+        var options = RunnerRelayedChatOptions.ToChatOptions(
+            new RunnerChatOptions(Temperature: 0.4f, ReasoningEffort: "galactic"),
+            acceptedLevels: ["low", "medium", "high"]);
 
         Assert.Equal(0.4f, options!.Temperature);
-        Assert.Null(options.RawRepresentationFactory);
+        Assert.Null(options.Reasoning);
+#pragma warning disable OPENAI001 // Responses reasoning options are an evaluation-stage API surface.
+        var createOptions = Assert.IsType<CreateResponseOptions>(options.RawRepresentationFactory!(null!));
+        Assert.Null(createOptions.ReasoningOptions);
+#pragma warning restore OPENAI001
     }
 
     private sealed class FakeNativeClient : INativeProtocolChatClient

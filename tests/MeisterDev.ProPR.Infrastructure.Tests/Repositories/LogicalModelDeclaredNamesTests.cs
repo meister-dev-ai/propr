@@ -63,11 +63,11 @@ public sealed class LogicalModelDeclaredNamesTests
             await repository.UpdateTenantEntryAsync(
                 this._tenantId,
                 read.Name,
-                read with { ReasoningEffort = ReviewReasoningEffort.High },
+                read with { ReasoningLevel = "high" },
                 default));
 
         var stored = await ReadStoredTenantEntryAsync(db, this._tenantId);
-        Assert.Equal(ReviewReasoningEffort.High, stored.ReasoningEffort);
+        Assert.Equal("high", stored.ReasoningLevel);
         Assert.Equal(DeclaredProtocolMode, stored.ProtocolMode);
     }
 
@@ -88,7 +88,7 @@ public sealed class LogicalModelDeclaredNamesTests
             await repository.UpdateTenantEntryAsync(
                 this._tenantId,
                 read.Name,
-                read with { ReasoningEffort = ReviewReasoningEffort.High },
+                read with { ReasoningLevel = "high" },
                 default));
 
         var stored = await ReadStoredTenantEntryAsync(db, this._tenantId);
@@ -210,7 +210,7 @@ public sealed class LogicalModelDeclaredNamesTests
             AiOperationKind.Chat,
             this._connectionId,
             this._configuredModelId,
-            ReviewReasoningEffort.None,
+            null,
             protocolMode);
     }
 
@@ -243,7 +243,7 @@ public sealed class LogicalModelDeclaredNamesTests
                     Capability = AiOperationKind.Chat,
                     ConnectionId = this._connectionId,
                     ConfiguredModelId = this._configuredModelId,
-                    ReasoningEffort = ReviewReasoningEffort.None,
+                    ReasoningLevel = null,
                     ProtocolMode = storedProtocolMode,
                     CreatedAt = now,
                     UpdatedAt = now,

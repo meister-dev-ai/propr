@@ -1599,7 +1599,7 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
                         supportsReasoning = true,
                         supportsPromptCaching = true,
                         reasoningContentField = "reasoning_content",
-                        supportsReasoningEffortNone = true,
+                        defaultReasoningLevel = "none",
                     },
                     BuildConfiguredModel("text-embedding-3-large", true),
                 },
@@ -1617,7 +1617,7 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
         Assert.True(model.SupportsReasoning);
         Assert.True(model.SupportsPromptCaching);
         Assert.Equal("reasoning_content", model.ReasoningContentField);
-        Assert.True(model.SupportsReasoningEffortNone);
+        Assert.Equal("none", model.DefaultReasoningLevel);
     }
 
     // An update that names no models restates the stored ones from the response shape. Anything the restatement
@@ -1651,7 +1651,7 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
                         cacheWriteCostPer1MUsd = 0.25m,
                         supportsReasoning = true,
                         reasoningContentField = "reasoning_content",
-                        supportsReasoningEffortNone = true,
+                        defaultReasoningLevel = "none",
                     },
                     BuildConfiguredModel("text-embedding-3-large", true),
                 },
@@ -1673,7 +1673,117 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
         Assert.Equal(0.25m, model.CacheWriteCostPer1MUsd);
         Assert.True(model.SupportsReasoning);
         Assert.Equal("reasoning_content", model.ReasoningContentField);
-        Assert.True(model.SupportsReasoningEffortNone);
+        Assert.Equal("none", model.DefaultReasoningLevel);
+    }
+
+    // A model saved without levels gets the levels its provider family reports, so an operator enters nothing for a
+    // model the family knows.
+    [Fact]
+    public async Task CreateAiConnection_FillsTheReasoningLevels_OfAModelThatStatesNone()
+    {
+        var created = await this.CreateOpenAiConnectionAsync(BuildConfiguredModel("gpt-6.1-terra"));
+
+        var model = Assert.Single(created.ConfiguredModels);
+        Assert.Equal(["none", "low", "medium", "high", "xhigh", "max"], model.ReasoningLevels);
+        Assert.Equal(AiReasoningLevelSource.AddIn, model.ReasoningLevelsSource);
+    }
+
+    [Fact]
+    public async Task CreateAiConnection_KeepsTheReasoningLevelsAModelStates_AsEnteredByAnOperator()
+    {
+        var created = await this.CreateOpenAiConnectionAsync(ChatModelWith("gpt-6.1-terra", reasoningLevels: ["High", "low"]));
+
+        var model = Assert.Single(created.ConfiguredModels);
+        Assert.Equal(["low", "high"], model.ReasoningLevels);
+        Assert.Equal(AiReasoningLevelSource.Operator, model.ReasoningLevelsSource);
+    }
+
+    // The hosted platform edits a connection by sending back the saved fields of each model, and an older client
+    // sends no levels at all. Both keep the stored levels.
+    [Fact]
+    public async Task UpdateAiConnection_WithAModelThatStatesNoLevels_KeepsItsStoredLevels()
+    {
+        var created = await this.CreateOpenAiConnectionAsync(ChatModelWith("gpt-6.1-terra", reasoningLevels: ["high"]));
+        var client = this.CreateAuthorizedClient();
+
+        var response = await client.PatchAsJsonAsync(
+            $"/clients/{ClientId}/ai-connections/{created.Id}",
+            new { configuredModels = new[] { BuildConfiguredModel("gpt-6.1-terra") }, purposeBindings = Array.Empty<object>() });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var model = Assert.Single((await response.Content.ReadFromJsonAsync<AiConnectionDto>(ApiJsonOptions))!.ConfiguredModels);
+        Assert.Equal(["high"], model.ReasoningLevels);
+        Assert.Equal(AiReasoningLevelSource.Operator, model.ReasoningLevelsSource);
+    }
+
+    [Fact]
+    public async Task UpdateAiConnection_ReplacesTheLevelsWithDetectedOnes_WhenAModelAsksToDetectThemAgain()
+    {
+        var created = await this.CreateOpenAiConnectionAsync(ChatModelWith("gpt-6.1-terra", reasoningLevels: ["high"]));
+        var client = this.CreateAuthorizedClient();
+
+        var response = await client.PatchAsJsonAsync(
+            $"/clients/{ClientId}/ai-connections/{created.Id}",
+            new
+            {
+                configuredModels = new[] { ChatModelWith("gpt-6.1-terra", reasoningLevels: ["high"], detectReasoningLevels: true) },
+                purposeBindings = Array.Empty<object>(),
+            });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var model = Assert.Single((await response.Content.ReadFromJsonAsync<AiConnectionDto>(ApiJsonOptions))!.ConfiguredModels);
+        Assert.Equal(["none", "low", "medium", "high", "xhigh", "max"], model.ReasoningLevels);
+        Assert.Equal(AiReasoningLevelSource.AddIn, model.ReasoningLevelsSource);
+    }
+
+    [Fact]
+    public async Task CreateAiConnection_RefusesAReasoningLevelThatIsNotALevelName()
+    {
+        var client = this.CreateAuthorizedClient();
+
+        var response = await client.PostAsJsonAsync(
+            $"/clients/{ClientId}/ai-connections",
+            OpenAiConnectionPayload(ChatModelWith("gpt-6.1-terra", reasoningLevels: ["low", "very high"])));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("'very high'", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+    }
+
+    private async Task<AiConnectionDto> CreateOpenAiConnectionAsync(object model)
+    {
+        var response = await this.CreateAuthorizedClient().PostAsJsonAsync($"/clients/{ClientId}/ai-connections", OpenAiConnectionPayload(model));
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<AiConnectionDto>(ApiJsonOptions))!;
+    }
+
+    private static object OpenAiConnectionPayload(object model)
+    {
+        return new
+        {
+            displayName = "OpenAI levels",
+            providerKind = "meisterdev/openAi",
+            baseUrl = "https://api.openai.com/v1",
+            auth = new { mode = "apiKey", apiKey = "secret" },
+            discoveryMode = "manualOnly",
+            configuredModels = new[] { model },
+            purposeBindings = Array.Empty<object>(),
+        };
+    }
+
+    private static object ChatModelWith(string remoteModelId, string[] reasoningLevels, bool detectReasoningLevels = false)
+    {
+        return new
+        {
+            remoteModelId,
+            displayName = remoteModelId,
+            operationKinds = new[] { "chat" },
+            supportedProtocolModes = new[] { "Auto" },
+            supportsStructuredOutput = true,
+            supportsToolUse = true,
+            source = "manual",
+            reasoningLevels,
+            detectReasoningLevels,
+        };
     }
 
     // A client that selects its models through logical models binds no purpose to the connection itself, so its

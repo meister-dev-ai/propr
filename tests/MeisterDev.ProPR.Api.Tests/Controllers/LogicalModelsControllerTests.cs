@@ -296,7 +296,7 @@ public sealed class LogicalModelsControllerTests
         var result = await controller.SetPurposeRole(ClientId, AiPurpose.ReviewTriage, new SetPurposeRoleRequest("triage-role"), default);
 
         Assert.IsType<NoContentResult>(result);
-        await catalog.Received(1).SetPurposeRoleAsync(ClientId, AiPurpose.ReviewTriage, "triage-role", Arg.Any<CancellationToken>());
+        await catalog.Received(1).SetPurposeRoleAsync(ClientId, AiPurpose.ReviewTriage, "triage-role", null, Arg.Any<CancellationToken>());
     }
 
     // ---- TenantLogicalModelsController ----
@@ -623,8 +623,7 @@ public sealed class LogicalModelsControllerTests
 
     private static LogicalModelDto Dto(string name)
     {
-        return new LogicalModelDto(
-            Guid.NewGuid(), name, AiOperationKind.Chat, Guid.NewGuid(), Guid.NewGuid(), ReviewReasoningEffort.None, ProviderDeclaredProtocolModes.Auto);
+        return new LogicalModelDto(Guid.NewGuid(), name, AiOperationKind.Chat, Guid.NewGuid(), Guid.NewGuid(), null, ProviderDeclaredProtocolModes.Auto);
     }
 
     private static ClientLogicalModelsController ClientController(

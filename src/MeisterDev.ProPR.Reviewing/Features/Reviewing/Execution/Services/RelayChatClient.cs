@@ -36,20 +36,22 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Services;
 /// <param name="call">The job and lease generation every relayed call is authorized against.</param>
 /// <param name="logicalModelName">The named model role the control plane resolves to a connection.</param>
 /// <param name="relay">The control-plane relay that performs the completion.</param>
-/// <param name="reasoningEffort">
-///     How hard the model is asked to reason on this job. Stated separately from the options the pass
-///     builds, because the reasoning request is rebuilt for every completion out of the job's
-///     reasoning-capture decision, and the effort has to survive that rebuild.
+/// <param name="reasoningLevel">
+///     The level a call runs at when the pass states none, from the logical model of the binding or the default level
+///     of its configured model. A call that carries a reasoning request of the pipeline keeps the level that request
+///     names, because the pass chose it.
 /// </param>
+/// <param name="acceptedLevels">The levels the model of the binding accepts, or null when no source knows them.</param>
 /// <param name="idempotencyKeyFactory">Names each attempt, so a retry is answered instead of recharged.</param>
 /// <param name="logger">Reports a provider request dropped because the tenant keeps no reasoning.</param>
 public sealed partial class RelayChatClient(
     RunnerCallContext call,
     string logicalModelName,
     IRunnerAiRelay relay,
-    ReviewReasoningEffort reasoningEffort,
+    string? reasoningLevel,
     Func<string>? idempotencyKeyFactory = null,
-    ILogger<RelayChatClient>? logger = null) : IChatClient
+    ILogger<RelayChatClient>? logger = null,
+    IReadOnlyList<string>? acceptedLevels = null) : IChatClient
 {
     private readonly Func<string> _newKey = idempotencyKeyFactory ?? (() => Guid.NewGuid().ToString("N"));
 
@@ -68,7 +70,7 @@ public sealed partial class RelayChatClient(
             new RunnerRelayRequest(
                 logicalModelName,
                 [.. messages],
-                resolution => this.ApplyReasoningCapture(options, resolution.CapturesReasoning, resolution.UsesResponsesApi),
+                resolution => this.ApplyReasoningCapture(options, resolution.CapturesReasoning, resolution.UsesResponsesApi, resolution.AcceptedLevels),
                 this._newKey()),
             cancellationToken);
 
@@ -135,9 +137,15 @@ public sealed partial class RelayChatClient(
     // Every shaping here is applied to a copy. The caller owns the instance it passed and may send it again,
     // to this client or to another, and may be sending it concurrently; a factory cleared or a request
     // written on that instance would reach calls this decision does not govern.
-    private ChatOptions? ApplyReasoningCapture(ChatOptions? options, bool capturesReasoning, bool usesResponsesApi)
+    private ChatOptions? ApplyReasoningCapture(
+        ChatOptions? options,
+        bool capturesReasoning,
+        bool usesResponsesApi,
+        IReadOnlyList<string>? resolvedLevels)
     {
-        var asksForSomething = capturesReasoning || reasoningEffort != ReviewReasoningEffort.None;
+        // The level the pass chose wins; a call without a reasoning request of the pipeline runs at the binding's level.
+        var level = options?.CarriesAReasoningRequest() == true ? options.ShapedReasoningLevel() : reasoningLevel;
+        var asksForSomething = capturesReasoning || level is not null;
 
         // Nothing to ask for and no reasoning request of this pipeline's to replace: the call reaches the
         // provider shaped as the pass shaped it, apart from a provider request this side cannot read.
@@ -160,13 +168,13 @@ public sealed partial class RelayChatClient(
 
         // The options argument is nullable by contract, and a call that sent none is governed by the tenant's
         // answer like any other, so the request is built for it here. A provider request the pipeline did not
-        // shape is replaced, because the resolved answer is what reaches the provider. A pass that asked a model
-        // accepting the effort none for no reasoning keeps that effort, as it does over the HTTP binding.
-        var statesNone = reasoningEffort == ReviewReasoningEffort.None
-                         && options?.CarriesAReasoningRequest() == true
-                         && options.Reasoning?.Effort == ReasoningEffort.None;
-
-        return (options?.Clone() ?? new ChatOptions()).ApplyResolvedReasoning(capturesReasoning, reasoningEffort, statesNone, usesResponsesApi);
+        // shape is replaced, because the resolved answer is what reaches the provider.
+        // The relay resolved the model on the control plane, and its list there is the one the provider is held to.
+        return (options?.Clone() ?? new ChatOptions()).ApplyResolvedReasoning(
+            capturesReasoning,
+            level,
+            resolvedLevels ?? acceptedLevels,
+            usesResponsesApi);
     }
 
     [LoggerMessage(

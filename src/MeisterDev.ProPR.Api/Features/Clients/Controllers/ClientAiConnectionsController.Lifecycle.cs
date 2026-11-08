@@ -75,6 +75,11 @@ public sealed partial class ClientAiConnectionsController
         }
 
         write = await this.FillEmbeddingDefaultsAsync(clientId, write, ct);
+        write = await this.FillReasoningLevelsAsync(clientId, write, existing.ConfiguredModels, request.ConfiguredModels, ct);
+        if (!this.ModelState.IsValid)
+        {
+            return this.ValidationProblem();
+        }
 
         try
         {

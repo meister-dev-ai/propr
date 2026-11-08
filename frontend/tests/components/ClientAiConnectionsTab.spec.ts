@@ -282,7 +282,7 @@ describe('ClientAiConnectionsTab', () => {
             supportsToolUse: true,
             supportsReasoning: false,
             supportsPromptCaching: false,
-            supportsReasoningEffortNone: false,
+            defaultReasoningLevel: null,
             source: 'manual',
           },
           {
@@ -298,7 +298,6 @@ describe('ClientAiConnectionsTab', () => {
             supportsToolUse: false,
             supportsReasoning: false,
             supportsPromptCaching: false,
-            supportsReasoningEffortNone: false,
             source: 'manual',
           },
         ],
@@ -374,5 +373,46 @@ describe('ClientAiConnectionsTab', () => {
 
     expect(mockVerifyAiConnection).toHaveBeenCalledWith('client-1', 'conn-1')
     expect(mockActivateAiConnection).toHaveBeenCalledWith('client-1', 'conn-1')
+  })
+
+  // The save refuses a default level that the levels of the model do not hold, so removing that level clears it.
+  it('clears the default level of a model when its level is removed', async () => {
+    mockListAiConnections.mockResolvedValue([
+      {
+        ...sampleProfile,
+        configuredModels: [
+          {
+            ...sampleProfile.configuredModels[0],
+            reasoningLevels: ['low', 'medium', 'high'],
+            reasoningLevelsSource: 'addIn',
+            defaultReasoningLevel: 'high',
+          },
+        ],
+      },
+    ])
+
+    const { default: ClientAiConnectionsTab } = await import('@/features/clients/components/ClientAiConnectionsTab.vue')
+    const wrapper = mount(ClientAiConnectionsTab, { props: { clientId: 'client-1' } })
+    await flushPromises()
+
+    await wrapper.find('.ai-profile-card').trigger('click')
+    await flushPromises()
+    await wrapper.find('.ai-model-row').findAll('button').find((button) => button.text() === 'Edit')!.trigger('click')
+
+    const defaultLevel = () => wrapper.find<HTMLSelectElement>('[data-testid="ai-model-default-level-0"]').element.value
+    expect(defaultLevel()).toBe('high')
+
+    await wrapper.find('[data-testid="ai-model-reasoning-levels-0-remove-high"]').trigger('click')
+    expect(defaultLevel()).toBe('')
+
+    await wrapper.find('[data-testid="ai-save-profile"]').trigger('click')
+    await flushPromises()
+
+    const [, , request] = mockUpdateAiConnection.mock.calls[0]
+    expect(request.configuredModels[0]).toMatchObject({
+      reasoningLevels: ['low', 'medium'],
+      reasoningLevelsSource: 'operator',
+      defaultReasoningLevel: null,
+    })
   })
 })

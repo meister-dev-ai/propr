@@ -317,7 +317,8 @@ public sealed class ModelCatalogRepository(MeisterProPRDbContext db, TimeProvide
             FirstStated(clientRow?.CacheWriteCostPer1MUsd, tenantRow?.CacheWriteCostPer1MUsd, global?.CacheWriteCostPer1MUsd).Value,
             baseRow.OpenWeights,
             baseRow.ReleaseDate,
-            layer);
+            layer,
+            baseRow.ReasoningLevels);
     }
 
     // A null in an override means "inherit", not "free", so the first STATED value wins and the layer that

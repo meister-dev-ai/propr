@@ -93,6 +93,30 @@ public interface ILogicalModelCatalogRepository
     /// <summary>Returns every purpose → logical-model-name mapping for the client.</summary>
     Task<IReadOnlyDictionary<AiPurpose, string>> GetPurposeRolesAsync(Guid clientId, CancellationToken ct);
 
+    /// <summary>
+    ///     Returns the reasoning level the client's assignment of <paramref name="purpose" /> sets, or
+    ///     <see langword="null" /> when the purpose is unmapped or its assignment sets no level.
+    /// </summary>
+    Task<string?> GetPurposeReasoningLevelAsync(Guid clientId, AiPurpose purpose, CancellationToken ct)
+    {
+        return Task.FromResult<string?>(null);
+    }
+
+    /// <summary>Returns the reasoning level of every purpose assignment of the client that sets one.</summary>
+    Task<IReadOnlyDictionary<AiPurpose, string>> GetPurposeReasoningLevelsAsync(Guid clientId, CancellationToken ct)
+    {
+        return Task.FromResult<IReadOnlyDictionary<AiPurpose, string>>(new Dictionary<AiPurpose, string>());
+    }
+
+    /// <summary>
+    ///     Maps a purpose to a logical model with the reasoning level of the assignment; a null level leaves the purpose
+    ///     to the level of its logical model and configured model.
+    /// </summary>
+    Task SetPurposeRoleAsync(Guid clientId, AiPurpose purpose, string logicalModelName, string? reasoningLevel, CancellationToken ct)
+    {
+        return this.SetPurposeRoleAsync(clientId, purpose, logicalModelName, ct);
+    }
+
     /// <summary>Upserts the logical-model mapping for one purpose of one client.</summary>
     Task SetPurposeRoleAsync(Guid clientId, AiPurpose purpose, string logicalModelName, CancellationToken ct);
 

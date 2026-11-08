@@ -53,7 +53,9 @@ import {
   parseMapText,
   providerGuidance,
   serializeMap,
+  setReasoningLevels,
   verificationLabel,
+  withDefaultReasoningLevel,
 } from './aiConnectionsFormatters'
 
 /**
@@ -447,7 +449,10 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
       supportsReasoning: model.supportsReasoning ?? false,
       supportsPromptCaching: model.supportsPromptCaching ?? false,
       reasoningContentField: model.reasoningContentField ?? '',
-      supportsReasoningEffortNone: model.supportsReasoningEffortNone ?? false,
+      defaultReasoningLevel: model.defaultReasoningLevel ?? null,
+      reasoningLevels: model.reasoningLevels ? [...model.reasoningLevels] : null,
+      reasoningLevelsSource: model.reasoningLevelsSource ?? null,
+      detectReasoningLevels: false,
     }))
     const modelLookup = new Map<string, string>()
     for (const model of editor.models) {
@@ -522,7 +527,10 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
       supportsReasoning: false,
       supportsPromptCaching: false,
       reasoningContentField: '',
-      supportsReasoningEffortNone: false,
+      defaultReasoningLevel: null,
+      reasoningLevels: null,
+      reasoningLevelsSource: null,
+      detectReasoningLevels: false,
     })
     editingModelId.value = newModelId
   }
@@ -557,6 +565,15 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
     existing.embeddingDimensions = discovered.embeddingDimensions == null ? existing.embeddingDimensions : String(discovered.embeddingDimensions)
     existing.supportsStructuredOutput = Boolean(discovered.supportsStructuredOutput)
     existing.supportsToolUse = Boolean(discovered.supportsToolUse)
+    // Levels an operator entered stay. Detected levels follow what the discovery reports now, with the default level of
+    // the model added when they lack it, because the server adds a default level to detected levels in the same way.
+    // The stored default level stays even when it is empty, because an operator may have left it empty on purpose. The
+    // default level that the discovery reports applies to a newly discovered model only.
+    if (existing.reasoningLevelsSource !== 'operator' && discovered.reasoningLevels) {
+      setReasoningLevels(existing, withDefaultReasoningLevel(discovered.reasoningLevels, existing.defaultReasoningLevel))
+      existing.reasoningLevelsSource = discovered.reasoningLevelsSource ?? null
+      existing.detectReasoningLevels = false
+    }
   }
 
   const buildDiscoveredModel = (discovered: AiConfiguredModelDto): EditableModel => ({
@@ -578,7 +595,11 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
     supportsReasoning: discovered.supportsReasoning ?? false,
     supportsPromptCaching: discovered.supportsPromptCaching ?? false,
     reasoningContentField: discovered.reasoningContentField ?? '',
-    supportsReasoningEffortNone: discovered.supportsReasoningEffortNone ?? false,
+    // A newly discovered model takes the default level that the discovery reports for it, or none.
+    defaultReasoningLevel: discovered.defaultReasoningLevel ?? null,
+    reasoningLevels: discovered.reasoningLevels ? [...discovered.reasoningLevels] : null,
+    reasoningLevelsSource: discovered.reasoningLevelsSource ?? null,
+    detectReasoningLevels: false,
   })
 
   const mergeDiscoveredModels = (discoveredModels: AiConfiguredModelDto[]) => {
@@ -708,7 +729,13 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
       supportsReasoning: model.supportsReasoning,
       supportsPromptCaching: model.supportsPromptCaching,
       reasoningContentField: model.reasoningContentField.trim() || undefined,
-      supportsReasoningEffortNone: model.kind === 'chat' ? model.supportsReasoningEffortNone : false,
+      // Sent for every chat model, null included: a request without it clears the stored default level. An embedding
+      // model takes no level.
+      defaultReasoningLevel: model.kind === 'chat' ? model.defaultReasoningLevel : undefined,
+      // A list nobody filled yet is left out, so the save keeps the stored levels or fills detected ones.
+      reasoningLevels: model.kind === 'chat' && model.reasoningLevels ? model.reasoningLevels : undefined,
+      reasoningLevelsSource: model.kind === 'chat' && model.reasoningLevels ? (model.reasoningLevelsSource ?? 'operator') : undefined,
+      detectReasoningLevels: model.kind === 'chat' && model.detectReasoningLevels ? true : undefined,
       source: 'manual',
     }))
   }

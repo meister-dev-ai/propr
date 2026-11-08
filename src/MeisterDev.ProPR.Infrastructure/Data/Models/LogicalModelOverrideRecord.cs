@@ -26,7 +26,7 @@ public sealed class LogicalModelOverrideRecord : ILogicalModelMapping
 
     public Guid ConfiguredModelId { get; set; }
 
-    public ReviewReasoningEffort ReasoningEffort { get; set; }
+    public string? ReasoningLevel { get; set; }
 
     public string ProtocolMode { get; set; } = string.Empty;
 

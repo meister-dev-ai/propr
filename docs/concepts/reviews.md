@@ -291,9 +291,9 @@ Everything below is set in the management UI. Unless noted, the scope is one cli
 
 | Setting | Where | Effect |
 |---|---|---|
-| Logical model per purpose | Tenant or client | Which model does review generation, triage, verification and embeddings - see [purposes, effort and protocol](../ai/purposes.md) |
-| Reasoning effort | Per logical model | Default effort for calls using that model; the evidence judge uses `low` when support is established - see [reasoning effort](../ai/purposes.md#reasoning-effort) |
-| Baseline reasoning effort | Per client | Reasoning effort for the baseline review pass, `None` by default. ProPR uses it when the logical model of the file's tier has the effort `none`. With `None`, ProPR sends the reasoning effort `none` to a model with **Accepts Reasoning Effort None** and leaves the effort out for any other model, which then uses its own default - see [reasoning effort](../ai/purposes.md#reasoning-effort) |
+| Logical model per purpose | Tenant or client | Which model does review generation, triage, verification and embeddings - see [purposes, reasoning levels and protocol](../ai/purposes.md) |
+| Reasoning level | Per review pass, purpose assignment, logical model and configured model | How hard the model thinks for the calls the place applies to; the first place that sets a level wins, and the evidence judge uses `low` where the model lists it - see [reasoning level](../ai/purposes.md#reasoning-level) |
+| Baseline reasoning level | Per client | Level of the baseline review pass when neither the purpose assignment nor the logical model of the file's tier sets one, not set by default - see [reasoning level](../ai/purposes.md#reasoning-level) |
 | Review aggressiveness | Per client | `Calm`, `Balanced` or `Assertive`. Calm keeps only what passes the strictest certainty gate; Balanced adds design-level observations; Assertive keeps those and lets less certain findings through |
 | Review temperature | Crawl and webhook configurations | More deterministic or more creative than the model default, `0.0`–`2.0` |
 | Multi-pass union | Per client | Review higher-complexity files across several independent passes and union the findings before deduplication. Costs more per file |

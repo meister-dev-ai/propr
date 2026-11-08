@@ -1458,7 +1458,18 @@ public sealed partial class AiConnectionRepository(
             record.SupportsReasoning,
             record.SupportsPromptCaching,
             record.ReasoningContentField,
-            record.SupportsReasoningEffortNone);
+            record.DefaultReasoningLevel,
+            record.ReasoningLevels,
+            ReasoningLevelsSourceOf(record.ReasoningLevelsSource));
+    }
+
+    // A source name this build does not know reads as no source, so the levels stay usable and the next fill or edit
+    // states the source again.
+    private static AiReasoningLevelSource? ReasoningLevelsSourceOf(string? stored)
+    {
+        return Enum.TryParse<AiReasoningLevelSource>(stored, ignoreCase: true, out var source) && Enum.IsDefined(source)
+            ? source
+            : null;
     }
 
     private AiPurposeBindingDto ToBindingDto(
@@ -1570,7 +1581,9 @@ public sealed partial class AiConnectionRepository(
                     ReasoningContentField = string.IsNullOrWhiteSpace(model.ReasoningContentField)
                         ? null
                         : model.ReasoningContentField.Trim(),
-                    SupportsReasoningEffortNone = model.SupportsReasoningEffortNone,
+                    DefaultReasoningLevel = ReasoningLevelSelection.Normalize(model.DefaultReasoningLevel),
+                    ReasoningLevels = model.ReasoningLevels?.ToArray(),
+                    ReasoningLevelsSource = model.ReasoningLevels is null ? null : model.ReasoningLevelsSource?.ToString(),
                 };
             })
             .ToList();
@@ -1746,7 +1759,9 @@ public sealed partial class AiConnectionRepository(
                 || existing.SupportsReasoning != model.SupportsReasoning
                 || existing.SupportsPromptCaching != model.SupportsPromptCaching
                 || existing.ReasoningContentField != model.ReasoningContentField
-                || existing.SupportsReasoningEffortNone != model.SupportsReasoningEffortNone)
+                || !string.Equals(existing.DefaultReasoningLevel, model.DefaultReasoningLevel, StringComparison.Ordinal)
+                || !NullableSequenceEqual(existing.ReasoningLevels, model.ReasoningLevels)
+                || !string.Equals(existing.ReasoningLevelsSource, model.ReasoningLevelsSource, StringComparison.Ordinal))
             {
                 return false;
             }
@@ -1807,6 +1822,12 @@ public sealed partial class AiConnectionRepository(
         }
 
         return true;
+    }
+
+    // A list of reasoning levels is null while no source knows the levels, which differs from an empty list.
+    private static bool NullableSequenceEqual(IReadOnlyList<string>? left, IReadOnlyList<string>? right)
+    {
+        return left is null || right is null ? left is null && right is null : SequenceEqual(left, right);
     }
 
     private static bool SequenceEqual(IReadOnlyList<string> left, IReadOnlyList<string> right)

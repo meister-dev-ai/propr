@@ -186,6 +186,29 @@ public static class ProviderContractMapping
             model.SupportsToolUse,
             AiConfiguredModelSource.Discovered,
             discoveredAt,
-            MaxContextTokens: model.MaxContextTokens);
+            MaxContextTokens: model.MaxContextTokens,
+            ReasoningLevels: ReportedLevels(model),
+            ReasoningLevelsSource: ReportedLevels(model) is null ? null : AiReasoningLevelSource.Provider,
+            DefaultReasoningLevel: ReportedDefaultLevel(model));
+    }
+
+    // A provider that reports an empty list or only names that are not level names has reported nothing usable, and
+    // the levels then come from the catalog and the add-in.
+    private static IReadOnlyList<string>? ReportedLevels(ProviderDiscoveredModel model)
+    {
+        return ProviderReasoningLevels.Normalize(model.ReasoningLevels) is { Count: > 0 } levels ? levels : null;
+    }
+
+    // The default level the provider reports, when it is a level name and the reported levels hold it. The save refuses
+    // a default level that the model's levels do not hold.
+    private static string? ReportedDefaultLevel(ProviderDiscoveredModel model)
+    {
+        var level = ReasoningLevelSelection.Normalize(model.DefaultReasoningLevel);
+        if (level is null || !ProviderReasoningLevels.IsValidName(level))
+        {
+            return null;
+        }
+
+        return ReportedLevels(model) is { } levels && !levels.Contains(level, StringComparer.Ordinal) ? null : level;
     }
 }

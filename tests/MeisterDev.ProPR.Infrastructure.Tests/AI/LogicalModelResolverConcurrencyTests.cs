@@ -118,7 +118,7 @@ public sealed class LogicalModelResolverConcurrencyTests(PostgresContainerFixtur
                 Capability = AiOperationKind.Chat,
                 ConnectionId = connectionId,
                 ConfiguredModelId = this._configuredModelId,
-                ReasoningEffort = ReviewReasoningEffort.High,
+                ReasoningLevel = "high",
                 ProtocolMode = ProviderDeclaredProtocolModes.Auto,
                 CreatedAt = now,
                 UpdatedAt = now,

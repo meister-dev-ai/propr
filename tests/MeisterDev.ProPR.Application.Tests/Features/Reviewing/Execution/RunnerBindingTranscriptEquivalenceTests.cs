@@ -129,7 +129,7 @@ public sealed class RunnerBindingTranscriptEquivalenceTests
             Call,
             "reviewer-medium",
             relay,
-            ReviewReasoningEffort.None,
+            null,
             () => $"call-{++counter}");
 
         return (tools, chat);

@@ -70,8 +70,9 @@ internal sealed class PrLevelReviewVerificationExecutor(
             aiRuntimeResolver,
             intent,
             protocolId,
-            SupportsReasoningEffortNone: reviewContext.RuntimeCapabilities.SupportsReasoningEffortNone,
-            UsesResponsesApi: reviewContext.RuntimeCapabilities.PrefersResponsesApi);
+            ReasoningLevels: reviewContext.RuntimeCapabilities.ReasoningLevels,
+            UsesResponsesApi: reviewContext.RuntimeCapabilities.PrefersResponsesApi,
+            DefaultReasoningLevel: reviewContext.RuntimeCapabilities.DefaultReasoningLevel);
 
         // Each finding keeps its position in the result. A finding that the judge decides is collected first and all
         // of them are judged in one verifier call, so the judge runtime is resolved and the source reads are cached

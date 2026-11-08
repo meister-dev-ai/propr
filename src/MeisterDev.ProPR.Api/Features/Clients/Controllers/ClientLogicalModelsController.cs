@@ -76,7 +76,8 @@ public sealed class ClientLogicalModelsController(
                     metadata = new LogicalModelReferenceResponse(
                         "available", model.RemoteModelId, connection.DisplayName, model.OperationKinds,
                         model.SupportedProtocolModes, model.TokenizerName, model.MaxInputTokens,
-                        model.EmbeddingDimensions, connection.IsActive, connection.Verification.Status);
+                        model.EmbeddingDimensions, connection.IsActive, connection.Verification.Status,
+                        model.ReasoningLevels, model.DefaultReasoningLevel);
                 }
             }
 
@@ -222,7 +223,8 @@ public sealed class ClientLogicalModelsController(
         }
 
         var map = await catalog.GetPurposeRolesAsync(clientId, ct);
-        return this.Ok(map.Select(kvp => new PurposeRoleResponse(kvp.Key, kvp.Value)).ToList());
+        var levels = await catalog.GetPurposeReasoningLevelsAsync(clientId, ct);
+        return this.Ok(map.Select(kvp => new PurposeRoleResponse(kvp.Key, kvp.Value, levels.GetValueOrDefault(kvp.Key))).ToList());
     }
 
     /// <summary>Maps an internal AI purpose to a logical model for this client.</summary>
@@ -246,7 +248,15 @@ public sealed class ClientLogicalModelsController(
             return invalid;
         }
 
-        await catalog.SetPurposeRoleAsync(clientId, purpose, request.LogicalModelName, ct);
+        // The level of the assignment is checked against the levels of the model behind the logical model.
+        var level = ReasoningLevelSelection.Normalize(request.ReasoningLevel);
+        if (level is not null && await this.PurposeLevelRefusalAsync(clientId, request.LogicalModelName, level, ct) is { } refusal)
+        {
+            this.ModelState.AddModelError("reasoningLevel", refusal);
+            return this.ValidationProblem();
+        }
+
+        await catalog.SetPurposeRoleAsync(clientId, purpose, request.LogicalModelName, level, ct);
         return this.NoContent();
     }
 
@@ -261,6 +271,20 @@ public sealed class ClientLogicalModelsController(
         }
 
         return await catalog.RemovePurposeRoleAsync(clientId, purpose, ct) ? this.NoContent() : this.NotFound();
+    }
+
+    // The reason a purpose cannot run at the level on the logical model, or null. A logical model or a model this
+    // client cannot resolve leaves the check to the level-name rule, because the purpose itself still resolves later.
+    private async Task<string?> PurposeLevelRefusalAsync(Guid clientId, string logicalModelName, string level, CancellationToken ct)
+    {
+        // A client override shadows the tenant entry with the same name.
+        var entry = (await catalog.GetClientOverridesAsync(clientId, ct))
+            .Concat(await catalog.GetTenantEntriesForClientAsync(clientId, ct))
+            .FirstOrDefault(candidate => string.Equals(candidate.Name, logicalModelName, StringComparison.OrdinalIgnoreCase));
+        var model = entry is null
+            ? null
+            : (await connections.GetByIdAsync(entry.ConnectionId, ct))?.ConfiguredModels.FirstOrDefault(candidate => candidate.Id == entry.ConfiguredModelId);
+        return ReasoningLevelSelection.Refusal(level, model?.ReasoningLevels, model?.RemoteModelId ?? logicalModelName);
     }
 
     private IActionResult? RequireClientAdmin(Guid clientId)
@@ -286,13 +310,20 @@ public sealed record LogicalModelWriteRequest(
     AiOperationKind Capability,
     Guid ConnectionId,
     Guid ConfiguredModelId,
-    ReviewReasoningEffort ReasoningEffort = ReviewReasoningEffort.None,
+    string? ReasoningLevel = null,
     string ProtocolMode = ProviderDeclaredProtocolModes.Auto)
 {
     /// <summary>Maps to the application DTO, minting a fresh id (the repository assigns one when empty).</summary>
     public LogicalModelDto ToDto()
     {
-        return new LogicalModelDto(Guid.Empty, this.Name, this.Capability, this.ConnectionId, this.ConfiguredModelId, this.ReasoningEffort, this.ProtocolMode);
+        return new LogicalModelDto(
+            Guid.Empty,
+            this.Name,
+            this.Capability,
+            this.ConnectionId,
+            this.ConfiguredModelId,
+            ReasoningLevelSelection.Normalize(this.ReasoningLevel),
+            this.ProtocolMode);
     }
 }
 
@@ -306,7 +337,7 @@ public sealed record LogicalModelResponse(
     AiOperationKind Capability,
     Guid ConnectionId,
     Guid ConfiguredModelId,
-    ReviewReasoningEffort ReasoningEffort,
+    string? ReasoningLevel,
     string ProtocolMode,
     string Scope)
 {
@@ -317,8 +348,7 @@ public sealed record LogicalModelResponse(
     /// <summary>Projects an application DTO into the response, tagging its scope (<c>client</c> or <c>tenant</c>).</summary>
     public static LogicalModelResponse From(LogicalModelDto dto, string scope)
     {
-        return new LogicalModelResponse(
-            dto.Id, dto.Name, dto.Capability, dto.ConnectionId, dto.ConfiguredModelId, dto.ReasoningEffort, dto.ProtocolMode, scope);
+        return new LogicalModelResponse(dto.Id, dto.Name, dto.Capability, dto.ConnectionId, dto.ConfiguredModelId, dto.ReasoningLevel, dto.ProtocolMode, scope);
     }
 }
 
@@ -343,10 +373,22 @@ public sealed record LogicalModelReferenceResponse(
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     bool? IsActive = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    AiVerificationStatus? VerificationStatus = null);
+    AiVerificationStatus? VerificationStatus = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<string>? ReasoningLevels = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    string? DefaultReasoningLevel = null);
 
 /// <summary>Payload to map a purpose to a logical model.</summary>
-public sealed record SetPurposeRoleRequest(string LogicalModelName);
+/// <param name="LogicalModelName">The logical model the purpose runs on.</param>
+/// <param name="ReasoningLevel">
+///     The reasoning level the purpose runs at, by the provider's name, or null to leave it to the level of the logical
+///     model and the default level of its configured model. A level the model does not accept is refused.
+/// </param>
+public sealed record SetPurposeRoleRequest(string LogicalModelName, string? ReasoningLevel = null);
 
 /// <summary>One purpose → logical-model mapping row.</summary>
-public sealed record PurposeRoleResponse(AiPurpose Purpose, string LogicalModelName);
+/// <param name="Purpose">The purpose.</param>
+/// <param name="LogicalModelName">The logical model the purpose runs on.</param>
+/// <param name="ReasoningLevel">The reasoning level the assignment sets, or null.</param>
+public sealed record PurposeRoleResponse(AiPurpose Purpose, string LogicalModelName, string? ReasoningLevel = null);

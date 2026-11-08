@@ -96,6 +96,7 @@ public sealed class ModelCatalogImportService(
         row.CacheWriteCostPer1MUsd = entry.CacheWriteCostPer1MUsd;
         row.OpenWeights = entry.OpenWeights;
         row.ReleaseDate = entry.ReleaseDate;
+        row.ReasoningLevels = entry.ReasoningLevels?.ToArray();
         row.SourceFormat = sourceFormat;
         row.ImportedAt = importedAt;
     }

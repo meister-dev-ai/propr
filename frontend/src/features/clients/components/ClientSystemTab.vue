@@ -175,22 +175,22 @@
                 </div>
                 <div class="inline-field-row review-publication-row">
                     <div class="form-field flex-1 review-publication-field">
-                        <label for="baselineReasoningEffort">Baseline reasoning effort</label>
-                        <select id="baselineReasoningEffort"
-                            v-model="editedBaselineReasoningEffort"
-                            name="baselineReasoningEffort">
-                            <option v-for="option in REASONING_EFFORT_OPTIONS" :key="option.value" :value="option.value">
-                                {{ option.label }}
+                        <label for="baselineReasoningLevel">Baseline reasoning level</label>
+                        <select id="baselineReasoningLevel"
+                            v-model="baselineReasoningLevelSelection"
+                            name="baselineReasoningLevel">
+                            <option value="">Not set</option>
+                            <option v-for="level in baselineReasoningLevelOptions" :key="level" :value="level">
+                                {{ level }}
                             </option>
                         </select>
                         <p class="muted review-publication-copy">
-                            Reasoning effort of the baseline (tier) review pass when the logical model of the file's
-                            tier has the effort None. A logical model with the effort Low, Medium or High sets the
-                            effort of the baseline pass itself.
-                            With <strong>None</strong> (default), ProPR sends the reasoning effort none to a model
-                            that has "Accepts Reasoning Effort None" selected on its AI connection. For any other
-                            model, ProPR leaves the effort out, and the model uses its own default.
-                            The effort of each additional pass is set in the AI Providers tab under "Review passes".
+                            The level of the baseline (tier) review pass when neither the purpose assignment nor the
+                            logical model of the file's tier sets one. A model that does not accept the level
+                            receives the nearest lower level it accepts. With <strong>Not set</strong> (default), the
+                            baseline pass takes the default level of the model, or the provider's default when the
+                            model has none.
+                            The level of each additional pass is set in the AI Providers tab under "Review passes".
                         </p>
                     </div>
                     <button :disabled="!isAdvancedSettingsButtonEnabled()"
@@ -229,8 +229,9 @@
 </template>
 
 <script lang="ts" setup>
-import { inject } from "vue";
+import { computed, inject } from "vue";
 import ClientOverview from "@/features/clients/components/ClientOverview.vue";
+import { standardReasoningLevels } from "@/features/clients/components/aiConnectionsFormatters";
 import ClientPostConfigSection from "@/features/clients/components/ClientPostConfigSection.vue";
 import ConfirmDialog from "@/components/dialogs/ConfirmDialog.vue";
 import { ClientDetailVmKey } from "@/features/clients/view-models/useClientDetailViewModel";
@@ -252,7 +253,7 @@ const {
     editedCommentResolutionBehavior,
     editedIncludeLinkedItemsInContext,
     editedOutputLanguage,
-    editedBaselineReasoningEffort,
+    editedBaselineReasoningLevel,
     reviewProfiles,
     clientReviewProfile,
     saveDisplayName,
@@ -275,15 +276,21 @@ const COMMENT_RESOLUTION_OPTIONS: { value: string; label: string }[] = [
     { value: "disabled", label: "Leave threads alone" },
 ];
 
-// The reasoning-effort levels offered for the baseline (tier) pass. Mirrors the backend
-// ReviewReasoningEffort enum. With 'none' (default), ProPR sends the effort none to a model that accepts it and
-// leaves the effort out for any other model, which then uses its own default.
-const REASONING_EFFORT_OPTIONS: { value: string; label: string }[] = [
-    { value: "none", label: "None" },
-    { value: "low", label: "Low" },
-    { value: "medium", label: "Medium" },
-    { value: "high", label: "High" },
-];
+// The baseline level applies to the models of every tier, so the select offers the shared level names. A stored
+// name outside them, set through the API, stays selectable so the select shows it.
+const baselineReasoningLevelOptions = computed<string[]>(() => {
+    const stored = editedBaselineReasoningLevel.value;
+    const names: string[] = [...standardReasoningLevels];
+    return stored && !names.includes(stored) ? [...names, stored] : names;
+});
+
+// An option cannot hold null, so the select holds an empty value for "Not set".
+const baselineReasoningLevelSelection = computed<string>({
+    get: () => editedBaselineReasoningLevel.value ?? "",
+    set: (value) => {
+        editedBaselineReasoningLevel.value = value === "" ? null : value;
+    },
+});
 </script>
 
 <style scoped>

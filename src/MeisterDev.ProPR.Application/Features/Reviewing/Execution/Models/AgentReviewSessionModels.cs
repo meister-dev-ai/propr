@@ -65,9 +65,14 @@ public enum SessionContinuationHandleType
 /// <summary>
 ///     Runtime capability flags relevant to session-aware review execution.
 /// </summary>
-/// <param name="SupportsReasoningEffortNone">
-///     Whether the bound model accepts the reasoning effort <c>none</c>. A call with the effort None sends
-///     <c>none</c> to such a model. Any other model receives no reasoning parameter and uses its own default.
+/// <param name="ReasoningLevels">
+///     The reasoning levels the bound model accepts, from the lowest to the highest effort, or null when no source knows
+///     them. A call sends only a level this list holds, see <see cref="AI.ReasoningLevelSelection" />.
+/// </param>
+/// <param name="DefaultReasoningLevel">The default level of the bound configured model, or null.</param>
+/// <param name="ConfiguredReasoningLevel">
+///     The level the purpose assignment or the logical model of the runtime sets, or null. A review pass on the runtime
+///     takes it before the client baseline level and the model's default level.
 /// </param>
 public sealed record AgentReviewRuntimeCapabilities(
     bool SupportsProviderManagedSessions,
@@ -76,7 +81,9 @@ public sealed record AgentReviewRuntimeCapabilities(
     bool PrefersResponsesApi,
     bool SupportsPromptCaching = false,
     bool SupportsPromptCacheRouting = false,
-    bool SupportsReasoningEffortNone = false);
+    IReadOnlyList<string>? ReasoningLevels = null,
+    string? DefaultReasoningLevel = null,
+    string? ConfiguredReasoningLevel = null);
 
 /// <summary>
 ///     Opaque continuation metadata carried across review turns.

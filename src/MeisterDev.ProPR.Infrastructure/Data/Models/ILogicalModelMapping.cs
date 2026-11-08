@@ -28,8 +28,11 @@ public interface ILogicalModelMapping
     /// <summary>The configured model under that connection the role maps to.</summary>
     Guid ConfiguredModelId { get; }
 
-    /// <summary>Reasoning effort carried on the mapping (single source of truth).</summary>
-    ReviewReasoningEffort ReasoningEffort { get; }
+    /// <summary>
+    ///     Reasoning level of the logical model for every use that sets no level of its own, or null when the logical
+    ///     model leaves it to the default level of its configured model.
+    /// </summary>
+    string? ReasoningLevel { get; }
 
     /// <summary>
     ///     Protocol mode carried on the mapping (single source of truth), as the name it is stored under.

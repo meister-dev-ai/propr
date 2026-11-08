@@ -337,12 +337,18 @@ public sealed class AzureOpenAiProviderDriver : IAiProviderDriver
 
         var authentication = this.Authentication(endpoint);
 
+        // The adapter is wrapped so that the host hands the client its reasoning request in neutral terms. OpenAI
+        // options that the host builds are a foreign type for the copy of the OpenAI library this add-in loads.
         if (ProviderVocabulary.ValuesEqual(protocolMode, ChatCompletionsProtocol))
         {
-            return new ChatClient(model.RemoteModelId, authentication, options).AsIChatClient();
+            return new AzureOpenAiReasoningChatClient(
+                new ChatClient(model.RemoteModelId, authentication, options).AsIChatClient(),
+                usesResponsesApi: false);
         }
 
-        return new OpenAIClient(authentication, options).GetResponsesClient().AsIChatClient(model.RemoteModelId);
+        return new AzureOpenAiReasoningChatClient(
+            new OpenAIClient(authentication, options).GetResponsesClient().AsIChatClient(model.RemoteModelId),
+            usesResponsesApi: true);
     }
 
     /// <inheritdoc />

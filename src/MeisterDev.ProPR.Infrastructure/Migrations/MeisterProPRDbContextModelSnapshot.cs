@@ -4119,6 +4119,11 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("connection_profile_id");
 
+                    b.Property<string>("DefaultReasoningLevel")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("default_reasoning_level");
+
                     b.Property<string>("DisplayName")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -4161,6 +4166,15 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("reasoning_content_field");
 
+                    b.PrimitiveCollection<string[]>("ReasoningLevels")
+                        .HasColumnType("text[]")
+                        .HasColumnName("reasoning_levels");
+
+                    b.Property<string>("ReasoningLevelsSource")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("reasoning_levels_source");
+
                     b.Property<string>("RemoteModelId")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -4185,10 +4199,6 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.Property<bool>("SupportsReasoning")
                         .HasColumnType("boolean")
                         .HasColumnName("supports_reasoning");
-
-                    b.Property<bool>("SupportsReasoningEffortNone")
-                        .HasColumnType("boolean")
-                        .HasColumnName("supports_reasoning_effort_none");
 
                     b.Property<bool>("SupportsStructuredOutput")
                         .HasColumnType("boolean")
@@ -4540,6 +4550,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("reasoning_content_field");
+
+                    b.PrimitiveCollection<string[]>("ReasoningLevels")
+                        .HasColumnType("text[]")
+                        .HasColumnName("reasoning_levels");
 
                     b.Property<DateOnly?>("ReleaseDate")
                         .HasColumnType("date")
@@ -4946,6 +4960,11 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("purpose");
 
+                    b.Property<string>("ReasoningLevel")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("reasoning_level");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ClientId", "Purpose")
@@ -4994,11 +5013,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnName("auto_resolve_severities")
                         .HasDefaultValueSql("''");
 
-                    b.Property<int>("BaselineReasoningEffort")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("baseline_reasoning_effort");
+                    b.Property<string>("BaselineReasoningLevel")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("baseline_reasoning_level");
 
                     b.Property<bool>("CodeInsightsCollectionEnabled")
                         .ValueGeneratedOnAdd()
@@ -5177,9 +5195,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("ordinal");
 
-                    b.Property<int?>("ReasoningEffort")
-                        .HasColumnType("integer")
-                        .HasColumnName("reasoning_effort");
+                    b.Property<string>("ReasoningLevel")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("reasoning_level");
 
                     b.Property<string>("Scope")
                         .HasMaxLength(64)
@@ -6144,9 +6163,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("character varying(129)")
                         .HasColumnName("protocol_mode");
 
-                    b.Property<int>("ReasoningEffort")
-                        .HasColumnType("integer")
-                        .HasColumnName("reasoning_effort");
+                    b.Property<string>("ReasoningLevel")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("reasoning_level");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -6198,9 +6218,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("character varying(129)")
                         .HasColumnName("protocol_mode");
 
-                    b.Property<int>("ReasoningEffort")
-                        .HasColumnType("integer")
-                        .HasColumnName("reasoning_effort");
+                    b.Property<string>("ReasoningLevel")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("reasoning_level");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")

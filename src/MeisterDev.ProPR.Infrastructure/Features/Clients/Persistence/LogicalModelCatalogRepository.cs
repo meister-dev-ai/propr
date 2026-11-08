@@ -5,6 +5,7 @@
 using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -70,7 +71,7 @@ public sealed class LogicalModelCatalogRepository(
                 Capability = entry.Capability,
                 ConnectionId = entry.ConnectionId,
                 ConfiguredModelId = entry.ConfiguredModelId,
-                ReasoningEffort = entry.ReasoningEffort,
+                ReasoningLevel = ReasoningLevelSelection.Normalize(entry.ReasoningLevel),
                 ProtocolMode = this.ProtocolModeToStore(null, family, entry.ProtocolMode),
                 CreatedAt = now,
                 UpdatedAt = now,
@@ -105,7 +106,7 @@ public sealed class LogicalModelCatalogRepository(
                 Capability = entry.Capability,
                 ConnectionId = entry.ConnectionId,
                 ConfiguredModelId = entry.ConfiguredModelId,
-                ReasoningEffort = entry.ReasoningEffort,
+                ReasoningLevel = ReasoningLevelSelection.Normalize(entry.ReasoningLevel),
                 ProtocolMode = this.ProtocolModeToStore(null, family, entry.ProtocolMode),
                 CreatedAt = now,
                 UpdatedAt = now,
@@ -198,7 +199,7 @@ public sealed class LogicalModelCatalogRepository(
                 tenantRecord.Capability = entry.Capability;
                 tenantRecord.ConnectionId = entry.ConnectionId;
                 tenantRecord.ConfiguredModelId = entry.ConfiguredModelId;
-                tenantRecord.ReasoningEffort = entry.ReasoningEffort;
+                tenantRecord.ReasoningLevel = ReasoningLevelSelection.Normalize(entry.ReasoningLevel);
                 tenantRecord.ProtocolMode = protocolMode;
                 tenantRecord.UpdatedAt = DateTimeOffset.UtcNow;
                 break;
@@ -206,7 +207,7 @@ public sealed class LogicalModelCatalogRepository(
                 overrideRecord.Capability = entry.Capability;
                 overrideRecord.ConnectionId = entry.ConnectionId;
                 overrideRecord.ConfiguredModelId = entry.ConfiguredModelId;
-                overrideRecord.ReasoningEffort = entry.ReasoningEffort;
+                overrideRecord.ReasoningLevel = ReasoningLevelSelection.Normalize(entry.ReasoningLevel);
                 overrideRecord.ProtocolMode = protocolMode;
                 overrideRecord.UpdatedAt = DateTimeOffset.UtcNow;
                 break;
@@ -423,7 +424,64 @@ public sealed class LogicalModelCatalogRepository(
     }
 
     /// <inheritdoc />
-    public async Task SetPurposeRoleAsync(Guid clientId, AiPurpose purpose, string logicalModelName, CancellationToken ct)
+    public async Task<string?> GetPurposeReasoningLevelAsync(Guid clientId, AiPurpose purpose, CancellationToken ct)
+    {
+        if (contextFactory is null)
+        {
+            return await ReadPurposeReasoningLevelAsync(db, clientId, purpose, ct);
+        }
+
+        await using var isolated = await contextFactory.CreateDbContextAsync(ct);
+        return await ReadPurposeReasoningLevelAsync(isolated, clientId, purpose, ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<AiPurpose, string>> GetPurposeReasoningLevelsAsync(Guid clientId, CancellationToken ct)
+    {
+        var rows = await db.ClientPurposeLogicalModels
+            .AsNoTracking()
+            .Where(x => x.ClientId == clientId && x.ReasoningLevel != null)
+            .Select(x => new { x.Purpose, x.ReasoningLevel })
+            .ToListAsync(ct);
+        return rows.ToDictionary(x => x.Purpose, x => x.ReasoningLevel!);
+    }
+
+    private static async Task<string?> ReadPurposeReasoningLevelAsync(
+        MeisterProPRDbContext context,
+        Guid clientId,
+        AiPurpose purpose,
+        CancellationToken ct)
+    {
+        return await context.ClientPurposeLogicalModels
+            .AsNoTracking()
+            .Where(x => x.ClientId == clientId && x.Purpose == purpose)
+            .Select(x => x.ReasoningLevel)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    ///     The reasoning level of the assignment belongs to the logical model it names: it stays when the purpose keeps
+    ///     its logical model, and it is cleared when the purpose moves to another one, whose model may not accept it.
+    /// </remarks>
+    public Task SetPurposeRoleAsync(Guid clientId, AiPurpose purpose, string logicalModelName, CancellationToken ct)
+    {
+        return this.UpsertPurposeRoleAsync(clientId, purpose, logicalModelName, keepLevel: true, reasoningLevel: null, ct);
+    }
+
+    /// <inheritdoc />
+    public Task SetPurposeRoleAsync(Guid clientId, AiPurpose purpose, string logicalModelName, string? reasoningLevel, CancellationToken ct)
+    {
+        return this.UpsertPurposeRoleAsync(clientId, purpose, logicalModelName, keepLevel: false, reasoningLevel, ct);
+    }
+
+    private async Task UpsertPurposeRoleAsync(
+        Guid clientId,
+        AiPurpose purpose,
+        string logicalModelName,
+        bool keepLevel,
+        string? reasoningLevel,
+        CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(logicalModelName);
 
@@ -444,10 +502,13 @@ public sealed class LogicalModelCatalogRepository(
                     ClientId = clientId,
                     Purpose = purpose,
                     LogicalModelName = logicalModelName,
+                    ReasoningLevel = keepLevel ? null : reasoningLevel,
                 });
         }
         else
         {
+            var sameLogicalModel = string.Equals(existing.LogicalModelName, logicalModelName, StringComparison.OrdinalIgnoreCase);
+            existing.ReasoningLevel = keepLevel ? sameLogicalModel ? existing.ReasoningLevel : null : reasoningLevel;
             existing.LogicalModelName = logicalModelName;
         }
 
@@ -518,7 +579,7 @@ public sealed class LogicalModelCatalogRepository(
             row.Capability,
             row.ConnectionId,
             row.ConfiguredModelId,
-            row.ReasoningEffort,
+            row.ReasoningLevel,
             resolved ? protocolMode : ProviderDeclaredProtocolModes.Auto)
         {
             UnresolvedProtocolMode = resolved ? null : resolution.Name,

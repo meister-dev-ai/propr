@@ -41,10 +41,11 @@ public sealed record RunnerRelayRequest(
 /// <summary>What the relay has resolved for one completion when it builds the chat options.</summary>
 /// <param name="CapturesReasoning">Whether the tenant that owns the job permits keeping the model's reasoning.</param>
 /// <param name="UsesResponsesApi">
-///     Whether the resolved model is called through the Responses API. A configured reasoning effort other than none
-///     is then also stated in the shared reasoning setting, which reaches a provider add-in.
+///     Whether the resolved model is called through the Responses API. A reasoning level is then also stated in the
+///     shared reasoning setting, which reaches a provider add-in.
 /// </param>
-public sealed record RunnerRelayResolution(bool CapturesReasoning, bool UsesResponsesApi);
+/// <param name="AcceptedLevels">The levels the resolved model accepts, or null when no source knows them.</param>
+public sealed record RunnerRelayResolution(bool CapturesReasoning, bool UsesResponsesApi, IReadOnlyList<string>? AcceptedLevels = null);
 
 /// <summary>Why a relayed completion was not performed.</summary>
 public enum RunnerRelayRefusal

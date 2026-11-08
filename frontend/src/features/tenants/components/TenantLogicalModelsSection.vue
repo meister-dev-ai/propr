@@ -48,7 +48,7 @@
             <td>{{ model.capability }}</td>
             <td data-testid="tenant-logical-model-connection-cell">{{ connectionName(model.connectionId) }}</td>
             <td>{{ modelName(model.connectionId, model.configuredModelId) }}</td>
-            <td>{{ model.reasoningEffort }}</td>
+            <td data-testid="tenant-logical-model-level-cell">{{ logicalModelLevelLabel(model) }}</td>
             <td>{{ model.protocolMode }}</td>
             <td class="tenant-logical-model-row-actions">
               <div class="row-actions">
@@ -99,15 +99,6 @@
             </select>
           </label>
           <label class="form-field">
-            <span>Reasoning effort</span>
-            <select v-model="draft.reasoningEffort" class="form-input-sm" data-testid="tenant-logical-model-effort">
-              <option value="none">none</option>
-              <option value="low">low</option>
-              <option value="medium">medium</option>
-              <option value="high">high</option>
-            </select>
-          </label>
-          <label class="form-field">
             <span>Connection</span>
             <select v-model="draft.connectionId" class="form-input-sm" data-testid="tenant-logical-model-connection" @change="draft.configuredModelId = ''">
               <option value="">Select a connection</option>
@@ -118,18 +109,33 @@
           </label>
           <label class="form-field">
             <span>Model</span>
-            <select v-model="draft.configuredModelId" class="form-input-sm" data-testid="tenant-logical-model-model">
+            <select
+              v-model="draft.configuredModelId"
+              class="form-input-sm"
+              data-testid="tenant-logical-model-model"
+              @change="onModelChange"
+            >
               <option value="">Select a model</option>
               <option v-for="model in modelsForSelectedConnection" :key="model.id ?? ''" :value="model.id ?? ''">
                 {{ model.displayName || model.remoteModelId }}
               </option>
             </select>
           </label>
-          <p class="muted-hint tenant-lm-field-wide tenant-lm-effort-hint" data-testid="tenant-logical-model-effort-hint">
-            With the reasoning effort none, ProPR sends none to a model that has "Accepts reasoning effort none"
-            selected on its AI connection. For any other model, ProPR leaves the effort out, and the model uses its
-            own default.
-          </p>
+          <!-- An embedding model takes no reasoning level, so the level is offered for the chat capability only. -->
+          <template v-if="draft.capability === 'chat'">
+            <label class="form-field">
+              <span>Reasoning level</span>
+              <ReasoningLevelSelect
+                v-model="draft.reasoningLevel"
+                v-bind="levelChoice"
+                class="form-input-sm"
+                test-id="tenant-logical-model-level"
+              />
+            </label>
+            <p class="muted-hint tenant-lm-field-wide tenant-lm-level-hint" data-testid="tenant-logical-model-level-hint">
+              The level applies to every purpose and review pass on this logical model that sets no level of its own.
+            </p>
+          </template>
         </form>
         <template #footer>
           <button class="btn-secondary btn-sm" type="button" @click="showCreate = false">Cancel</button>
@@ -145,7 +151,13 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import ModalDialog from '@/components/dialogs/ModalDialog.vue'
-import { autoProtocolMode } from '@/features/clients/components/aiConnectionsFormatters'
+import ReasoningLevelSelect from '@/features/clients/components/ReasoningLevelSelect.vue'
+import {
+  acceptsReasoningLevel,
+  autoProtocolMode,
+  configuredModelLevelChoice,
+  logicalModelLevelLabel,
+} from '@/features/clients/components/aiConnectionsFormatters'
 import {
   createTenantEntry,
   deleteTenantEntry,
@@ -174,7 +186,8 @@ const draft = reactive({
   capability: 'chat' as NonNullable<LogicalModelWriteRequest['capability']>,
   connectionId: '',
   configuredModelId: '',
-  reasoningEffort: 'none' as NonNullable<LogicalModelWriteRequest['reasoningEffort']>,
+  // Null leaves the level to the default level of the configured model.
+  reasoningLevel: null as string | null,
   protocolMode: autoProtocolMode as NonNullable<LogicalModelWriteRequest['protocolMode']>,
 })
 
@@ -187,6 +200,18 @@ const modelsForSelectedConnection = computed(() => {
 const canCreate = computed(
   () => draft.name.trim().length > 0 && !!draft.connectionId && !!draft.configuredModelId,
 )
+
+// The levels of the selected configured model, which also supplies the level a logical model without one inherits.
+const levelChoice = computed(() =>
+  configuredModelLevelChoice(modelsForSelectedConnection.value.find(model => model.id === draft.configuredModelId)),
+)
+
+// The save refuses a level the newly selected model does not accept, so such a level is cleared.
+function onModelChange(): void {
+  if (draft.reasoningLevel !== null && !acceptsReasoningLevel(levelChoice.value.levels, draft.reasoningLevel)) {
+    draft.reasoningLevel = null
+  }
+}
 
 // Resolve the stored connection/model ids to display names via the tenant's connections.
 function connectionName(connectionId: string | null | undefined): string {
@@ -212,7 +237,7 @@ function startEdit(model: LogicalModelResponse): void {
   draft.capability = (model.capability ?? 'chat') as NonNullable<LogicalModelWriteRequest['capability']>
   draft.connectionId = model.connectionId ?? ''
   draft.configuredModelId = model.configuredModelId ?? ''
-  draft.reasoningEffort = (model.reasoningEffort ?? 'none') as NonNullable<LogicalModelWriteRequest['reasoningEffort']>
+  draft.reasoningLevel = model.reasoningLevel ?? null
   draft.protocolMode = (model.protocolMode ?? autoProtocolMode) as NonNullable<LogicalModelWriteRequest['protocolMode']>
   error.value = ''
   showCreate.value = true
@@ -239,7 +264,8 @@ async function submit(): Promise<void> {
   }
 
   error.value = ''
-  const payload = { ...draft, name: draft.name.trim() }
+  // The save refuses a level on an embedding logical model.
+  const payload = { ...draft, name: draft.name.trim(), reasoningLevel: draft.capability === 'chat' ? draft.reasoningLevel : null }
   const editing = editingName.value
   try {
     if (editing) {
@@ -250,10 +276,12 @@ async function submit(): Promise<void> {
     showCreate.value = false
     resetDraft()
     await load()
-  } catch {
-    error.value = editing
+  } catch (failure) {
+    const fallback = editing
       ? 'Failed to update the logical model (the selected model may not support its capability).'
       : 'Failed to create the logical model (the name may already exist, or the model cannot serve that capability).'
+    // The message from the server contains the refused level or capability.
+    error.value = failure instanceof Error && failure.message ? failure.message : fallback
   }
 }
 
@@ -277,7 +305,7 @@ function resetDraft(): void {
   draft.capability = 'chat'
   draft.connectionId = ''
   draft.configuredModelId = ''
-  draft.reasoningEffort = 'none'
+  draft.reasoningLevel = null
   draft.protocolMode = autoProtocolMode
 }
 
@@ -318,7 +346,7 @@ defineExpose({ load })
   grid-column: 1 / -1;
 }
 
-.tenant-lm-effort-hint {
+.tenant-lm-level-hint {
   margin: 0;
 }
 

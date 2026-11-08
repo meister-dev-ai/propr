@@ -9,9 +9,9 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 /// <summary>The runtime resolved for a file's configured pass before its assignment inventory is closed.</summary>
 public readonly record struct PreparedReviewPassRuntime(
     IResolvedAiChatRuntime? Runtime,
-    ReviewReasoningEffort Effort,
+    string? Level,
     string? Failure)
 {
     /// <summary>Retains a failed resolution so execution does not repeat it or change the captured assignment.</summary>
-    public static PreparedReviewPassRuntime Failed(string failure) => new(null, ReviewReasoningEffort.None, failure);
+    public static PreparedReviewPassRuntime Failed(string failure) => new(null, null, failure);
 }

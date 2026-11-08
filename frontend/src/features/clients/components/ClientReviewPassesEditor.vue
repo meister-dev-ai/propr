@@ -59,7 +59,7 @@
                 Logical model “{{ row.logicalModelName }}” is no longer available — edit and pick another.
               </p>
             </td>
-            <td>{{ row.logicalModelName ? '—' : reasoningLabel(row.reasoning) }}</td>
+            <td data-testid="review-pass-level-cell">{{ row.reasoningLevel ?? 'Inherit' }}</td>
             <td>{{ lensLabel(row.lens) }}</td>
             <td>{{ scopeLabel(row.scope) }}</td>
             <td>{{ row.shadow ? 'Yes' : '—' }}</td>
@@ -128,8 +128,8 @@
           </select>
         </label>
 
-        <!-- Raw mode: connection, model and reasoning are chosen here. A logical model supplies all three
-             itself, so the raw inputs are hidden when one is selected. -->
+        <!-- Raw mode: the connection and the model are chosen here. A logical model supplies both, so the raw inputs
+             are hidden when one is selected. -->
         <template v-if="!draft.logicalModelName">
           <label class="form-field">
             <span>Connection</span>
@@ -159,22 +159,19 @@
               </option>
             </select>
           </label>
-          <label class="form-field">
-            <span>Reasoning</span>
-            <select v-model="draft.reasoning" class="form-input-sm" data-testid="review-pass-reasoning">
-              <option v-for="option in REASONING_EFFORT_OPTIONS" :key="option.value" :value="option.value">
-                {{ option.label }}
-              </option>
-            </select>
-          </label>
-          <p class="muted review-pass-reasoning-hint" data-testid="review-pass-reasoning-hint">
-            With None, ProPR sends the reasoning effort none to a model that has "Accepts Reasoning Effort None"
-            selected on its AI connection. For any other model, ProPR leaves the effort out, and the model uses
-            its own default.
-          </p>
         </template>
-        <p v-else class="muted review-pass-from-logical" data-testid="review-pass-from-logical">
-          Connection, model &amp; reasoning come from the logical model.
+
+        <label class="form-field">
+          <span>Reasoning level</span>
+          <ReasoningLevelSelect
+            v-model="draft.reasoningLevel"
+            v-bind="draftLevelChoice"
+            class="form-input-sm"
+            test-id="review-pass-reasoning-level"
+          />
+        </label>
+        <p v-if="draft.logicalModelName" class="muted review-pass-from-logical" data-testid="review-pass-from-logical">
+          The connection and the model come from the logical model.
         </p>
 
         <label class="form-field">
@@ -216,14 +213,16 @@ import ModalDialog from '@/components/dialogs/ModalDialog.vue'
 import type { AiConfiguredModelDto, AiConnectionDto } from '@/services/aiConnectionsService'
 import type { LogicalModelResponse } from '@/services/logicalModelsService'
 import type { components } from '@/types'
+import ReasoningLevelSelect from './ReasoningLevelSelect.vue'
+import { configuredModelLevelChoice, logicalModelLevelChoice, type ReasoningLevelChoice } from './aiConnectionsFormatters'
 
 type ReviewPassEntry = components['schemas']['ReviewPassEntry']
 
 // One review pass selects its model in one of two ways. When a logical model is chosen, it supplies the
-// connection, model, reasoning effort and protocol itself, so the raw connection/model/reasoning inputs are
-// hidden; the pass still carries an optional lens, an optional scope, and a shadow flag. When the logical model
-// is left blank the pass falls back to picking a raw connection + configured model (and reasoning) directly —
-// the legacy path. The connection is only a UI convenience for narrowing the raw model dropdown.
+// connection, the model and the protocol, so the raw connection and model inputs are hidden. When the logical model
+// is left blank, the pass picks a raw connection and configured model directly, which is the legacy path. The
+// connection is only a UI convenience for narrowing the raw model dropdown. Both kinds of pass carry an optional
+// reasoning level, an optional lens, an optional scope and a shadow flag.
 interface PassRow {
   logicalModelName: string
   connectionId: string
@@ -231,7 +230,8 @@ interface PassRow {
   lens: string
   scope: string
   shadow: boolean
-  reasoning: string
+  // Null takes the level of the logical model and then the default level of the model.
+  reasoningLevel: string | null
 }
 
 const MAX_PASSES = 4
@@ -250,16 +250,6 @@ const LENS_OPTIONS: { value: string; label: string }[] = [
 const SCOPE_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'Per-file' },
   { value: 'pr_wide', label: 'PR-wide' },
-]
-
-// The reasoning-effort levels offered per pass. With 'none' (default), ProPR sends the effort none to a model that
-// accepts it and leaves the effort out for any other model, which then uses its own default.
-// low/medium/high ask for reasoning at the corresponding level. Mirrors the backend ReviewReasoningEffort enum.
-const REASONING_EFFORT_OPTIONS: { value: string; label: string }[] = [
-  { value: 'none', label: 'None' },
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
 ]
 
 const props = withDefaults(
@@ -287,7 +277,7 @@ const editingIndex = ref<number | null>(null)
 const draft = reactive<PassRow>(emptyRow())
 
 function emptyRow(): PassRow {
-  return { logicalModelName: '', connectionId: '', configuredModelId: '', lens: '', scope: '', shadow: false, reasoning: 'none' }
+  return { logicalModelName: '', connectionId: '', configuredModelId: '', lens: '', scope: '', shadow: false, reasoningLevel: null }
 }
 
 // The connection/model lists load asynchronously; until at least one connection has arrived we cannot tell a
@@ -411,17 +401,24 @@ const isRowComplete = (row: PassRow): boolean =>
 // The draft is savable once it names a model source: a logical model, or a raw configured model.
 const isDraftComplete = computed<boolean>(() => (draft.logicalModelName ? true : !!draft.configuredModelId))
 
+const configuredModelFor = (configuredModelId: string): AiConfiguredModelDto | undefined =>
+  configuredModelId
+    ? props.connections.flatMap((connection) => connection.configuredModels ?? []).find((model) => model.id === configuredModelId)
+    : undefined
+
+// The levels the draft's model accepts, and the level the pass takes when it sets none: on a logical model the level
+// of the logical model and then the default level of its model, on a configured model the default level of that model.
+const draftLevelChoice = computed<ReasoningLevelChoice>(() =>
+  draft.logicalModelName
+    ? logicalModelLevelChoice(props.logicalModels.find((model) => model.name === draft.logicalModelName))
+    : configuredModelLevelChoice(configuredModelFor(draft.configuredModelId)),
+)
+
 // Display labels for the read-only table.
 const rawModelLabel = (row: PassRow): string => {
-  const owner = props.connections.find((connection) =>
-    (connection.configuredModels ?? []).some((model) => model.id === row.configuredModelId),
-  )
-  const model = owner?.configuredModels?.find((candidate) => candidate.id === row.configuredModelId)
+  const model = configuredModelFor(row.configuredModelId)
   return model?.displayName || model?.remoteModelId || '—'
 }
-
-const reasoningLabel = (value: string): string =>
-  REASONING_EFFORT_OPTIONS.find((option) => option.value === value)?.label ?? 'None'
 
 // An unrecognised lens renders as its own raw value. The backend vocabulary can grow ahead of this list, and
 // a pass carrying a lens this build does not know must not read as an ordinary resample pass — that would
@@ -436,17 +433,14 @@ const rowToEntry = (row: PassRow, ordinal: number): ReviewPassEntry => {
     lens: row.lens ? row.lens : null,
     scope: row.scope ? row.scope : null,
     shadow: row.shadow,
+    reasoningLevel: row.reasoningLevel,
   }
 
-  // Exactly one model source per pass (the server rejects both-or-neither). A logical model carries its own
-  // reasoning effort, so a logical-model pass omits configuredModelId and reasoningEffort entirely.
+  // Exactly one model source per pass (the server rejects both-or-neither), so a logical-model pass omits
+  // configuredModelId entirely.
   return row.logicalModelName
     ? { ...shared, logicalModelName: row.logicalModelName }
-    : {
-        ...shared,
-        configuredModelId: row.configuredModelId,
-        reasoningEffort: (row.reasoning || 'none') as ReviewPassEntry['reasoningEffort'],
-      }
+    : { ...shared, configuredModelId: row.configuredModelId }
 }
 
 const completeEntries = (source: PassRow[]): ReviewPassEntry[] =>
@@ -456,7 +450,7 @@ const entriesKey = (entries: ReviewPassEntry[]): string =>
   entries
     .map(
       (entry) =>
-        `${entry.configuredModelId ?? ''}:${entry.logicalModelName ?? ''}:${entry.lens ?? ''}:${entry.scope ?? ''}:${entry.shadow ? '1' : '0'}:${entry.reasoningEffort ?? 'none'}`,
+        `${entry.configuredModelId ?? ''}:${entry.logicalModelName ?? ''}:${entry.lens ?? ''}:${entry.scope ?? ''}:${entry.shadow ? '1' : '0'}:${entry.reasoningLevel ?? ''}`,
     )
     .join('|')
 
@@ -468,7 +462,7 @@ const syncRowsFromModelValue = (): void => {
     lens: entry.lens ?? '',
     scope: entry.scope === 'pr_wide' ? 'pr_wide' : '',
     shadow: entry.shadow ?? false,
-    reasoning: entry.reasoningEffort ?? 'none',
+    reasoningLevel: entry.reasoningLevel ?? null,
   }))
 }
 
@@ -511,7 +505,7 @@ const assignDraft = (row: PassRow): void => {
   draft.lens = row.lens
   draft.scope = row.scope
   draft.shadow = row.shadow
-  draft.reasoning = row.reasoning
+  draft.reasoningLevel = row.reasoningLevel
 }
 
 const openAdd = (): void => {
@@ -652,13 +646,11 @@ const onDraftLogicalModelChange = (): void => {
 }
 
 .review-pass-from-logical,
-.review-pass-reasoning-hint,
 .review-pass-shadow-field {
   grid-column: 1 / -1;
 }
 
-.review-pass-from-logical,
-.review-pass-reasoning-hint {
+.review-pass-from-logical {
   margin: 0;
   font-size: 0.85rem;
 }

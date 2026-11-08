@@ -23621,12 +23621,16 @@ export interface components {
             supportsPromptCaching?: boolean;
             reasoningContentField?: string | null;
             /**
-             * @description Whether ProPR sends the reasoning effort `none` to this model. For a review pass, an evidence judge call
-             *     or a contradiction check with the effort None, ProPR sends `none` to a model with this flag and leaves
-             *     the effort out for any other model, which then uses its own default. An operator sets the flag when the
-             *     provider documents the effort `none` for the model, because some reasoning models refuse it.
+             * @description The level ProPR sends to this model for a call that no other place chooses a level for, or null to leave the
+             *     choice to the provider's own default. It is one of ReasoningLevels.
              */
-            supportsReasoningEffortNone?: boolean;
+            defaultReasoningLevel?: string | null;
+            /**
+             * @description The reasoning levels the model accepts, by the provider's names and from the lowest to the highest effort. An
+             *     empty list means that the model accepts no level; null means that no source knows the levels yet.
+             */
+            reasoningLevels?: string[] | null;
+            reasoningLevelsSource?: components["schemas"]["AiReasoningLevelSource"];
             /** @description Returns true when the model supports chat workloads. */
             readonly supportsChat?: boolean;
             /** @description Returns true when the model supports embeddings. */
@@ -23664,12 +23668,22 @@ export interface components {
             supportsPromptCaching?: boolean;
             reasoningContentField?: string | null;
             /**
-             * @description Whether ProPR sends the reasoning effort `none` to this model. For a review pass, an evidence judge call
-             *     or a contradiction check with the effort None, ProPR sends `none` to a model with this flag and leaves
-             *     the effort out for any other model, which then uses its own default. Set it when the provider documents
-             *     the effort `none` for the model.
+             * @description The level ProPR sends to this model for a call that no other place chooses a level for, by the provider's name,
+             *     or null to leave the choice to the provider's own default. It has to be one of the model's reasoning levels.
              */
-            supportsReasoningEffortNone?: boolean;
+            defaultReasoningLevel?: string | null;
+            /**
+             * @description The reasoning levels the model accepts, by the provider's names, for example `none`, `low` or
+             *     `max`. An empty list means that the model accepts no level. Leave it out to keep the stored levels of a
+             *     saved model, or to let ProPR fill the levels of a new model from the provider family and the model catalog.
+             */
+            reasoningLevels?: string[] | null;
+            reasoningLevelsSource?: components["schemas"]["AiReasoningLevelSource"];
+            /**
+             * @description Whether ProPR detects the levels again from the provider family and the model catalog and replaces the stated
+             *     and stored levels with them.
+             */
+            detectReasoningLevels?: boolean;
         };
         /**
          * @description Origin of a configured model entry.
@@ -24020,6 +24034,8 @@ export interface components {
              */
             releaseDate?: string | null;
             pricingLayer?: components["schemas"]["AiModelCatalogLayer"];
+            /** @description The reasoning levels the model accepts, from the lowest to the highest effort, or null when the catalog states none. */
+            reasoningLevels?: string[] | null;
         };
         /**
          * @description Which scope layer supplied a resolved catalog value.
@@ -24255,6 +24271,11 @@ export interface components {
             protocolMode?: string | null;
             isEnabled?: boolean;
         };
+        /**
+         * @description Where the reasoning levels of a configured model come from.
+         * @enum {string}
+         */
+        AiReasoningLevelSource: "provider" | "catalog" | "addIn" | "operator";
         /** @description One stored value on a connection profile that names nothing this build recognises. */
         AiUnresolvedValueDto: {
             field?: components["schemas"]["AiConnectionVocabularyField"];
@@ -24927,7 +24948,7 @@ export interface components {
             enableMultiPassUnion?: boolean;
             includeLinkedItemsInContext?: boolean;
             reviewPasses?: components["schemas"]["ReviewPassEntry"][] | null;
-            baselineReasoningEffort?: components["schemas"]["ReviewReasoningEffort"];
+            baselineReasoningLevel?: string | null;
             /** Format: uuid */
             tenantId?: string | null;
             tenantSlug?: string | null;
@@ -26997,6 +27018,8 @@ export interface components {
             embeddingDimensions?: number | null;
             isActive?: boolean | null;
             verificationStatus?: components["schemas"]["AiVerificationStatus"];
+            reasoningLevels?: string[] | null;
+            defaultReasoningLevel?: string | null;
         };
         /** @description One logical model as returned to the client, tagged by the scope it came from (client override or tenant). */
         LogicalModelResponse: {
@@ -27008,7 +27031,7 @@ export interface components {
             connectionId?: string;
             /** Format: uuid */
             configuredModelId?: string;
-            reasoningEffort?: components["schemas"]["ReviewReasoningEffort"];
+            reasoningLevel?: string | null;
             protocolMode?: string | null;
             scope?: string | null;
             referencedModel?: components["schemas"]["LogicalModelReferenceResponse"];
@@ -27021,7 +27044,7 @@ export interface components {
             connectionId?: string;
             /** Format: uuid */
             configuredModelId?: string;
-            reasoningEffort?: components["schemas"]["ReviewReasoningEffort"];
+            reasoningLevel?: string | null;
             protocolMode?: string | null;
         };
         /** @description Login request payload. */
@@ -27439,7 +27462,7 @@ export interface components {
             enableMultiPassUnion?: boolean | null;
             includeLinkedItemsInContext?: boolean | null;
             reviewPasses?: components["schemas"]["ReviewPassEntry"][] | null;
-            baselineReasoningEffort?: components["schemas"]["ReviewReasoningEffort"];
+            baselineReasoningLevel?: string | null;
             budgetConfig?: components["schemas"]["BudgetConfigDto"];
             minimumSeverityToPost?: components["schemas"]["CommentSeverity"];
             autoResolveSeverities?: components["schemas"]["CommentSeverity"][] | null;
@@ -28812,7 +28835,10 @@ export interface components {
         /** @description One purpose → logical-model mapping row. */
         PurposeRoleResponse: {
             purpose?: components["schemas"]["AiPurpose"];
+            /** @description The logical model the purpose runs on. */
             logicalModelName?: string | null;
+            /** @description The reasoning level the assignment sets, or null. */
+            reasoningLevel?: string | null;
         };
         /** @description Request body for setting a client's default review profile. */
         PutClientReviewProfileRequest: {
@@ -29407,10 +29433,14 @@ export interface components {
             scope?: string | null;
             /** @description Whether this pass runs in shadow mode. Additive metadata the runtime does not act on yet. */
             shadow?: boolean;
-            reasoningEffort?: components["schemas"]["ReviewReasoningEffort"];
             /**
-             * @description The named logical model this pass runs on (its connection, model, reasoning effort, and protocol come from the
-             *     resolved role). When set, it takes precedence and ConfiguredModelId is ignored. A pass
+             * @description Reasoning level this pass asks the model for, by the provider's name, for example `high` or `max`.
+             *     Without one, the pass takes the level of its logical model and then the default level of its configured model.
+             *     The model receives only a level it accepts.
+             */
+            reasoningLevel?: string | null;
+            /**
+             * @description The named logical model this pass runs on (its connection, model and protocol come from the resolved role). When set, it takes precedence and ConfiguredModelId is ignored. A pass
              *     should set exactly one of LogicalModelName or ConfiguredModelId.
              */
             logicalModelName?: string | null;
@@ -29430,13 +29460,6 @@ export interface components {
          * @enum {string}
          */
         ReviewProfileSource: "systemDefault" | "clientDefault";
-        /**
-         * @description How much reasoning effort a review pass asks the model to spend. Configured per pass at the client level and
-         *     applied to the outbound chat request. MeisterDev.ProPR.Domain.Enums.ReviewReasoningEffort.None is the default. The remaining levels map to the
-         *     provider's low/medium/high reasoning-effort settings.
-         * @enum {string}
-         */
-        ReviewReasoningEffort: "none" | "low" | "medium" | "high";
         /** @description Provider-neutral repository identity supplied by review intake clients. */
         ReviewRepositoryRefDto: {
             externalRepositoryId?: string | null;
@@ -30428,7 +30451,11 @@ export interface components {
             remoteModelId?: string | null;
             /** @description The provider family, which decides prompt-shape details. */
             providerKind?: string | null;
-            /** @description The reasoning effort this binding asks for. */
+            /**
+             * @description The reasoning level of the logical model this binding names, by the provider's name, or empty for no level. Every
+             *     binding of the same logical model carries the same level. A runner that knows only the levels none, low, medium
+             *     and high reads any other name as no level.
+             */
             reasoningEffort?: string | null;
             /** @description The tokenizer that counts this model's prompts, when one is configured. */
             tokenizerName?: string | null;
@@ -30455,11 +30482,20 @@ export interface components {
             /** Format: uuid */
             configuredModelId?: string | null;
             /**
-             * @description Whether the configured model accepts the reasoning effort `none`. A review pass, an evidence judge call
-             *     or a contradiction check with the effort None then sends the effort `none`. Without the flag, the call
-             *     leaves the effort out, and the model uses its own default.
+             * @description Whether the default level of the configured model is `none`, for a runner that reads no level list: such a
+             *     runner sends the effort `none` for a call without a level when the flag is set.
              */
             supportsReasoningEffortNone?: boolean;
+            /** @description The levels the configured model accepts, or null when no source knows them. */
+            reasoningLevels?: string[] | null;
+            /** @description The default level of the configured model, or null. */
+            defaultReasoningLevel?: string | null;
+            /**
+             * @description The reasoning level the assignment of the review purpose sets, on the default model only, or null. It applies
+             *     before the level of the logical model to the stages that run on the default model, and the evidence judge does
+             *     not take it.
+             */
+            purposeReasoningLevel?: string | null;
         };
         /** @description One file this job has already had reviewed, reduced to what the pipeline reads back. */
         RunnerPriorFileResult: {
@@ -30738,6 +30774,12 @@ export interface components {
              *     pass the client is still evaluating.
              */
             shadow?: boolean;
+            /**
+             * @description The reasoning level the pass itself sets, by the provider's name, or null when the pass sets none and takes the
+             *     level of its logical model. The level travels here, not in Model, because passes on the same
+             *     logical model share one binding on the executor.
+             */
+            reasoningLevel?: string | null;
         };
         /**
          * @description Which review the executor is being asked to perform.
@@ -30976,7 +31018,13 @@ export interface components {
         };
         /** @description Payload to map a purpose to a logical model. */
         SetPurposeRoleRequest: {
+            /** @description The logical model the purpose runs on. */
             logicalModelName?: string | null;
+            /**
+             * @description The reasoning level the purpose runs at, by the provider's name, or null to leave it to the level of the logical
+             *     model and the default level of its configured model. A level the model does not accept is refused.
+             */
+            reasoningLevel?: string | null;
         };
         /** @description Enable/disable request for a user. */
         SetUserActiveRequest: {

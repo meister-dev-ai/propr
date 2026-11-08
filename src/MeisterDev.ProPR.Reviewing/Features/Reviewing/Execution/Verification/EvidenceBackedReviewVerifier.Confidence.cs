@@ -4,6 +4,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text.Json;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.AI;
@@ -167,10 +168,14 @@ public sealed partial class EvidenceBackedReviewVerifier
 
             var claim = workItem.Claim;
             var system = BuildContradictionSystemPrompt();
-            // The check runs with the configured verification effort. Without one it runs with the effort None, which
-            // sends none to a model that accepts it and no effort to any other model.
+            // The check runs with the configured verification level. Without one it asks for the level none from a model
+            // that accepts it - one whose list holds it, or whose default level is none, which a runner learns from an
+            // older control plane that sends no list - and for no level from any other model.
             var options = new ChatOptions { ModelId = runtime.ModelId, MaxOutputTokens = this._outputBudgets.Initial };
-            ApplyJudgeReasoning(options, this._verificationReasoningEffort, runtime);
+            var acceptsNone = runtime.ReasoningLevels?.Contains(ReviewReasoningRequest.NoneLevel, StringComparer.Ordinal) == true
+                              || string.Equals(runtime.ModelDefaultLevel, ReviewReasoningRequest.NoneLevel, StringComparison.Ordinal);
+            var checkLevel = ReasoningLevelSelection.FirstSet(this._verificationReasoningLevel, acceptsNone ? ReviewReasoningRequest.NoneLevel : null);
+            ApplyJudgeReasoning(options, checkLevel, runtime);
 
             var checkSources = new List<JudgeExcerpt>();
             var result = await EvidenceJudgeToolLoop.RunAsync(

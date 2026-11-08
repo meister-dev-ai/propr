@@ -690,16 +690,12 @@ Which files land in which complexity tier is decided per review - see
 
 ## Evidence judge budgets
 
-The evidence judge requests `low` reasoning effort when the bundled catalog advertises it for the exact
-model and the selected transport supports it. On any other model, the judge runs with the effort `none`, and
-both contradiction checks run with the effort `none` on every model. For these calls, ProPR sends `none` to a
-model with **Accepts Reasoning Effort None** and leaves the effort out for any other model, which then uses its
-own default.
-`AI_VERIFICATION_REASONING_EFFORT` sets one effort for the judge and both contradiction checks on every
-model. Set it only for models that accept a reasoning effort, because a model that does not accept one
-rejects the request, and the output ceilings include the reasoning tokens. A `low`, `medium` or `high` effort
-reaches the Responses API and the native protocols, and Chat Completions receives none of them - see
-[reasoning effort](../ai/purposes.md#reasoning-effort).
+The evidence judge runs at the level of the purpose assignment of Verification, otherwise at
+`AI_VERIFICATION_REASONING_LEVEL`, otherwise at `low` where the model lists it and the selected transport supports
+it, and then at the level of its logical model and model. Both contradiction checks run at
+`AI_VERIFICATION_REASONING_LEVEL`, otherwise at `none` on a model that lists it. A model receives only a level it
+accepts, and Chat Completions receives only `none` - see [reasoning level](../ai/purposes.md#reasoning-level). The
+output ceilings include the reasoning tokens.
 The output ceiling includes reasoning tokens. An output-limit response, or an unusable verdict at the
 measured ceiling, receives one larger retry. Completed tool results remain available; the retry permits
 no further lookups and shares the claim's 120-second deadline. Both attempts are recorded and charged.
@@ -710,7 +706,8 @@ ceiling withholds the finding with `judge_output_limit`.
 |---|---|---|---|---|
 | `AI_EVIDENCE_JUDGE_MAX_OUTPUT_TOKENS` | Initial reasoning-inclusive output ceiling per judge call | `4000` | 512–32768 | no |
 | `AI_EVIDENCE_JUDGE_RETRY_MAX_OUTPUT_TOKENS` | Output ceiling for the single recovery attempt | `8000` | 512–32768; greater than the initial ceiling | no |
-| `AI_VERIFICATION_REASONING_EFFORT` | Reasoning effort the judge and both contradiction checks request | `none` | `none`, `low`, `medium`, `high` | no |
+| `AI_VERIFICATION_REASONING_LEVEL` | Reasoning level the judge and both contradiction checks request | not set | A level name, for example `none`, `low`, `high` or `max`; a value that is not a level name is ignored | no |
+| `AI_VERIFICATION_REASONING_EFFORT` | Former name of `AI_VERIFICATION_REASONING_LEVEL`, read when that variable is not set | not set | As `AI_VERIFICATION_REASONING_LEVEL`, except that `none` means not set, as it did before levels had names | no |
 
 Both the control plane and runner read these installation settings. A parsable value outside these
 bounds, or a retry ceiling no greater than the initial ceiling, fails startup. Unparsable values use

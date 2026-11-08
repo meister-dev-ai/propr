@@ -131,7 +131,7 @@ public sealed class PrWideCandidateGeneratorTests
             });
 
         var candidates = await CreateSut().GenerateCandidatesAsync(
-            CreateJob(), CreatePr(), context, Runtime(chat), new(2, 1, 1), 2, false, ReviewReasoningEffort.None, CancellationToken.None);
+            CreateJob(), CreatePr(), context, Runtime(chat), new(2, 1, 1), 2, false, null, CancellationToken.None);
 
         var classification = Assert.Single(candidates).FindingClassification;
         Assert.NotNull(classification);
@@ -213,7 +213,7 @@ public sealed class PrWideCandidateGeneratorTests
                 new ChatResponse(new ChatMessage(ChatRole.Assistant, "{\"summary\":\"Review.\",\"candidate_findings\":[" + synthesized + "]}")));
 
         var candidates = await CreateSut().GenerateCandidatesAsync(
-            CreateJob(), CreatePr(), context, Runtime(chat), new(1, 1, 1), 2, false, ReviewReasoningEffort.None, CancellationToken.None);
+            CreateJob(), CreatePr(), context, Runtime(chat), new(1, 1, 1), 2, false, null, CancellationToken.None);
 
         var classification = Assert.Single(candidates).FindingClassification;
         Assert.NotNull(classification);
@@ -257,7 +257,7 @@ public sealed class PrWideCandidateGeneratorTests
             modelEvidenceStore: store);
         await sut.GenerateCandidatesAsync(
             CreateJob(), CreatePr(), new ReviewSystemContext(null, [], null), runtime,
-            new PrWideGenerationBudget(1, 1, 1), 2, false, ReviewReasoningEffort.None, CancellationToken.None);
+            new PrWideGenerationBudget(1, 1, 1), 2, false, null, CancellationToken.None);
 
         Assert.NotEmpty(retained);
         var passes = retained[^1].PullRequestPasses.SelectMany(proof => proof.Passes).ToArray();
@@ -308,7 +308,7 @@ public sealed class PrWideCandidateGeneratorTests
             new PrWideGenerationBudget(3, 3, 5),
             unionPassIndex: 2,
             shadow: false,
-            reasoningEffort: ReviewReasoningEffort.None,
+            reasoningLevel: null,
             CancellationToken.None);
 
         Assert.NotEmpty(candidates);
@@ -348,8 +348,8 @@ public sealed class PrWideCandidateGeneratorTests
             Arg.Any<long?>());
     }
 
-    // A PR-wide pass configured for no reasoning sends the effort none to every stage only when the pass's own model
-    // accepts it, and records on its trace what it sent.
+    // A PR-wide pass that asks for the level none sends it to every stage only when the levels of the pass's own model
+    // hold it, and records on its trace what it sent.
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -374,7 +374,7 @@ public sealed class PrWideCandidateGeneratorTests
         chat.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Do<ChatOptions?>(sent.Add), Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "{}")));
         var runtime = Runtime(chat);
-        var model = runtime.Model with { SupportsReasoningEffortNone = accepted };
+        var model = runtime.Model with { ReasoningLevels = accepted ? ["none", "low", "medium", "high"] : ["low", "medium", "high"] };
         runtime.Model.Returns(model);
         var context = new ReviewSystemContext(null, [], Substitute.For<IReviewContextTools>()) { ProtocolRecorder = recorder };
 
@@ -386,7 +386,7 @@ public sealed class PrWideCandidateGeneratorTests
             new PrWideGenerationBudget(1, 1, 1),
             unionPassIndex: 2,
             shadow: false,
-            reasoningEffort: ReviewReasoningEffort.None,
+            reasoningLevel: "none",
             CancellationToken.None);
 
         Assert.NotEmpty(sent);
@@ -439,7 +439,7 @@ public sealed class PrWideCandidateGeneratorTests
             new PrWideGenerationBudget(MaxInvestigations: 1, MaxToolCallsPerInvestigation: 3, MaxSeedFilesPerInvestigation: 5),
             unionPassIndex: 2,
             shadow: false,
-            reasoningEffort: ReviewReasoningEffort.None,
+            reasoningLevel: null,
             CancellationToken.None);
 
         await recorder.Received(1).RecordPrWideStageEventAsync(
@@ -486,7 +486,7 @@ public sealed class PrWideCandidateGeneratorTests
             new PrWideGenerationBudget(3, 3, 5),
             unionPassIndex: 2,
             shadow: true,
-            reasoningEffort: ReviewReasoningEffort.None,
+            reasoningLevel: null,
             CancellationToken.None);
 
         Assert.NotEmpty(candidates);
@@ -572,13 +572,48 @@ public sealed class PrWideCandidateGeneratorTests
             new PrWideGenerationBudget(3, 3, 5),
             unionPassIndex: 2,
             shadow: false,
-            reasoningEffort: ReviewReasoningEffort.None,
+            reasoningLevel: null,
             CancellationToken.None);
 
         var candidate = Assert.Single(candidates);
         Assert.Equal("src/Core/Aggregator.cs", candidate.FilePath);
         Assert.Equal(2, candidate.LineNumber);
         Assert.Equal(ChangedLineRelation.OnChangedLine, candidate.ScopeRelation);
+    }
+
+    // The level travels on the protocol of the pass's own model. A pass model served through Chat Completions receives
+    // no level other than none, also when the review's own model uses the Responses API.
+    [Theory]
+    [InlineData(true, ReasoningEffort.High)]
+    [InlineData(false, null)]
+    public async Task GenerateCandidatesAsync_SendsTheLevelOnTheProtocolOfThePassModel(bool passModelUsesResponses, ReasoningEffort? expected)
+    {
+        var sent = new List<ChatOptions?>();
+        var chat = Substitute.For<IChatClient>();
+        chat.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Do<ChatOptions?>(sent.Add), Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "{}")));
+        var runtime = Runtime(chat);
+        var model = runtime.Model with { ReasoningLevels = ["none", "low", "high"] };
+        runtime.Model.Returns(model);
+        runtime.Capabilities.Returns(new AgentReviewRuntimeCapabilities(false, false, false, PrefersResponsesApi: passModelUsesResponses));
+        var context = new ReviewSystemContext(null, [], Substitute.For<IReviewContextTools>())
+        {
+            RuntimeCapabilities = new AgentReviewRuntimeCapabilities(false, false, false, PrefersResponsesApi: true),
+        };
+
+        await CreateSut().GenerateCandidatesAsync(
+            CreateJob(),
+            CreatePr(),
+            context,
+            runtime,
+            new PrWideGenerationBudget(1, 1, 1),
+            unionPassIndex: 2,
+            shadow: false,
+            reasoningLevel: "high",
+            CancellationToken.None);
+
+        Assert.NotEmpty(sent);
+        Assert.All(sent, options => Assert.Equal(expected, options?.Reasoning?.Effort));
     }
 
     private static PrWideAgenticReviewOrchestrator CreateSut()

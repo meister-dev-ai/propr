@@ -113,7 +113,7 @@ public sealed partial class EvidenceBackedReviewVerifier(
     private readonly TimeSpan _excerptTimeout = excerptTimeout ?? DefaultExcerptTimeout;
     private readonly TimeSpan _recordingGrace = recordingGrace ?? DefaultRecordingGrace;
     private readonly (int Initial, int Retry) _outputBudgets = ResolveOutputBudgets(reviewOptions);
-    private readonly ReviewReasoningEffort _verificationReasoningEffort = reviewOptions?.Value.VerificationReasoningEffort ?? ReviewReasoningEffort.None;
+    private readonly string? _verificationReasoningLevel = ReasoningLevelSelection.Normalize(reviewOptions?.Value.VerificationReasoningLevel);
 
     private static (int Initial, int Retry) ResolveOutputBudgets(IOptions<AiReviewOptions>? options)
     {
@@ -194,8 +194,11 @@ public sealed partial class EvidenceBackedReviewVerifier(
                     purpose == AiPurpose.ReviewHighEffort ? AiConnectionModelCategory.HighEffort : resolvedJudgeTokenCategory,
                     runtime.SupportsLowReasoningEffort,
                     new VerificationRuntimeProvenance(runtime.Model.RemoteModelId, runtime.Connection?.Id, purpose.ToString(), runtime.LogicalModelName, false),
-                    runtime.Model.SupportsReasoningEffortNone,
-                    runtime.Capabilities.PrefersResponsesApi);
+                    runtime.Capabilities.ReasoningLevels,
+                    runtime.Capabilities.PrefersResponsesApi,
+                    runtime.PurposeReasoningLevel,
+                    runtime.LogicalModelReasoningLevel,
+                    runtime.Model.DefaultReasoningLevel);
             }
             catch (OperationCanceledException)
             {
@@ -210,8 +213,9 @@ public sealed partial class EvidenceBackedReviewVerifier(
         return new JudgeRuntime(
             context?.ChatClient, context?.ModelId, AiConnectionModelCategory.Default,
             Provenance: new VerificationRuntimeProvenance(context?.ModelId, null, purpose.ToString(), null, true),
-            SupportsReasoningEffortNone: context?.SupportsReasoningEffortNone ?? false,
-            UsesResponsesApi: context?.UsesResponsesApi ?? false);
+            ReasoningLevels: context?.ReasoningLevels,
+            UsesResponsesApi: context?.UsesResponsesApi ?? false,
+            ModelDefaultLevel: context?.DefaultReasoningLevel);
     }
 
     // A verification purpose could not be resolved, so the step that asked for it runs on the reviewer's own tier client.
@@ -377,13 +381,18 @@ public sealed partial class EvidenceBackedReviewVerifier(
         var options = new ChatOptions { ModelId = judge.ModelId, MaxOutputTokens = this._outputBudgets.Initial };
         var observedSources = new List<JudgeExcerpt>();
 
-        // A configured verification effort applies to every judge model. Without one, the judge asks for low effort only
-        // where the model supports it, and otherwise runs with the effort None. A model that accepts the effort none is
-        // then sent none, and any other model receives no effort and uses its own default, as in a review pass.
-        var effort = this._verificationReasoningEffort != ReviewReasoningEffort.None ? this._verificationReasoningEffort
-            : judge.SupportsLowReasoningEffort ? ReviewReasoningEffort.Low
-            : ReviewReasoningEffort.None;
-        ApplyJudgeReasoning(options, effort, judge);
+        // The level of the purpose assignment applies first, then a configured verification level, then low where the
+        // model and its transport take it. The judge keeps that default above the level of the logical model, because
+        // purposes share logical models through their fallback chain, and a logical model set high for the review would
+        // otherwise raise the cost of every judge call. Without any of these, the logical model's level and the model's
+        // default level apply, as in a review pass.
+        var level = ReasoningLevelSelection.FirstSet(
+            judge.PurposeLevel,
+            this._verificationReasoningLevel,
+            judge.SupportsLowReasoningEffort ? "low" : null,
+            judge.LogicalModelLevel,
+            judge.ModelDefaultLevel);
+        ApplyJudgeReasoning(options, level, judge);
 
         var result = await EvidenceJudgeToolLoop.RunAsync(
             judge.Client!,
@@ -1186,17 +1195,13 @@ public sealed partial class EvidenceBackedReviewVerifier(
         }
     }
 
-    // States the effort of a judge or contradiction-check call. The effort None on a model that does not accept the
-    // effort none leaves the options untouched, so the request carries no reasoning options and the model uses its
-    // own default. Any other effort is stated for the Responses API, also in the standard setting that reaches a
-    // provider add-in, for native protocols and for relayed calls; Chat Completions receives only the effort none, as
-    // for a review pass.
-    private static void ApplyJudgeReasoning(ChatOptions options, ReviewReasoningEffort effort, JudgeRuntime judge)
+    // States the level of a judge or contradiction-check call, also when it asks for none: the request then carries no
+    // reasoning options and the model uses its own default, and the runtime of the purpose does not add its own level to
+    // a call that decided against one. A level reaches the transports as for a review pass, so Chat Completions receives
+    // only the level none, and a model receives only a level it accepts.
+    private static void ApplyJudgeReasoning(ChatOptions options, string? level, JudgeRuntime judge)
     {
-        if (effort != ReviewReasoningEffort.None || judge.SupportsReasoningEffortNone)
-        {
-            options.ApplyResolvedReasoning(false, effort, judge.SupportsReasoningEffortNone, judge.UsesResponsesApi);
-        }
+        options.ApplyResolvedReasoning(false, level, judge.ReasoningLevels, judge.UsesResponsesApi);
     }
 
     /// <summary>The runtime a judge or contradiction-check call runs on.</summary>
@@ -1205,16 +1210,22 @@ public sealed partial class EvidenceBackedReviewVerifier(
     /// <param name="Category">The token category the call is charged under.</param>
     /// <param name="SupportsLowReasoningEffort">Whether the model and its transport support low reasoning effort.</param>
     /// <param name="Provenance">The runtime recorded with the outcome.</param>
-    /// <param name="SupportsReasoningEffortNone">Whether the judging model accepts the reasoning effort none.</param>
+    /// <param name="ReasoningLevels">The levels the judging model accepts, or null when no source knows them.</param>
     /// <param name="UsesResponsesApi">Whether the judging model is called through the Responses API.</param>
+    /// <param name="PurposeLevel">The level the purpose assignment of the judging model sets, or null.</param>
+    /// <param name="LogicalModelLevel">The level of the logical model of the judging model, or null.</param>
+    /// <param name="ModelDefaultLevel">The default level of the judging model, or null.</param>
     private sealed record JudgeRuntime(
         IChatClient? Client,
         string? ModelId,
         AiConnectionModelCategory Category,
         bool SupportsLowReasoningEffort = false,
         VerificationRuntimeProvenance? Provenance = null,
-        bool SupportsReasoningEffortNone = false,
-        bool UsesResponsesApi = false);
+        IReadOnlyList<string>? ReasoningLevels = null,
+        bool UsesResponsesApi = false,
+        string? PurposeLevel = null,
+        string? LogicalModelLevel = null,
+        string? ModelDefaultLevel = null);
 
     // The serialized protocol recording of one claim: the lock shared by the run, the time after which the claim no
     // longer waits for that lock, and the run token the records themselves use.

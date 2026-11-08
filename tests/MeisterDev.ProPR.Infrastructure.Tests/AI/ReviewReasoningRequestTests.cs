@@ -1,7 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.Ai.Providers.Contracts;
+using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Infrastructure.AI;
 using Microsoft.Extensions.AI;
 using OpenAI.Responses;
@@ -10,54 +11,55 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.AI;
 
 public class ReviewReasoningRequestTests
 {
-    // Chat Completions reads the effort from the standard setting only. An ordinary review pass on a model called
-    // through Chat Completions leaves a configured Low, Medium or High out of it, because OpenAI refuses function tools
-    // there with any effort other than none from GPT-5.4 on.
+    private static readonly IReadOnlyList<string> AcceptsNoneToHigh = ["none", "low", "medium", "high"];
+
+    // Chat Completions reads the effort from the shared setting only. An ordinary review pass on a model called through
+    // Chat Completions leaves every level other than none out of it, because OpenAI refuses function tools there with
+    // any effort other than none from GPT-5.4 on.
     [Theory]
-    [InlineData(ReviewReasoningEffort.Low)]
-    [InlineData(ReviewReasoningEffort.Medium)]
-    [InlineData(ReviewReasoningEffort.High)]
-    public void OrdinaryReviewReasoning_DoesNotChangeItsStandardTransportOptions(ReviewReasoningEffort effort)
+    [InlineData("low")]
+    [InlineData("medium")]
+    [InlineData("high")]
+    public void OrdinaryReviewReasoning_DoesNotChangeItsStandardTransportOptions(string level)
     {
-        var options = new ChatOptions().ApplyReasoning(false, effort, supportsReasoningEffortNone: true);
+        var options = new ChatOptions().ApplyReasoning(false, level, AcceptsNoneToHigh);
 
         Assert.Null(options.Reasoning);
     }
 
-    // For a model called through the Responses API, a configured Low, Medium or High is also stated in the standard
-    // setting, which a provider add-in reads, and the Responses options carry the same effort for a client that reads
-    // them. An ordinary pass and a resolved decision behave alike.
+    // For a model called through the Responses API, a level is also stated in the shared setting, which a provider
+    // add-in reads, as far as the setting has a value for it, and the Responses options carry the level by name for a
+    // client that reads them. An ordinary pass and a resolved decision behave alike.
     [Theory]
-    [InlineData(ReviewReasoningEffort.Low, ReasoningEffort.Low, "low", false)]
-    [InlineData(ReviewReasoningEffort.Medium, ReasoningEffort.Medium, "medium", false)]
-    [InlineData(ReviewReasoningEffort.High, ReasoningEffort.High, "high", false)]
-    [InlineData(ReviewReasoningEffort.Low, ReasoningEffort.Low, "low", true)]
-    [InlineData(ReviewReasoningEffort.High, ReasoningEffort.High, "high", true)]
-    public void AConfiguredEffort_IsStatedInTheStandardSettingForTheResponsesApi(
-        ReviewReasoningEffort effort,
-        ReasoningEffort expected,
-        string expectedLevel,
-        bool resolved)
+    [InlineData("minimal", ReasoningEffort.Low, false)]
+    [InlineData("low", ReasoningEffort.Low, false)]
+    [InlineData("medium", ReasoningEffort.Medium, false)]
+    [InlineData("high", ReasoningEffort.High, false)]
+    [InlineData("xhigh", ReasoningEffort.ExtraHigh, true)]
+    [InlineData("max", ReasoningEffort.ExtraHigh, true)]
+    public void ALevel_IsStatedInTheSharedSettingAndByNameForTheResponsesApi(string level, ReasoningEffort expected, bool resolved)
     {
         var options = resolved
-            ? new ChatOptions().ApplyResolvedReasoning(false, effort, usesResponsesApi: true)
-            : new ChatOptions().ApplyReasoning(false, effort, usesResponsesApi: true);
+            ? new ChatOptions().ApplyResolvedReasoning(false, level, usesResponsesApi: true)
+            : new ChatOptions().ApplyReasoning(false, level, usesResponsesApi: true);
 
         Assert.Equal(expected, options.Reasoning!.Effort);
 #pragma warning disable OPENAI001 // Responses reasoning options are an evaluation-stage API surface.
         var raw = Assert.IsType<CreateResponseOptions>(options.RawRepresentationFactory!(null!));
-        Assert.Equal(new ResponseReasoningEffortLevel(expectedLevel), raw.ReasoningOptions!.ReasoningEffortLevel);
+        Assert.Equal(new ResponseReasoningEffortLevel(level), raw.ReasoningOptions!.ReasoningEffortLevel);
 #pragma warning restore OPENAI001
     }
 
-    // The effort None on a model called through the Responses API follows the rule of every transport: the effort none
-    // for a model that accepts it, and no standard setting for any other model.
+    // The level none follows the rule of every transport: a model whose list holds it receives it, and a model whose
+    // list does not receives no level.
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void NoReasoning_OnTheResponsesApi_StatesTheEffortNoneOnlyForAModelThatAcceptsIt(bool acceptsNone)
+    public void TheLevelNone_OnTheResponsesApi_ReachesOnlyAModelThatAcceptsIt(bool acceptsNone)
     {
-        var options = new ChatOptions().ApplyResolvedReasoning(false, ReviewReasoningEffort.None, acceptsNone, usesResponsesApi: true);
+        IReadOnlyList<string> levels = acceptsNone ? ["none", "low"] : ["low", "high"];
+
+        var options = new ChatOptions().ApplyResolvedReasoning(false, "none", levels, usesResponsesApi: true);
 
         ReasoningEffort? expected = acceptsNone ? ReasoningEffort.None : null;
         Assert.Equal(expected, options.Reasoning?.Effort);
@@ -77,17 +79,17 @@ public class ReviewReasoningRequestTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void NoReasoning_StatesTheEffortNoneForAModelThatAcceptsIt(bool resolved)
+    public void TheLevelNone_StatesTheEffortNoneAndKeepsTheTemperature(bool resolved)
     {
         var options = new ChatOptions { Temperature = 0.2f };
 
         if (resolved)
         {
-            options.ApplyResolvedReasoning(false, ReviewReasoningEffort.None, supportsReasoningEffortNone: true);
+            options.ApplyResolvedReasoning(false, "none", AcceptsNoneToHigh);
         }
         else
         {
-            options.ApplyReasoning(false, ReviewReasoningEffort.None, supportsReasoningEffortNone: true);
+            options.ApplyReasoning(false, "none", AcceptsNoneToHigh);
         }
 
         Assert.Equal(ReasoningEffort.None, options.Reasoning!.Effort);
@@ -101,26 +103,64 @@ public class ReviewReasoningRequestTests
         Assert.Equal(0.2f, options.Temperature);
     }
 
-    // A client that speaks its provider's own protocol reads the neutral request, in which no reasoning is the
-    // provider's default and needs no separate word.
-    [Fact]
-    public void NoReasoning_ReachesANativeProtocolClientAsTheNeutralNone()
+    // A client that speaks its provider's own protocol, which includes the provider add-ins, reads the neutral request
+    // with the level by name and the nearest neutral value for a family that does not read the name.
+    [Theory]
+    [InlineData("none", ProviderReasoningEffort.None)]
+    [InlineData("minimal", ProviderReasoningEffort.Low)]
+    [InlineData("medium", ProviderReasoningEffort.Medium)]
+    [InlineData("xhigh", ProviderReasoningEffort.High)]
+    [InlineData("max", ProviderReasoningEffort.High)]
+    public void ALevel_ReachesANativeProtocolClientByNameInTheNeutralRequest(string level, ProviderReasoningEffort expected)
     {
-        var options = new ChatOptions().ApplyReasoning(true, ReviewReasoningEffort.None, supportsReasoningEffortNone: true);
+        var options = new ChatOptions().ApplyReasoning(true, level);
 
-        var raw = options.RawRepresentationFactory!(new NativeProtocolClient());
+        var request = Assert.IsType<ProviderReasoningRequest>(options.RawRepresentationFactory!(new NativeProtocolClient()));
 
-        var request = Assert.IsType<MeisterDev.Ai.Providers.Contracts.ProviderReasoningRequest>(raw);
-        Assert.Equal(MeisterDev.Ai.Providers.Enums.ProviderReasoningEffort.None, request.Effort);
+        Assert.Equal(level, request.Level);
+        Assert.Equal(expected, request.Effort);
         Assert.True(request.CaptureReasoning);
     }
 
-    // A resolved decision, which relayed calls and the verification calls use, states a configured effort for the
-    // Responses API and leaves it out of the standard setting that Chat Completions reads, as an ordinary pass does.
+    // A stored level can fall out of the model's list; the model then receives the nearest lower level its list holds.
     [Fact]
-    public void ResolvedReasoning_StatesLowEffortForTheResponsesApiOnly()
+    public void ALevelTheModelDoesNotAccept_ReachesItAsTheNearestLowerLevelItAccepts()
     {
-        var options = new ChatOptions().ApplyResolvedReasoning(false, ReviewReasoningEffort.Low, supportsReasoningEffortNone: true);
+        var options = new ChatOptions().ApplyReasoning(false, "max", ["low", "medium", "high"], usesResponsesApi: true);
+
+        Assert.Equal(ReasoningEffort.High, options.Reasoning!.Effort);
+        var request = Assert.IsType<ProviderReasoningRequest>(options.RawRepresentationFactory!(new NativeProtocolClient()));
+        Assert.Equal("high", request.Level);
+    }
+
+    [Fact]
+    public void ALevelWithNoLowerLevelTheModelAccepts_LeavesTheRequestUnchanged()
+    {
+        var options = new ChatOptions();
+
+        var result = options.ApplyReasoning(false, "low", ["medium", "high"]);
+
+        Assert.Same(options, result);
+        Assert.Null(result.RawRepresentationFactory);
+    }
+
+    // A model whose levels no source knows receives the level as configured, as before models carried their levels.
+    [Fact]
+    public void AModelWithoutALevelList_ReceivesTheLevelAsConfigured()
+    {
+        var options = new ChatOptions().ApplyReasoning(false, "max", acceptedLevels: null, usesResponsesApi: true);
+
+        Assert.Equal(ReasoningEffort.ExtraHigh, options.Reasoning!.Effort);
+        var request = Assert.IsType<ProviderReasoningRequest>(options.RawRepresentationFactory!(new NativeProtocolClient()));
+        Assert.Equal("max", request.Level);
+    }
+
+    // A resolved decision, which relayed calls and the verification calls use, states a level for the Responses API and
+    // leaves it out of the shared setting that Chat Completions reads, as an ordinary pass does.
+    [Fact]
+    public void ResolvedReasoning_StatesLowForTheResponsesApiOnly()
+    {
+        var options = new ChatOptions().ApplyResolvedReasoning(false, "low", AcceptsNoneToHigh);
 
         Assert.Null(options.Reasoning);
 #pragma warning disable OPENAI001 // Responses reasoning options are an evaluation-stage API surface.
@@ -133,101 +173,87 @@ public class ReviewReasoningRequestTests
     // A resolved decision replaces what the options carried, so an effort stated there earlier does not reach Chat
     // Completions.
     [Theory]
-    [InlineData(ReviewReasoningEffort.None)]
-    [InlineData(ReviewReasoningEffort.Low)]
-    [InlineData(ReviewReasoningEffort.High)]
-    public void AResolvedDecision_ClearsPreviouslyStatedStandardEffort(ReviewReasoningEffort effort)
+    [InlineData(null)]
+    [InlineData("low")]
+    [InlineData("high")]
+    public void AResolvedDecision_ClearsPreviouslyStatedStandardEffort(string? level)
     {
         var options = new ChatOptions { Reasoning = new ReasoningOptions { Effort = ReasoningEffort.High } };
 
-        options.ApplyResolvedReasoning(false, effort);
+        options.ApplyResolvedReasoning(false, level);
 
         Assert.Null(options.Reasoning);
     }
 
     [Fact]
-    public void ApplyReasoning_CaptureOffAndEffortNone_LeavesRawRepresentationUnset()
+    public void ApplyReasoning_CaptureOffAndNoLevel_LeavesRawRepresentationUnset()
     {
         var options = new ChatOptions();
 
-        var result = options.ApplyReasoning(captureReasoning: false, ReviewReasoningEffort.None);
+        var result = options.ApplyReasoning(captureReasoning: false, null);
 
-        // Default-none path: byte-identical to sending no reasoning options at all.
+        // Byte-identical to sending no reasoning options at all.
         Assert.Same(options, result);
         Assert.Null(result.RawRepresentationFactory);
     }
 
-    // OpenAI rejects the whole request with HTTP 400 when a reasoning model is sent a temperature, so a
-    // configured effort has to clear it. Every review call carries a temperature, so this failed all of them.
+    // OpenAI rejects the whole request with HTTP 400 when a reasoning model is sent a temperature, so a level other
+    // than none has to clear it.
     [Theory]
-    [InlineData(ReviewReasoningEffort.Low)]
-    [InlineData(ReviewReasoningEffort.Medium)]
-    [InlineData(ReviewReasoningEffort.High)]
-    public void ApplyReasoning_WithAnEffort_DropsTheSamplingTemperature(ReviewReasoningEffort effort)
+    [InlineData("low")]
+    [InlineData("medium")]
+    [InlineData("high")]
+    [InlineData("max")]
+    public void ApplyReasoning_WithALevel_DropsTheSamplingTemperature(string level)
     {
         var options = new ChatOptions { Temperature = 0.2f };
 
-        var result = options.ApplyReasoning(captureReasoning: false, effort);
+        var result = options.ApplyReasoning(captureReasoning: false, level);
 
         Assert.Null(result.Temperature);
     }
 
     // An ordinary sampling model is not asked to reason, so its configured temperature has to survive.
     [Fact]
-    public void ApplyReasoning_WithNoEffort_KeepsTheSamplingTemperature()
+    public void ApplyReasoning_WithNoLevel_KeepsTheSamplingTemperature()
     {
         var options = new ChatOptions { Temperature = 0.2f };
 
-        var result = options.ApplyReasoning(captureReasoning: true, ReviewReasoningEffort.None);
+        var result = options.ApplyReasoning(captureReasoning: true, null);
 
         Assert.Equal(0.2f, result.Temperature);
     }
 
     [Fact]
-    public void ApplyReasoning_CaptureOnAndEffortNone_RequestsSummaryButNoEffort()
+    public void ApplyReasoning_CaptureOnAndNoLevel_RequestsSummaryButNoEffort()
     {
-        var options = new ChatOptions();
-
-        var result = options.ApplyReasoning(captureReasoning: true, ReviewReasoningEffort.None);
-
-        Assert.NotNull(result.RawRepresentationFactory);
+        var result = new ChatOptions().ApplyReasoning(captureReasoning: true, null);
 
         var raw = result.RawRepresentationFactory!(null!);
 #pragma warning disable OPENAI001
         var createOptions = Assert.IsType<CreateResponseOptions>(raw);
-        Assert.NotNull(createOptions.ReasoningOptions);
         Assert.Equal(ResponseReasoningSummaryVerbosity.Auto, createOptions.ReasoningOptions!.ReasoningSummaryVerbosity);
-        // Effort stays unset when None, so behavior matches the pre-feature capture-on request exactly.
         Assert.Null(createOptions.ReasoningOptions.ReasoningEffortLevel);
 #pragma warning restore OPENAI001
     }
 
     [Fact]
-    public void ApplyReasoning_CaptureOffAndEffortSet_SetsEffortUnconditionallyWithoutSummary()
+    public void ApplyReasoning_CaptureOffAndALevel_SetsTheLevelWithoutSummary()
     {
-        var options = new ChatOptions();
-
-        var result = options.ApplyReasoning(captureReasoning: false, ReviewReasoningEffort.High);
-
-        Assert.NotNull(result.RawRepresentationFactory);
+        var result = new ChatOptions().ApplyReasoning(captureReasoning: false, "high");
 
         var raw = result.RawRepresentationFactory!(null!);
 #pragma warning disable OPENAI001
         var createOptions = Assert.IsType<CreateResponseOptions>(raw);
-        Assert.NotNull(createOptions.ReasoningOptions);
-        // Effort is applied independently of the reasoning-summary capture flag.
         Assert.Equal(ResponseReasoningEffortLevel.High, createOptions.ReasoningOptions!.ReasoningEffortLevel);
-        // No summary requested when capture is off.
         Assert.Null(createOptions.ReasoningOptions.ReasoningSummaryVerbosity);
 #pragma warning restore OPENAI001
     }
 
     [Fact]
-    public void ApplyReasoning_CaptureOnAndEffortSet_SetsBothSummaryAndEffort()
+    public void ApplyReasoning_CaptureOnAndALevel_SetsBothSummaryAndLevel()
     {
-        var options = new ChatOptions();
-
-        var result = options.ApplyReasoning(captureReasoning: true, ReviewReasoningEffort.Medium);
+        var result = new ChatOptions().ApplyReasoning(captureReasoning: true, "medium");
 
         var raw = result.RawRepresentationFactory!(null!);
 #pragma warning disable OPENAI001
@@ -237,32 +263,20 @@ public class ReviewReasoningRequestTests
 #pragma warning restore OPENAI001
     }
 
-    [Theory]
-    [InlineData(ReviewReasoningEffort.Low)]
-    [InlineData(ReviewReasoningEffort.Medium)]
-    [InlineData(ReviewReasoningEffort.High)]
-    public void ApplyReasoning_MapsEachEffortLevelToTheProviderLevel(ReviewReasoningEffort effort)
+    // The shaping records the level it sent, so a relay that rebuilds the request keeps the pass's level.
+    [Fact]
+    public void ShapedReasoningLevel_IsTheLevelTheRequestNames()
     {
-        var result = new ChatOptions().ApplyReasoning(captureReasoning: false, effort);
+        var options = new ChatOptions().ApplyReasoning(false, "xhigh", ["low", "high"]);
 
-        var raw = result.RawRepresentationFactory!(null!);
-#pragma warning disable OPENAI001
-        var createOptions = Assert.IsType<CreateResponseOptions>(raw);
-        var expected = effort switch
-        {
-            ReviewReasoningEffort.Low => ResponseReasoningEffortLevel.Low,
-            ReviewReasoningEffort.Medium => ResponseReasoningEffortLevel.Medium,
-            ReviewReasoningEffort.High => ResponseReasoningEffortLevel.High,
-            _ => (ResponseReasoningEffortLevel?)null,
-        };
-        Assert.Equal(expected, createOptions.ReasoningOptions!.ReasoningEffortLevel);
-#pragma warning restore OPENAI001
+        Assert.True(options.CarriesAReasoningRequest());
+        Assert.Equal("high", options.ShapedReasoningLevel());
     }
 
     [Fact]
     public void ApplyReasoning_Enabled_ReturnsFreshRawInstancePerInvocation()
     {
-        var options = new ChatOptions().ApplyReasoning(captureReasoning: true, ReviewReasoningEffort.None);
+        var options = new ChatOptions().ApplyReasoning(captureReasoning: true, null);
 
         var first = options.RawRepresentationFactory!(null!);
         var second = options.RawRepresentationFactory!(null!);
@@ -270,7 +284,7 @@ public class ReviewReasoningRequestTests
         Assert.NotSame(first, second);
     }
 
-    private sealed class NativeProtocolClient : MeisterDev.Ai.Providers.Contracts.INativeProtocolChatClient
+    private sealed class NativeProtocolClient : INativeProtocolChatClient
     {
         public string NativeProtocol => "test/native:Messages";
 

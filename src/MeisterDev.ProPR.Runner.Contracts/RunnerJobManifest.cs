@@ -281,12 +281,18 @@ public sealed record RunnerWorkspaceReference(
 ///     which is the reason for running one, so an executor that ignored this flag would post findings from a
 ///     pass the client is still evaluating.
 /// </param>
+/// <param name="ReasoningLevel">
+///     The reasoning level the pass itself sets, by the provider's name, or null when the pass sets none and takes the
+///     level of its logical model. The level travels here, not in <paramref name="Model" />, because passes on the same
+///     logical model share one binding on the executor.
+/// </param>
 public sealed record RunnerReviewPass(
     int Ordinal,
     RunnerModelBinding Model,
     string? Lens,
     string? Scope,
-    bool Shadow);
+    bool Shadow,
+    string? ReasoningLevel = null);
 
 /// <summary>
 ///     A model the executor may call, named rather than connected.
@@ -300,7 +306,11 @@ public sealed record RunnerReviewPass(
 /// <param name="LogicalModelName">The named model role the relay resolves.</param>
 /// <param name="RemoteModelId">The provider's model identifier, recorded on the trace.</param>
 /// <param name="ProviderKind">The provider family, which decides prompt-shape details.</param>
-/// <param name="ReasoningEffort">The reasoning effort this binding asks for.</param>
+/// <param name="ReasoningEffort">
+///     The reasoning level of the logical model this binding names, by the provider's name, or empty for no level. Every
+///     binding of the same logical model carries the same level. A runner that knows only the levels none, low, medium
+///     and high reads any other name as no level.
+/// </param>
 /// <param name="TokenizerName">The tokenizer that counts this model's prompts, when one is configured.</param>
 /// <param name="MaxInputTokens">The largest prompt the model accepts, when known.</param>
 /// <param name="MaxContextTokens">The context window the budgeter degrades against, when known.</param>
@@ -309,9 +319,15 @@ public sealed record RunnerReviewPass(
 /// <param name="SupportsStructuredOutput">Whether findings can be requested as a structured response.</param>
 /// <param name="SupportsLowReasoningEffort">Whether the resolved model and transport support low reasoning effort.</param>
 /// <param name="SupportsReasoningEffortNone">
-///     Whether the configured model accepts the reasoning effort <c>none</c>. A review pass, an evidence judge call
-///     or a contradiction check with the effort None then sends the effort <c>none</c>. Without the flag, the call
-///     leaves the effort out, and the model uses its own default.
+///     Whether the default level of the configured model is <c>none</c>, for a runner that reads no level list: such a
+///     runner sends the effort <c>none</c> for a call without a level when the flag is set.
+/// </param>
+/// <param name="ReasoningLevels">The levels the configured model accepts, or null when no source knows them.</param>
+/// <param name="DefaultReasoningLevel">The default level of the configured model, or null.</param>
+/// <param name="PurposeReasoningLevel">
+///     The reasoning level the assignment of the review purpose sets, on the default model only, or null. It applies
+///     before the level of the logical model to the stages that run on the default model, and the evidence judge does
+///     not take it.
 /// </param>
 public sealed record RunnerModelBinding(
     string LogicalModelName,
@@ -327,7 +343,10 @@ public sealed record RunnerModelBinding(
     bool SupportsLowReasoningEffort = false,
     Guid? ConnectionId = null,
     Guid? ConfiguredModelId = null,
-    bool SupportsReasoningEffortNone = false);
+    bool SupportsReasoningEffortNone = false,
+    IReadOnlyList<string>? ReasoningLevels = null,
+    string? DefaultReasoningLevel = null,
+    string? PurposeReasoningLevel = null);
 
 /// <summary>Prompt configuration for this review, resolved from client configuration at dispatch.</summary>
 /// <param name="Language">The output language contract for findings, when the client sets one.</param>

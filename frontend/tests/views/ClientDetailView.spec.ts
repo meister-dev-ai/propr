@@ -272,7 +272,7 @@ describe('ClientDetailView', () => {
       '/clients/{clientId}',
         expect.objectContaining({
           params: { path: { clientId: 'client-1' } },
-          body: { scmCommentPostingEnabled: false, enableMultiPassUnion: false, reviewEveryIncrementEnabled: false, commentResolutionBehavior: 'silent', includeLinkedItemsInContext: true, outputLanguage: 'en', baselineReasoningEffort: 'none' },
+          body: { scmCommentPostingEnabled: false, enableMultiPassUnion: false, reviewEveryIncrementEnabled: false, commentResolutionBehavior: 'silent', includeLinkedItemsInContext: true, outputLanguage: 'en' },
         })
     )
   })
@@ -300,7 +300,7 @@ describe('ClientDetailView', () => {
       '/clients/{clientId}',
         expect.objectContaining({
           params: { path: { clientId: 'client-1' } },
-          body: { scmCommentPostingEnabled: true, enableMultiPassUnion: false, reviewEveryIncrementEnabled: false, commentResolutionBehavior: 'silent', includeLinkedItemsInContext: true, outputLanguage: 'en', baselineReasoningEffort: 'none' },
+          body: { scmCommentPostingEnabled: true, enableMultiPassUnion: false, reviewEveryIncrementEnabled: false, commentResolutionBehavior: 'silent', includeLinkedItemsInContext: true, outputLanguage: 'en' },
         })
     )
   })

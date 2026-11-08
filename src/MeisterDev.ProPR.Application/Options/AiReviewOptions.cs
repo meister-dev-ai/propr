@@ -121,13 +121,13 @@ public sealed class AiReviewOptions : IValidatableObject
     public int EvidenceJudgeRetryMaxOutputTokens { get; set; } = 8000;
 
     /// <summary>
-    ///     Reasoning effort that the evidence judge and both contradiction checks request on every model. With None, the
-    ///     judge requests low effort where the model supports it and otherwise runs with the effort None, and the checks
-    ///     always run with the effort None. The effort None sends none to a model that accepts it and no effort to any
-    ///     other model. Chat Completions receives no low, medium or high effort.
-    ///     Bound to <c>AI_VERIFICATION_REASONING_EFFORT</c>.
+    ///     Reasoning level that the evidence judge and both contradiction checks request on every model, or
+    ///     <see langword="null" /> for their own defaults: the judge requests <c>low</c> where the model accepts it, and
+    ///     the checks request <c>none</c> where the model accepts it. A model receives only a level it accepts.
+    ///     Bound to <c>AI_VERIFICATION_REASONING_LEVEL</c>, otherwise to the former <c>AI_VERIFICATION_REASONING_EFFORT</c>,
+    ///     whose value <c>none</c> means not set.
     /// </summary>
-    public ReviewReasoningEffort VerificationReasoningEffort { get; set; } = ReviewReasoningEffort.None;
+    public string? VerificationReasoningLevel { get; set; }
 
     /// <summary>Whether both evidence-judge budgets are bounded and the retry budget exceeds the initial budget.</summary>
     public bool HasValidEvidenceJudgeOutputBudgets()

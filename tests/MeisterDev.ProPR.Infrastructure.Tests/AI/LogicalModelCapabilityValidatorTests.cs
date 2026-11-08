@@ -6,7 +6,6 @@ using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Interfaces;
-using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Repositories;
 using NSubstitute;
 using MeisterDev.ProPR.TestSupport;
@@ -209,7 +208,7 @@ public sealed class LogicalModelCapabilityValidatorTests
             capability,
             connectionId,
             modelId,
-            ReviewReasoningEffort.None,
+            null,
             ProviderDeclaredProtocolModes.Auto);
     }
 }

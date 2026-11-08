@@ -183,6 +183,29 @@ public interface IAiProviderDriver
         return false;
     }
 
+    /// <summary>
+    ///     The reasoning levels a model accepts, by the provider's names and from the lowest to the highest effort, as
+    ///     far as the family knows them without a call to the provider.
+    /// </summary>
+    /// <param name="remoteModelId">The model identifier as the provider knows it.</param>
+    /// <param name="catalogLevels">
+    ///     The levels the host's model catalog lists for the model, or null when the catalog does not know the model.
+    /// </param>
+    /// <returns>
+    ///     The levels the model accepts, or null when the family does not know them. The default returns
+    ///     <paramref name="catalogLevels" /> unchanged.
+    /// </returns>
+    /// <remarks>
+    ///     A family overrides this member to complete or correct the catalog with what it knows about its own models,
+    ///     for example the level <c>none</c> for a model whose thinking a request can leave off, or the levels of a model
+    ///     released after the catalog snapshot. The host calls it when it fills the levels of a configured model that
+    ///     the provider's discovery did not report.
+    /// </remarks>
+    IReadOnlyList<string>? DescribeReasoningLevels(string remoteModelId, IReadOnlyList<string>? catalogLevels)
+    {
+        return catalogLevels;
+    }
+
     /// <summary>Creates an embedding generator for one resolved model binding.</summary>
     IEmbeddingGenerator<string, Embedding<float>> CreateEmbeddingGenerator(
         ProviderEndpoint endpoint,

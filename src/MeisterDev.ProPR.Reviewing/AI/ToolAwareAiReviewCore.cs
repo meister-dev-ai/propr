@@ -234,8 +234,8 @@ internal sealed partial class ToolAwareAiReviewCore(
             Tools = transportTools.Count > 0 ? [.. transportTools] : null,
         }.ApplyReasoning(
             systemContext.CapturesReasoning(opts),
-            systemContext.ActiveReasoningEffort,
-            systemContext.RuntimeCapabilities.SupportsReasoningEffortNone,
+            systemContext.ActiveReasoningLevel,
+            systemContext.RuntimeCapabilities.ReasoningLevels,
             systemContext.RuntimeCapabilities.PrefersResponsesApi);
 
         // Pre-flight context-window budgeting: estimate the assembled payload against the model's context
@@ -739,8 +739,8 @@ internal sealed partial class ToolAwareAiReviewCore(
         var finalOptions = CreateTextAnswerOptions(setup.ChatOptions, setup.EffectiveModelId, systemContext.Temperature)
             .ApplyReasoning(
                 systemContext.CapturesReasoning(opts),
-                systemContext.ActiveReasoningEffort,
-                systemContext.RuntimeCapabilities.SupportsReasoningEffortNone,
+                systemContext.ActiveReasoningLevel,
+                systemContext.RuntimeCapabilities.ReasoningLevels,
                 systemContext.RuntimeCapabilities.PrefersResponsesApi);
         ChatResponse finalResponse;
         try
@@ -852,8 +852,8 @@ internal sealed partial class ToolAwareAiReviewCore(
         var correctionOptions = CreateTextAnswerOptions(chatOptions, effectiveModelId, systemContext.Temperature)
             .ApplyReasoning(
                 systemContext.CapturesReasoning(options.Value),
-                systemContext.ActiveReasoningEffort,
-                systemContext.RuntimeCapabilities.SupportsReasoningEffortNone,
+                systemContext.ActiveReasoningLevel,
+                systemContext.RuntimeCapabilities.ReasoningLevels,
                 systemContext.RuntimeCapabilities.PrefersResponsesApi);
 
         // Apply the same context-window budget to the schema-repair call, which sends the accumulated transcript

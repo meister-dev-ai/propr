@@ -97,16 +97,25 @@
               <input v-model="model.maxInputTokens" type="number" min="1" class="form-input-sm" placeholder="Max input" aria-label="Max input tokens" />
               <input v-model="model.embeddingDimensions" type="number" min="64" class="form-input-sm" placeholder="Dimensions" aria-label="Embedding dimensions" />
             </template>
-            <label v-else class="tenant-conn-model-flag">
-              <input v-model="model.supportsReasoningEffortNone" type="checkbox" :data-testid="`tenant-conn-model-effort-none-${index}`" />
-              <span>Accepts reasoning effort none</span>
-            </label>
+            <template v-else>
+              <!-- The server detects the levels of a new model when it creates the connection, so the select offers the
+                   shared level names. When the detected levels lack the default level, the server adds it to them. -->
+              <ReasoningLevelSelect
+                v-model="model.defaultReasoningLevel"
+                :levels="null"
+                :inherited-level="null"
+                inherited-from=""
+                class="form-input-sm"
+                aria-label="Default level"
+                :test-id="`tenant-conn-model-default-level-${index}`"
+              />
+            </template>
             <button class="btn-danger btn-xs" type="button" aria-label="Remove model" @click="draft.models.splice(index, 1)">Remove</button>
           </div>
-          <p v-if="draft.models.some(model => model.capability === 'chat')" class="muted-hint" data-testid="tenant-conn-model-effort-none-hint">
-            With "Accepts reasoning effort none" selected, ProPR sends the reasoning effort none to the model for a
-            review pass with the effort None. Without it, ProPR leaves the effort out, and the model uses its own
-            default. Turn it on when the provider documents the effort none for the model.
+          <p v-if="draft.models.some(model => model.capability === 'chat')" class="muted-hint" data-testid="tenant-conn-model-default-level-hint">
+            ProPR sends the default level of a chat model to that model for a call that no review pass, purpose
+            assignment, logical model or baseline level chooses a level for. With Provider default, ProPR sends no level,
+            and the provider applies its own default.
           </p>
         </div>
 
@@ -125,6 +134,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import ModalDialog from '@/components/dialogs/ModalDialog.vue'
+import ReasoningLevelSelect from '@/features/clients/components/ReasoningLevelSelect.vue'
 import {
   createTenantConnection,
   deleteTenantConnection,
@@ -165,8 +175,9 @@ interface ModelDraft {
   tokenizerName: string
   maxInputTokens: string
   embeddingDimensions: string
-  // Whether ProPR sends the reasoning effort none to this chat model for a call with the effort None.
-  supportsReasoningEffortNone: boolean
+  // The level ProPR sends to the model for a call that no other place chooses a level for, or null to leave the choice
+  // to the provider's own default. Only a chat model takes a level.
+  defaultReasoningLevel: string | null
 }
 
 const connections = ref<AiConnectionDto[]>([])
@@ -271,7 +282,7 @@ function addModel(): void {
     tokenizerName: '',
     maxInputTokens: '',
     embeddingDimensions: '',
-    supportsReasoningEffortNone: false,
+    defaultReasoningLevel: null,
   })
 }
 
@@ -294,7 +305,7 @@ async function create(): Promise<void> {
       tokenizerName: model.capability === 'embedding' ? model.tokenizerName.trim() || undefined : undefined,
       maxInputTokens: model.capability === 'embedding' && model.maxInputTokens ? Number(model.maxInputTokens) : undefined,
       embeddingDimensions: model.capability === 'embedding' && model.embeddingDimensions ? Number(model.embeddingDimensions) : undefined,
-      supportsReasoningEffortNone: model.capability === 'chat' && model.supportsReasoningEffortNone,
+      defaultReasoningLevel: model.capability === 'chat' ? model.defaultReasoningLevel : undefined,
     })),
   }
 
@@ -430,17 +441,15 @@ defineExpose({ load })
   min-width: 0;
 }
 
-.tenant-conn-model-row .btn-xs {
-  flex: 0 0 auto;
+/* ReasoningLevelSelect wraps its select in a root element, and that element is the flex item of this row, so it gets
+   the same sizing as the inputs. */
+.tenant-conn-model-row .reasoning-level-select {
+  flex: 1 1 8rem;
+  min-width: 0;
 }
 
-.tenant-conn-model-flag {
-  display: flex;
+.tenant-conn-model-row .btn-xs {
   flex: 0 0 auto;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.85rem;
-  white-space: nowrap;
 }
 
 @media (max-width: 720px) {

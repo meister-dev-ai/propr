@@ -19,15 +19,21 @@ public sealed class DiscussionAiConfigurationVersionReader(IDbContextFactory<Mei
         var tenant = await db.Clients.Where(client => client.Id == clientId).Select(client => client.TenantId).SingleAsync(ct);
         var purposes = requestedPurposes.SelectMany(purpose => new[] { purpose }.Concat(AiPurposeFallbacks.Chain(purpose))).Distinct().ToArray();
         var purposeNames = purposes.Select(purpose => purpose.ToString()).ToArray();
-        var mappings = await db.ClientPurposeLogicalModels.AsNoTracking().Where(mapping => mapping.ClientId == clientId && purposes.Contains(mapping.Purpose))
-            .OrderBy(mapping => mapping.Id).Select(mapping => new { mapping.LogicalModelName, mapping.Purpose }).ToListAsync(ct);
-        var logicalNames = mappings.Select(mapping => mapping.LogicalModelName).ToArray();
-        var overrides = await db.LogicalModelOverrides.AsNoTracking().Where(mapping => mapping.ClientId == clientId && logicalNames.Contains(mapping.Name))
-            .OrderBy(mapping => mapping.Id).Select(mapping => new
-                { mapping.Name, mapping.ConnectionId, mapping.ConfiguredModelId, mapping.ProtocolMode, mapping.ReasoningEffort }).ToListAsync(ct);
-        var logicalModels = await db.LogicalModels.AsNoTracking().Where(mapping => mapping.TenantId == tenant && logicalNames.Contains(mapping.Name))
-            .OrderBy(mapping => mapping.Id).Select(mapping => new
-                { mapping.Name, mapping.ConnectionId, mapping.ConfiguredModelId, mapping.ProtocolMode, mapping.ReasoningEffort }).ToListAsync(ct);
+        var purposeRows = await db.ClientPurposeLogicalModels.AsNoTracking()
+            .Where(mapping => mapping.ClientId == clientId && purposes.Contains(mapping.Purpose))
+            .OrderBy(mapping => mapping.Id).Select(mapping => new { mapping.LogicalModelName, mapping.Purpose, mapping.ReasoningLevel }).ToListAsync(ct);
+        var mappings = purposeRows.Select(mapping => PurposeRow(mapping.LogicalModelName, mapping.Purpose, mapping.ReasoningLevel)).ToList();
+        var logicalNames = purposeRows.Select(mapping => mapping.LogicalModelName).ToArray();
+        var overrides = (await db.LogicalModelOverrides.AsNoTracking().Where(mapping => mapping.ClientId == clientId && logicalNames.Contains(mapping.Name))
+                .OrderBy(mapping => mapping.Id).Select(mapping => new
+                    { mapping.Name, mapping.ConnectionId, mapping.ConfiguredModelId, mapping.ProtocolMode, mapping.ReasoningLevel }).ToListAsync(ct))
+            .Select(mapping => LogicalModelRow(mapping.Name, mapping.ConnectionId, mapping.ConfiguredModelId, mapping.ProtocolMode, mapping.ReasoningLevel))
+            .ToList();
+        var logicalModels = (await db.LogicalModels.AsNoTracking().Where(mapping => mapping.TenantId == tenant && logicalNames.Contains(mapping.Name))
+                .OrderBy(mapping => mapping.Id).Select(mapping => new
+                    { mapping.Name, mapping.ConnectionId, mapping.ConfiguredModelId, mapping.ProtocolMode, mapping.ReasoningLevel }).ToListAsync(ct))
+            .Select(mapping => LogicalModelRow(mapping.Name, mapping.ConnectionId, mapping.ConfiguredModelId, mapping.ProtocolMode, mapping.ReasoningLevel))
+            .ToList();
         var bindings = await db.AiPurposeBindings.AsNoTracking().Where(binding => purposeNames.Contains(binding.Purpose) && binding.ConnectionProfile != null &&
                                                                                   (binding.ConnectionProfile.ClientId == clientId ||
                                                                                    binding.ConnectionProfile.TenantId == tenant))
@@ -71,4 +77,52 @@ public sealed class DiscussionAiConfigurationVersionReader(IDbContextFactory<Mei
         return DiscussionThreadProgress.Fingerprint(
             DiscussionFingerprints.CanonicalValue(new { mappings, overrides, logicalModels, profiles, bindings, models }));
     }
+
+    /// <summary>
+    ///     A purpose assignment as the fingerprint states it. The level appears only when the assignment sets one, so
+    ///     an assignment without a level keeps the fingerprint it had before purpose assignments carried levels.
+    /// </summary>
+    internal static object PurposeRow(string logicalModelName, AiPurpose purpose, string? reasoningLevel)
+    {
+        return reasoningLevel is null
+            ? new { LogicalModelName = logicalModelName, Purpose = purpose }
+            : new { LogicalModelName = logicalModelName, Purpose = purpose, ReasoningLevel = reasoningLevel };
+    }
+
+    /// <summary>A logical model as the fingerprint states it.</summary>
+    internal static LogicalModelFingerprintRow LogicalModelRow(
+        string name,
+        Guid connectionId,
+        Guid configuredModelId,
+        string protocolMode,
+        string? reasoningLevel)
+    {
+        return new LogicalModelFingerprintRow(name, connectionId, configuredModelId, protocolMode, FingerprintLevel(reasoningLevel));
+    }
+
+    /// <summary>
+    ///     A level as the fingerprint states it. Before levels had names, the fingerprint held the effort as the number
+    ///     of the former enumeration: 0 for no effort, 1 for low, 2 for medium and 3 for high. Those four keep their
+    ///     numbers, so a configuration that did not change keeps its fingerprint, and memory and insights are not
+    ///     processed again after the upgrade. Every other level appears by its name.
+    /// </summary>
+    internal static object FingerprintLevel(string? level)
+    {
+        return level switch
+        {
+            null => 0,
+            "low" => 1,
+            "medium" => 2,
+            "high" => 3,
+            _ => level,
+        };
+    }
+
+    /// <summary>A logical model row of the fingerprint, with the property names the fingerprint has always used.</summary>
+    internal sealed record LogicalModelFingerprintRow(
+        string Name,
+        Guid ConnectionId,
+        Guid ConfiguredModelId,
+        string ProtocolMode,
+        object ReasoningEffort);
 }

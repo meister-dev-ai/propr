@@ -8,7 +8,6 @@ using MeisterDev.Ai.Providers.Usage;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
-using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.AI;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Services;
 using Microsoft.Extensions.AI;
@@ -31,11 +30,11 @@ public sealed class RelayChatClientReasoningTests
     public async Task AJobThatWithholdsReasoning_AsksTheProviderForNoSummary()
     {
         var relay = new RecordingRelay(capturesReasoning: false);
-        var client = new RelayChatClient(Call, "reviewer-medium", relay, ReviewReasoningEffort.None, () => "k");
+        var client = new RelayChatClient(Call, "reviewer-medium", relay, null, () => "k");
 
         await client.GetResponseAsync(
             [new ChatMessage(ChatRole.User, "review this")],
-            new ChatOptions().ApplyReasoning(captureReasoning: true, ReviewReasoningEffort.None));
+            new ChatOptions().ApplyReasoning(captureReasoning: true, null));
 
         var request = Assert.IsType<ProviderReasoningRequest>(RawRequest(relay.Relayed));
         Assert.False(request.CaptureReasoning);
@@ -47,11 +46,11 @@ public sealed class RelayChatClientReasoningTests
     public async Task AJobThatWithholdsReasoning_KeepsTheEffortTheJobRunsAt()
     {
         var relay = new RecordingRelay(capturesReasoning: false);
-        var client = new RelayChatClient(Call, "reviewer-medium", relay, ReviewReasoningEffort.High, () => "k");
+        var client = new RelayChatClient(Call, "reviewer-medium", relay, "high", () => "k");
 
         await client.GetResponseAsync(
             [new ChatMessage(ChatRole.User, "review this")],
-            new ChatOptions().ApplyReasoning(captureReasoning: true, ReviewReasoningEffort.High));
+            new ChatOptions().ApplyReasoning(captureReasoning: true, "high"));
 
         var request = Assert.IsType<ProviderReasoningRequest>(RawRequest(relay.Relayed));
         Assert.False(request.CaptureReasoning);
@@ -64,15 +63,33 @@ public sealed class RelayChatClientReasoningTests
     public async Task AJobThatCapturesReasoning_OverridesTheRequestThePassShaped()
     {
         var relay = new RecordingRelay(capturesReasoning: true);
-        var client = new RelayChatClient(Call, "reviewer-medium", relay, ReviewReasoningEffort.High, () => "k");
+        var client = new RelayChatClient(Call, "reviewer-medium", relay, "high", () => "k");
 
         await client.GetResponseAsync(
             [new ChatMessage(ChatRole.User, "review this")],
-            new ChatOptions().ApplyReasoning(captureReasoning: false, ReviewReasoningEffort.High));
+            new ChatOptions().ApplyReasoning(captureReasoning: false, "high"));
 
         var request = Assert.IsType<ProviderReasoningRequest>(RawRequest(relay.Relayed));
         Assert.True(request.CaptureReasoning);
         Assert.Equal(ProviderReasoningEffort.High, request.Effort);
+    }
+
+    // The pass chose the level of its request from its own configuration, its purpose or its logical model. The relay
+    // states the tenant's capture decision again and keeps that level; the level of the binding applies only to a call
+    // that carries no reasoning request of the pipeline.
+    [Fact]
+    public async Task AReasoningRequestThePassShaped_KeepsItsLevelOverTheLevelOfTheBinding()
+    {
+        var relay = new RecordingRelay(capturesReasoning: false);
+        var client = new RelayChatClient(Call, "reviewer-medium", relay, "low", () => "k");
+
+        await client.GetResponseAsync(
+            [new ChatMessage(ChatRole.User, "review this")],
+            new ChatOptions().ApplyReasoning(captureReasoning: true, "xhigh"));
+
+        var request = Assert.IsType<ProviderReasoningRequest>(RawRequest(relay.Relayed));
+        Assert.Equal("xhigh", request.Level);
+        Assert.False(request.CaptureReasoning);
     }
 
     // Tool calling is what a review pass is made of, and the output ceiling bounds what it may spend on the
@@ -81,7 +98,7 @@ public sealed class RelayChatClientReasoningTests
     public async Task TheRebuiltOptions_KeepEveryToolAndTheCeilingThePassSet()
     {
         var relay = new RecordingRelay(capturesReasoning: true);
-        var client = new RelayChatClient(Call, "reviewer-medium", relay, ReviewReasoningEffort.None, () => "k");
+        var client = new RelayChatClient(Call, "reviewer-medium", relay, null, () => "k");
 
         await client.GetResponseAsync(
             [new ChatMessage(ChatRole.User, "review this")],
@@ -106,7 +123,7 @@ public sealed class RelayChatClientReasoningTests
     public async Task AJobThatCapturesReasoning_ShapesOptionsThePassDidNotSend()
     {
         var relay = new RecordingRelay(capturesReasoning: true);
-        var client = new RelayChatClient(Call, "reviewer-medium", relay, ReviewReasoningEffort.None, () => "k");
+        var client = new RelayChatClient(Call, "reviewer-medium", relay, null, () => "k");
 
         await client.GetResponseAsync([new ChatMessage(ChatRole.User, "review this")]);
 
@@ -119,7 +136,7 @@ public sealed class RelayChatClientReasoningTests
     public async Task AConfiguredEffort_ShapesOptionsThePassDidNotSend()
     {
         var relay = new RecordingRelay(capturesReasoning: false);
-        var client = new RelayChatClient(Call, "reviewer-medium", relay, ReviewReasoningEffort.Low, () => "k");
+        var client = new RelayChatClient(Call, "reviewer-medium", relay, "low", () => "k");
 
         await client.GetResponseAsync([new ChatMessage(ChatRole.User, "review this")]);
 
@@ -134,7 +151,7 @@ public sealed class RelayChatClientReasoningTests
     public async Task AJobWithNothingToAskFor_SendsNoOptions()
     {
         var relay = new RecordingRelay(capturesReasoning: false);
-        var client = new RelayChatClient(Call, "reviewer-medium", relay, ReviewReasoningEffort.None, () => "k");
+        var client = new RelayChatClient(Call, "reviewer-medium", relay, null, () => "k");
 
         await client.GetResponseAsync([new ChatMessage(ChatRole.User, "review this")]);
 
@@ -147,7 +164,7 @@ public sealed class RelayChatClientReasoningTests
     public async Task AProviderRequestThisPipelineDidNotBuild_IsDroppedWhenTheTenantKeepsNoReasoning()
     {
         var relay = new RecordingRelay(capturesReasoning: false);
-        var client = new RelayChatClient(Call, "reviewer-medium", relay, ReviewReasoningEffort.None, () => "k");
+        var client = new RelayChatClient(Call, "reviewer-medium", relay, null, () => "k");
 
         await client.GetResponseAsync(
             [new ChatMessage(ChatRole.User, "review this")],
@@ -168,7 +185,7 @@ public sealed class RelayChatClientReasoningTests
     public async Task AProviderRequestThisPipelineDidNotBuild_IsNeverCalledToFindOutWhatItAsksFor()
     {
         var relay = new RecordingRelay(capturesReasoning: false);
-        var client = new RelayChatClient(Call, "reviewer-medium", relay, ReviewReasoningEffort.None, () => "k");
+        var client = new RelayChatClient(Call, "reviewer-medium", relay, null, () => "k");
 
         var response = await client.GetResponseAsync(
             [new ChatMessage(ChatRole.User, "review this")],
@@ -186,7 +203,7 @@ public sealed class RelayChatClientReasoningTests
     public async Task AJobThatCapturesReasoning_ReplacesAProviderRequestThisPipelineDidNotBuild()
     {
         var relay = new RecordingRelay(capturesReasoning: true);
-        var client = new RelayChatClient(Call, "reviewer-medium", relay, ReviewReasoningEffort.None, () => "k");
+        var client = new RelayChatClient(Call, "reviewer-medium", relay, null, () => "k");
 
         await client.GetResponseAsync(
             [new ChatMessage(ChatRole.User, "review this")],
@@ -202,7 +219,7 @@ public sealed class RelayChatClientReasoningTests
     public async Task DroppingAnUnreadableProviderRequest_LeavesTheCallersOptionsUntouched()
     {
         var relay = new RecordingRelay(capturesReasoning: false);
-        var client = new RelayChatClient(Call, "reviewer-medium", relay, ReviewReasoningEffort.None, () => "k");
+        var client = new RelayChatClient(Call, "reviewer-medium", relay, null, () => "k");
         var callersFactory = (Func<IChatClient, object?>)(_ => "the options the pass shaped itself");
         var callersOptions = new ChatOptions { MaxOutputTokens = 4096, RawRepresentationFactory = callersFactory };
 
@@ -218,7 +235,7 @@ public sealed class RelayChatClientReasoningTests
     public async Task StatingTheResolvedReasoningRequest_LeavesTheCallersOptionsUntouched()
     {
         var relay = new RecordingRelay(capturesReasoning: true);
-        var client = new RelayChatClient(Call, "reviewer-medium", relay, ReviewReasoningEffort.High, () => "k");
+        var client = new RelayChatClient(Call, "reviewer-medium", relay, "high", () => "k");
         var callersOptions = new ChatOptions { Temperature = 0.2f };
 
         await client.GetResponseAsync([new ChatMessage(ChatRole.User, "review this")], callersOptions);
@@ -239,7 +256,7 @@ public sealed class RelayChatClientReasoningTests
     [Fact]
     public async Task AJobTheControlPlaneNoLongerHolds_IsReportedAsAJobThatIsNotExecuting()
     {
-        var client = new RelayChatClient(Call, "reviewer-medium", new RefusingRelay(RunnerRelayResult.JobNotHeld()), ReviewReasoningEffort.None, () => "k");
+        var client = new RelayChatClient(Call, "reviewer-medium", new RefusingRelay(RunnerRelayResult.JobNotHeld()), null, () => "k");
 
         var refused = await Assert.ThrowsAsync<RunnerCallRefusedException>(() => client.GetResponseAsync([new ChatMessage(ChatRole.User, "review this")]));
 
@@ -255,7 +272,7 @@ public sealed class RelayChatClientReasoningTests
             Call,
             "reviewer-medium",
             new RefusingRelay(RunnerRelayResult.NotAuthorized(RunnerCallRefusal.SupersededGeneration)),
-            ReviewReasoningEffort.None,
+            null,
             () => "k");
 
         var refused = await Assert.ThrowsAsync<RunnerCallRefusedException>(() => client.GetResponseAsync([new ChatMessage(ChatRole.User, "review this")]));

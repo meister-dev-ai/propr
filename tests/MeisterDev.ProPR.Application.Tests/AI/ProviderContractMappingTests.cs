@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.AI;
@@ -19,6 +20,27 @@ public sealed class ProviderContractMappingTests
     private const string CompatibleApiKey = "meisterdev/openAiCompatible:ApiKey";
 
     private const string CompatibleChatCompletions = "meisterdev/openAiCompatible:ChatCompletions";
+
+    // A default level the provider reports reaches the discovered model when it is a level name that the reported
+    // levels hold, because the save refuses any other.
+    [Theory]
+    [InlineData("none", new[] { "none", "low", "high" }, "none")]
+    [InlineData(" High ", null, "high")]
+    [InlineData("max", new[] { "low", "high" }, null)]
+    [InlineData("two words", null, null)]
+    [InlineData(null, new[] { "low" }, null)]
+    public void DiscoveredModelCarriesTheDefaultLevelTheProviderReports(string? reported, string[]? levels, string? expected)
+    {
+        var model = new ProviderDiscoveredModel("gpt-6.1-terra", "GPT 6.1 Terra", [AiOperationKind.Chat], ["auto"])
+        {
+            ReasoningLevels = levels,
+            DefaultReasoningLevel = reported,
+        };
+
+        var discovered = Assert.Single(new ProviderModelDiscoveryResult("ok", true, [], [model]).ToDto(DateTimeOffset.UnixEpoch).Models);
+
+        Assert.Equal(expected, discovered.DefaultReasoningLevel);
+    }
 
     [Fact]
     public void ConnectionMapsToTheEndpointADriverNeeds()

@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest'
 import type { components } from '@/types'
-import { normalizeReviewPasses, reviewPassesEqual } from '../useClientDetailViewModel'
+import { baselineReasoningLevelPatch, normalizeReviewPasses, reviewPassesEqual } from '../useClientDetailViewModel'
 
 type ReviewPassEntry = components['schemas']['ReviewPassEntry']
 
@@ -18,8 +18,8 @@ describe('review-pass normalize/equal preserve the lens', () => {
     ])
 
     expect(normalized).toEqual([
-      { ordinal: 0, configuredModelId: 'm1', logicalModelName: null, lens: 'security', scope: null, shadow: false, reasoningEffort: 'none' },
-      { ordinal: 1, configuredModelId: 'm2', logicalModelName: null, lens: null, scope: null, shadow: false, reasoningEffort: 'none' },
+      { ordinal: 0, configuredModelId: 'm1', logicalModelName: null, lens: 'security', scope: null, shadow: false, reasoningLevel: null },
+      { ordinal: 1, configuredModelId: 'm2', logicalModelName: null, lens: null, scope: null, shadow: false, reasoningLevel: null },
     ])
   })
 
@@ -40,7 +40,7 @@ describe('review-pass normalize/equal preserve the lens', () => {
   it('normalize keeps scope/shadow and equality treats a scope- or shadow-only change as different', () => {
     const normalized = normalizeReviewPasses([{ ordinal: 0, configuredModelId: 'm1', scope: 'pr_wide', shadow: true }])
     expect(normalized).toEqual([
-      { ordinal: 0, configuredModelId: 'm1', logicalModelName: null, lens: null, scope: 'pr_wide', shadow: true, reasoningEffort: 'none' },
+      { ordinal: 0, configuredModelId: 'm1', logicalModelName: null, lens: null, scope: 'pr_wide', shadow: true, reasoningLevel: null },
     ])
 
     const base: ReviewPassEntry[] = [{ ordinal: 0, configuredModelId: 'm1', lens: null, scope: null, shadow: false }]
@@ -87,5 +87,38 @@ describe('review-pass normalize/equal preserve the lens', () => {
         [{ ordinal: 0, logicalModelName: 'High Budget' }],
       ),
     ).toBe(false)
+  })
+})
+
+describe('review-pass normalize/equal preserve the reasoning level', () => {
+  it('normalizeReviewPasses keeps the level of both kinds of pass and defaults a missing one to null', () => {
+    const normalized = normalizeReviewPasses([
+      { ordinal: 0, logicalModelName: 'deep', reasoningLevel: 'xhigh' },
+      { ordinal: 1, configuredModelId: 'm1', reasoningLevel: 'low' },
+      { ordinal: 2, configuredModelId: 'm2' },
+    ])
+
+    expect(normalized.map((pass) => pass.reasoningLevel)).toEqual(['xhigh', 'low', null])
+  })
+
+  it('reviewPassesEqual treats a level-only change as different so Save activates', () => {
+    const before: ReviewPassEntry[] = [{ ordinal: 0, logicalModelName: 'deep', reasoningLevel: null }]
+
+    expect(reviewPassesEqual(before, [{ ordinal: 0, logicalModelName: 'deep', reasoningLevel: 'max' }])).toBe(false)
+    expect(reviewPassesEqual(before, [{ ordinal: 0, logicalModelName: 'deep' }])).toBe(true)
+  })
+})
+
+describe('baselineReasoningLevelPatch', () => {
+  it('sends a chosen level', () => {
+    expect(baselineReasoningLevelPatch('high', null)).toBe('high')
+    expect(baselineReasoningLevelPatch('high', 'low')).toBe('high')
+  })
+
+  // An absent field leaves the stored level, and an empty value clears it.
+  it('clears a stored level with an empty value and leaves out a level that was never set', () => {
+    expect(baselineReasoningLevelPatch(null, 'low')).toBe('')
+    expect(baselineReasoningLevelPatch(null, null)).toBeUndefined()
+    expect(baselineReasoningLevelPatch(null, undefined)).toBeUndefined()
   })
 })

@@ -42,6 +42,8 @@ public sealed partial class ClientAiConnectionsController(
 
     private static readonly StringComparer ModelNameComparer = StringComparer.OrdinalIgnoreCase;
 
+    private static readonly IReadOnlySet<string> EmptyDetectAgain = new HashSet<string>();
+
     [LoggerMessage(Level = LogLevel.Information, Message = "AI connection profile {ConnectionId} created for client {ClientId}")]
     private static partial void LogConnectionCreated(ILogger logger, Guid connectionId, Guid clientId);
 
@@ -169,6 +171,11 @@ public sealed partial class ClientAiConnectionsController(
         }
 
         writeRequest = await this.FillEmbeddingDefaultsAsync(clientId, writeRequest, ct);
+        writeRequest = await this.FillReasoningLevelsAsync(clientId, writeRequest, stored: null, request.ConfiguredModels, ct);
+        if (!this.ModelState.IsValid)
+        {
+            return this.ValidationProblem();
+        }
 
         if (request.CreationRequestId == Guid.Empty)
         {
@@ -253,6 +260,11 @@ public sealed partial class ClientAiConnectionsController(
         }
 
         writeRequest = await this.FillEmbeddingDefaultsAsync(clientId, writeRequest, ct);
+        writeRequest = await this.FillReasoningLevelsAsync(clientId, writeRequest, existing.ConfiguredModels, request.ConfiguredModels, ct);
+        if (!this.ModelState.IsValid)
+        {
+            return this.ValidationProblem();
+        }
 
         try
         {
@@ -700,6 +712,14 @@ public sealed partial class ClientAiConnectionsController(
                 catalog,
                 discovered.Models.Select(model => model.RemoteModelId),
                 this.DefaultProtocolModes(providerKind, isEmbeddingOnly: false)),
+        };
+
+        // A provider that reports the levels of its models has them in the listing already. For every other chat
+        // model, the levels come from the catalog and the family's add-in, so the operator sees them before saving.
+        discovered = discovered with
+        {
+            Models = ConfiguredModelReasoningLevels.Complete(discovered.Models, null, EmptyDetectAgain, driver, providerKind, catalog),
+            CatalogModels = ConfiguredModelReasoningLevels.Complete(discovered.CatalogModels, null, EmptyDetectAgain, driver, providerKind, catalog),
         };
 
         return this.Ok(discovered);
@@ -1342,6 +1362,11 @@ public sealed partial class ClientAiConnectionsController(
             this.ModelState.AddModelError(RequestModelsPropertyName, $"Model '{remoteModelId}' cannot declare chat protocols without chat capability.");
         }
 
+        if (ConfiguredModelReasoningLevels.Refusal(remoteModelId, requestModel.ReasoningLevels) is { } levelRefusal)
+        {
+            this.ModelState.AddModelError($"configuredModels[{index}].reasoningLevels", levelRefusal);
+        }
+
         return new AiConfiguredModelDto(
             requestModel.Id ?? Guid.Empty,
             remoteModelId,
@@ -1363,7 +1388,16 @@ public sealed partial class ClientAiConnectionsController(
             requestModel.SupportsReasoning,
             requestModel.SupportsPromptCaching,
             string.IsNullOrWhiteSpace(requestModel.ReasoningContentField) ? null : requestModel.ReasoningContentField.Trim(),
-            requestModel.SupportsReasoningEffortNone);
+            ReasoningLevelSelection.Normalize(requestModel.DefaultReasoningLevel),
+            ProviderReasoningLevels.Normalize(requestModel.ReasoningLevels),
+            StatedReasoningLevelsSource(requestModel));
+    }
+
+    // A stated list without a source was entered by an operator. Without a stated list there is no source yet: the
+    // save keeps the stored list or fills a detected one.
+    private static AiReasoningLevelSource? StatedReasoningLevelsSource(AiConfiguredModelRequest requestModel)
+    {
+        return requestModel.ReasoningLevels is null ? null : requestModel.ReasoningLevelsSource ?? AiReasoningLevelSource.Operator;
     }
 
     // An embedding model may leave its tokenizer, input limit and width out, and the save fills them in. A stated
@@ -1410,6 +1444,50 @@ public sealed partial class ClientAiConnectionsController(
                 .ToList()
                 .AsReadOnly(),
         };
+    }
+
+    // The levels are completed after the request is validated: a stated list stays, a saved model keeps its stored
+    // list, and any other chat model gets the levels detected from its provider family and the client's catalog.
+    private async Task<AiConnectionWriteRequestDto> FillReasoningLevelsAsync(
+        Guid clientId,
+        AiConnectionWriteRequestDto writeRequest,
+        IReadOnlyList<AiConfiguredModelDto>? stored,
+        IReadOnlyList<AiConfiguredModelRequest>? requestModels,
+        CancellationToken ct)
+    {
+        var catalog = modelCatalog is null ? [] : await modelCatalog.GetEffectiveForClientAsync(clientId, ct: ct);
+        var driver = providerDrivers.IsRegistered(writeRequest.ProviderKind) ? providerDrivers.GetRequired(writeRequest.ProviderKind) : null;
+        var completed = ConfiguredModelReasoningLevels.Complete(
+            writeRequest.ConfiguredModels,
+            stored,
+            DetectAgain(requestModels),
+            driver,
+            driver?.Declaration.Key ?? writeRequest.ProviderKind,
+            catalog);
+        this.AddDefaultReasoningLevelErrors(completed);
+        return writeRequest with { ConfiguredModels = completed };
+    }
+
+    // The default level of a model is one of its levels, checked once the save has completed the levels.
+    internal void AddDefaultReasoningLevelErrors(IReadOnlyList<AiConfiguredModelDto> models)
+    {
+        for (var index = 0; index < models.Count; index++)
+        {
+            var model = models[index];
+            if (ReasoningLevelSelection.Refusal(model.DefaultReasoningLevel, model.ReasoningLevels, model.RemoteModelId) is { } refusal)
+            {
+                this.ModelState.AddModelError($"configuredModels[{index}].defaultReasoningLevel", refusal);
+            }
+        }
+    }
+
+    // The models whose levels a request asks to detect again, by their identifiers.
+    internal static IReadOnlySet<string> DetectAgain(IReadOnlyList<AiConfiguredModelRequest>? requestModels)
+    {
+        return (requestModels ?? [])
+            .Where(model => model.DetectReasoningLevels && !string.IsNullOrWhiteSpace(model.RemoteModelId))
+            .Select(model => model.RemoteModelId.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     private IReadOnlyList<AiPurposeBindingDto> NormalizePurposeBindings(
@@ -1614,7 +1692,9 @@ public sealed partial class ClientAiConnectionsController(
             model.SupportsReasoning,
             model.SupportsPromptCaching,
             model.ReasoningContentField,
-            model.SupportsReasoningEffortNone);
+            model.DefaultReasoningLevel,
+            model.ReasoningLevels,
+            model.ReasoningLevelsSource);
     }
 
     private static AiPurposeBindingRequest ToBindingRequest(AiPurposeBindingDto binding)
@@ -1766,11 +1846,22 @@ public sealed record AiConnectionAuthRequest(
 }
 
 /// <summary>Configured model payload item for create, update, and discovery flows.</summary>
-/// <param name="SupportsReasoningEffortNone">
-///     Whether ProPR sends the reasoning effort <c>none</c> to this model. For a review pass, an evidence judge call
-///     or a contradiction check with the effort None, ProPR sends <c>none</c> to a model with this flag and leaves
-///     the effort out for any other model, which then uses its own default. Set it when the provider documents
-///     the effort <c>none</c> for the model.
+/// <param name="DefaultReasoningLevel">
+///     The level ProPR sends to this model for a call that no other place chooses a level for, by the provider's name,
+///     or null to leave the choice to the provider's own default. It has to be one of the model's reasoning levels.
+/// </param>
+/// <param name="ReasoningLevels">
+///     The reasoning levels the model accepts, by the provider's names, for example <c>none</c>, <c>low</c> or
+///     <c>max</c>. An empty list means that the model accepts no level. Leave it out to keep the stored levels of a
+///     saved model, or to let ProPR fill the levels of a new model from the provider family and the model catalog.
+/// </param>
+/// <param name="ReasoningLevelsSource">
+///     Where <paramref name="ReasoningLevels" /> come from. A stated list without a source counts as entered by an
+///     operator, and ProPR then keeps it when it detects levels again.
+/// </param>
+/// <param name="DetectReasoningLevels">
+///     Whether ProPR detects the levels again from the provider family and the model catalog and replaces the stated
+///     and stored levels with them.
 /// </param>
 public sealed record AiConfiguredModelRequest(
     Guid? Id,
@@ -1793,7 +1884,10 @@ public sealed record AiConfiguredModelRequest(
     bool SupportsReasoning = false,
     bool SupportsPromptCaching = false,
     string? ReasoningContentField = null,
-    bool SupportsReasoningEffortNone = false);
+    string? DefaultReasoningLevel = null,
+    IReadOnlyList<string>? ReasoningLevels = null,
+    AiReasoningLevelSource? ReasoningLevelsSource = null,
+    bool DetectReasoningLevels = false);
 
 /// <summary>Purpose binding payload item for create and update flows.</summary>
 public sealed record AiPurposeBindingRequest(

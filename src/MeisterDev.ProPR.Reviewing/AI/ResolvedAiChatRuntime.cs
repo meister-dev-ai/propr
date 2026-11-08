@@ -26,5 +26,8 @@ public sealed record ResolvedAiChatRuntime(
     public string? LogicalModelName { get; init; }
 
     /// <inheritdoc />
-    public ReviewReasoningEffort LogicalModelReasoningEffort { get; init; }
+    public string? LogicalModelReasoningLevel { get; init; }
+
+    /// <inheritdoc />
+    public string? PurposeReasoningLevel { get; init; }
 }

@@ -386,7 +386,7 @@ public sealed partial class AiConnectionRepository
             LogicalModelCapabilityValidator.ValidateMapping(
                 new LogicalModelDto(
                     reference.Id, reference.Name,
-                    reference.Capability, reference.ConnectionId, reference.ConfiguredModelId, reference.ReasoningEffort,
+                    reference.Capability, reference.ConnectionId, reference.ConfiguredModelId, reference.ReasoningLevel,
                     reference.ProtocolMode), candidate);
         }
     }
@@ -441,7 +441,7 @@ public sealed partial class AiConnectionRepository
                     m.Id, m.RemoteModelId, m.DisplayName, m.OperationKinds, m.SupportedProtocolModes, m.TokenizerName,
                     m.MaxInputTokens, m.EmbeddingDimensions, m.SupportsStructuredOutput, m.SupportsToolUse,
                     m.MaxContextTokens, m.SupportsReasoning, m.SupportsPromptCaching, m.ReasoningContentField,
-                    m.SupportsReasoningEffortNone,
+                    m.DefaultReasoningLevel, m.ReasoningLevels, m.ReasoningLevelsSource,
                     m.Source, m.LastSeenAt, m.InputCostPer1MUsd, m.OutputCostPer1MUsd, m.CachedInputCostPer1MUsd, m.CacheWriteCostPer1MUsd,
                 }),
                 Bindings = record.PurposeBindings.OrderBy(b => b.Id).Select(b => new

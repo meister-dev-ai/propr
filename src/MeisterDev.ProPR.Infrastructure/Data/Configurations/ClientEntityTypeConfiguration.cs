@@ -92,11 +92,9 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
             .HasColumnName("code_insights_collection_enabled")
             .HasDefaultValue(false);
 
-        builder.Property(c => c.BaselineReasoningEffort)
-            .HasColumnName("baseline_reasoning_effort")
-            .HasConversion<int>()
-            .HasDefaultValue(ReviewReasoningEffort.None)
-            .HasSentinel(ReviewReasoningEffort.None);
+        builder.Property(c => c.BaselineReasoningLevel)
+            .HasColumnName("baseline_reasoning_level")
+            .HasMaxLength(32);
 
         builder.Property(c => c.IncludeLinkedItemsInContext)
             .HasColumnName("include_linked_items_in_context")

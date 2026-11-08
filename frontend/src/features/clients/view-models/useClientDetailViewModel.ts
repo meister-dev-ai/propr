@@ -32,7 +32,6 @@ export type DetailTab = (typeof detailTabs)[number]
 /** The language tag a client falls back to when none is stored. Mirrors the backend default. */
 export const DEFAULT_OUTPUT_LANGUAGE = 'en'
 export type ReviewPassEntry = components['schemas']['ReviewPassEntry']
-export type ReviewReasoningEffort = components['schemas']['ReviewReasoningEffort']
 export type CommentResolutionBehavior = components['schemas']['CommentResolutionBehavior']
 export type BudgetConfig = components['schemas']['BudgetConfigDto']
 export type ReviewAdmissionPolicy = components['schemas']['ReviewAdmissionPolicyDto']
@@ -53,7 +52,8 @@ export interface ClientDetailDto {
   includeLinkedItemsInContext: boolean
   outputLanguage?: string | null
   reviewPasses?: ReviewPassEntry[] | null
-  baselineReasoningEffort?: ReviewReasoningEffort | null
+  /** The reasoning level of the baseline review pass, or null when none is set. */
+  baselineReasoningLevel?: string | null
   budgetConfig?: BudgetConfig | null
   admissionPolicy?: ReviewAdmissionPolicy | null
   findingBadgeStyle?: FindingBadgeStyle | null
@@ -102,7 +102,8 @@ export interface ClientDetailViewModel {
   editedIncludeLinkedItemsInContext: Ref<boolean>
   editedOutputLanguage: Ref<string>
   editedReviewPasses: Ref<ReviewPassEntry[]>
-  editedBaselineReasoningEffort: Ref<ReviewReasoningEffort>
+  /** The edited baseline reasoning level, or null for none. */
+  editedBaselineReasoningLevel: Ref<string | null>
   editedFindingBadgeStyle: Ref<FindingBadgeStyle>
   editedMinimumSeverityToPost: Ref<CommentSeverity>
   editedAutoResolveSeverities: Ref<CommentSeverity[]>
@@ -287,7 +288,7 @@ export function normalizeReviewPasses(passes: ReviewPassEntry[] | null | undefin
       lens: pass.lens ?? null,
       scope: pass.scope ?? null,
       shadow: pass.shadow ?? false,
-      reasoningEffort: pass.reasoningEffort ?? 'none',
+      reasoningLevel: pass.reasoningLevel ?? null,
     }))
 }
 
@@ -326,8 +327,6 @@ function isFailedPatch(result: { data?: unknown; error?: unknown; response?: Res
   return !!result.error || !result.data || result.response?.ok === false
 }
 
-/** Two pass lists are equal when they carry the same ordered (configured-model id, lens, scope, shadow,
- * reasoning effort) tuples. */
 /** Formats a stored numeric USD cap for a text input: null/undefined becomes an empty field ("no limit"). */
 export function capToInput(value: number | null | undefined): string {
   return value == null ? '' : String(value)
@@ -367,6 +366,8 @@ export function admissionBoundsError(bounds: readonly (readonly [string, string]
     : `${invalid[0]} must be a whole number between 1 and ${MAX_ADMISSION_BOUND}, or blank for no bound.`
 }
 
+/** Two pass lists are equal when they carry the same ordered (configured-model id, logical model, lens, scope,
+ * shadow, reasoning level) tuples. */
 export function reviewPassesEqual(left: ReviewPassEntry[], right: ReviewPassEntry[]): boolean {
   if (left.length !== right.length) {
     return false
@@ -379,8 +380,21 @@ export function reviewPassesEqual(left: ReviewPassEntry[], right: ReviewPassEntr
       (pass.lens ?? null) === (right[index]?.lens ?? null) &&
       (pass.scope ?? null) === (right[index]?.scope ?? null) &&
       (pass.shadow ?? false) === (right[index]?.shadow ?? false) &&
-      (pass.reasoningEffort ?? 'none') === (right[index]?.reasoningEffort ?? 'none'),
+      (pass.reasoningLevel ?? null) === (right[index]?.reasoningLevel ?? null),
   )
+}
+
+/**
+ * The baseline reasoning level for a client patch, or undefined to leave the field out. The patch keeps the stored
+ * level when the field is absent and clears it for an empty value. A removed level is therefore sent as an empty
+ * value, and the field is left out when no level is chosen and none is stored.
+ */
+export function baselineReasoningLevelPatch(edited: string | null, stored: string | null | undefined): string | undefined {
+  if (edited) {
+    return edited
+  }
+
+  return stored ? '' : undefined
 }
 
 /** Two severity sets are equal when they contain the same severities regardless of order (and ignoring duplicates). */
@@ -439,7 +453,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const editedIncludeLinkedItemsInContext = ref(true)
   const editedOutputLanguage = ref(DEFAULT_OUTPUT_LANGUAGE)
   const editedReviewPasses = ref<ReviewPassEntry[]>([])
-  const editedBaselineReasoningEffort = ref<ReviewReasoningEffort>('none')
+  const editedBaselineReasoningLevel = ref<string | null>(null)
   const editedFindingBadgeStyle = ref<FindingBadgeStyle>('shieldsIo')
   const editedMinimumSeverityToPost = ref<CommentSeverity>('info')
   const editedAutoResolveSeverities = ref<CommentSeverity[]>([])
@@ -517,7 +531,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedIncludeLinkedItemsInContext.value = Boolean(nextClient.includeLinkedItemsInContext)
     editedOutputLanguage.value = nextClient.outputLanguage || DEFAULT_OUTPUT_LANGUAGE
     editedReviewPasses.value = normalizeReviewPasses(nextClient.reviewPasses)
-    editedBaselineReasoningEffort.value = nextClient.baselineReasoningEffort ?? 'none'
+    editedBaselineReasoningLevel.value = nextClient.baselineReasoningLevel ?? null
     editedFindingBadgeStyle.value = nextClient.findingBadgeStyle ?? 'shieldsIo'
     editedMinimumSeverityToPost.value = nextClient.minimumSeverityToPost ?? 'info'
     editedAutoResolveSeverities.value = [...(nextClient.autoResolveSeverities ?? [])]
@@ -717,7 +731,14 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
         commentResolutionBehavior: editedCommentResolutionBehavior.value,
         includeLinkedItemsInContext: editedIncludeLinkedItemsInContext.value,
         outputLanguage: editedOutputLanguage.value.trim(),
-        baselineReasoningEffort: editedBaselineReasoningEffort.value,
+      }
+
+      const baselineReasoningLevel = baselineReasoningLevelPatch(
+        editedBaselineReasoningLevel.value,
+        client.value.baselineReasoningLevel,
+      )
+      if (baselineReasoningLevel !== undefined) {
+        patchBody.baselineReasoningLevel = baselineReasoningLevel
       }
 
       // The review-pass list is edited on the AI Connections tab but shares this save path with the System tab.
@@ -912,7 +933,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
         editedCommentResolutionBehavior.value !== (client.value.commentResolutionBehavior ?? 'silent') ||
         editedIncludeLinkedItemsInContext.value !== Boolean(client.value.includeLinkedItemsInContext) ||
         editedOutputLanguage.value.trim() !== (client.value.outputLanguage || DEFAULT_OUTPUT_LANGUAGE) ||
-        editedBaselineReasoningEffort.value !== (client.value.baselineReasoningEffort ?? 'none') ||
+        editedBaselineReasoningLevel.value !== (client.value.baselineReasoningLevel ?? null) ||
         !reviewPassesEqual(editedReviewPasses.value, normalizeReviewPasses(client.value.reviewPasses))
       )
     )
@@ -1011,7 +1032,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedIncludeLinkedItemsInContext,
     editedOutputLanguage,
     editedReviewPasses,
-    editedBaselineReasoningEffort,
+    editedBaselineReasoningLevel,
     editedFindingBadgeStyle,
     editedMinimumSeverityToPost,
     editedAutoResolveSeverities,

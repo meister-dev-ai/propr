@@ -54,37 +54,66 @@ public sealed class RunnerJobManifestResolverTests
         Assert.Equal(supported, resolution.Manifest!.DefaultModel.SupportsLowReasoningEffort);
     }
 
-    // A runner decides from its manifest whether a pass configured for no reasoning sends the effort none, so the
-    // binding has to carry what the configured model states.
+    // A runner sends a model only the levels it accepts, and a call without a level gets the model's default level, so
+    // the binding carries both. The flag for the level none keeps a runner that reads no list on its former behaviour.
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task TheManifest_CarriesWhetherTheModelAcceptsTheReasoningEffortNone(bool accepted)
+    public async Task TheManifest_CarriesTheLevelsAndTheDefaultLevelOfTheModel(bool defaultsToNone)
     {
         var runtime = Runtime("reviewer-default");
-        var model = runtime.Model with { SupportsReasoningEffortNone = accepted };
+        var model = runtime.Model with { DefaultReasoningLevel = defaultsToNone ? "none" : null, ReasoningLevels = ["none", "low", "high"] };
         runtime.Model.Returns(model);
         this._runtimes.ResolveChatRuntimeAsync(Arg.Any<Guid>(), Arg.Any<AiPurpose>(), Arg.Any<CancellationToken>()).Returns(runtime);
 
         var resolution = await this.CreateResolver().ResolveAsync(RequestFor(JobWithRevision()));
 
-        Assert.Equal(accepted, resolution.Manifest!.DefaultModel.SupportsReasoningEffortNone);
+        Assert.Equal(defaultsToNone, resolution.Manifest!.DefaultModel.SupportsReasoningEffortNone);
+        Assert.Equal(model.DefaultReasoningLevel, resolution.Manifest.DefaultModel.DefaultReasoningLevel);
+        Assert.Equal(["none", "low", "high"], resolution.Manifest.DefaultModel.ReasoningLevels);
     }
 
-    // A runner reviews every file on the default model, and its baseline pass uses the effort of that logical model
-    // as a review in process does, so the binding carries the effort the logical model sets.
+    // A runner reviews every file on the default model. Its binding carries the level of the logical model, and the
+    // level of the review purpose's assignment travels beside it, because the evidence judge takes the level of the
+    // logical model and not the level of the review purpose. An empty level reads as no level on every runner.
     [Theory]
-    [InlineData(ReviewReasoningEffort.None, "None")]
-    [InlineData(ReviewReasoningEffort.High, "High")]
-    public async Task TheManifest_CarriesTheEffortOfTheDefaultLogicalModel(ReviewReasoningEffort effort, string expected)
+    [InlineData(null, null, "", null)]
+    [InlineData(null, "high", "high", null)]
+    [InlineData("xhigh", "high", "high", "xhigh")]
+    public async Task TheManifest_CarriesTheLevelsOfTheLogicalModelAndOfThePurposeApart(
+        string? purposeLevel,
+        string? logicalModelLevel,
+        string expectedLogicalModelLevel,
+        string? expectedPurposeLevel)
     {
         var runtime = Runtime("reviewer-default");
-        runtime.LogicalModelReasoningEffort.Returns(effort);
+        runtime.PurposeReasoningLevel.Returns(purposeLevel);
+        runtime.LogicalModelReasoningLevel.Returns(logicalModelLevel);
         this._runtimes.ResolveChatRuntimeAsync(Arg.Any<Guid>(), Arg.Any<AiPurpose>(), Arg.Any<CancellationToken>()).Returns(runtime);
 
         var resolution = await this.CreateResolver().ResolveAsync(RequestFor(JobWithRevision()));
 
-        Assert.Equal(expected, resolution.Manifest!.DefaultModel.ReasoningEffort);
+        Assert.Equal(expectedLogicalModelLevel, resolution.Manifest!.DefaultModel.ReasoningEffort);
+        Assert.Equal(expectedPurposeLevel, resolution.Manifest.DefaultModel.PurposeReasoningLevel);
+    }
+
+    // The executor keeps one binding per logical model, so a pass level in the binding would reach every pass on that
+    // logical model. The pass's own level travels on the pass, and every binding carries the level of the logical model.
+    [Fact]
+    public async Task APassLevel_TravelsOnThePass_AndTheBindingCarriesTheLevelOfTheLogicalModel()
+    {
+        var job = JobWithRevision();
+        this._clients.GetReviewPassesAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<ReviewPassSpec>>(_ =>
+            [
+                new ReviewPassSpec(Guid.NewGuid(), LogicalModelName: "reviewer-medium"),
+                new ReviewPassSpec(Guid.NewGuid(), Lens: "security", ReasoningLevel: "high", LogicalModelName: "reviewer-medium"),
+            ]);
+
+        var manifest = (await this.CreateResolver().ResolveAsync(RequestFor(job))).Manifest!;
+
+        Assert.Equal(["medium", "medium"], manifest.Passes.Select(pass => pass.Model.ReasoningEffort));
+        Assert.Equal([null, "high"], manifest.Passes.Select(pass => pass.ReasoningLevel));
     }
 
     private readonly IClientRegistry _clients = Substitute.For<IClientRegistry>();
@@ -104,13 +133,13 @@ public sealed class RunnerJobManifestResolverTests
                 Runtime(ci.ArgAt<string>(1)),
                 ci.ArgAt<string>(1),
                 LogicalModelLayer.TenantCatalog,
-                ReviewReasoningEffort.Medium));
+                "medium"));
 
         this._clients.GetReviewPassesAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns<IReadOnlyList<ReviewPassSpec>>(_ =>
                 [new ReviewPassSpec(Guid.NewGuid(), LogicalModelName: "reviewer-medium")]);
-        this._clients.GetBaselineReasoningEffortAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(ReviewReasoningEffort.None);
+        this._clients.GetBaselineReasoningLevelAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
         this._clients.GetOutputLanguageAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns("en");
         this._clients.GetCustomSystemMessageAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
@@ -879,7 +908,7 @@ public sealed class RunnerJobManifestResolverTests
 
         var pass = Assert.Single(manifest.Passes);
         Assert.Equal("reviewer-medium", pass.Model.LogicalModelName);
-        Assert.Equal("Medium", pass.Model.ReasoningEffort);
+        Assert.Equal("medium", pass.Model.ReasoningEffort);
     }
 
     // The reviewer reads the conversation to avoid raising again what has already been answered, and it

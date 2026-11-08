@@ -190,9 +190,57 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
         commentResolutionBehavior: 'silent',
         includeLinkedItemsInContext: true,
         outputLanguage: 'en',
-        baselineReasoningEffort: 'none',
       },
     })
+  })
+
+  async function loadClientWith(client: Record<string, unknown>) {
+    mockGet.mockReset()
+    mockGet
+      .mockResolvedValueOnce({ data: client, response: { status: 200, ok: true } })
+      .mockResolvedValueOnce({ data: sampleReviewProfiles, response: { status: 200, ok: true } })
+      .mockResolvedValueOnce({ data: sampleClientReviewProfile, response: { status: 200, ok: true } })
+    const vm = useClientDetailViewModel({ autoLoad: false })
+    await vm.loadClient()
+    return vm
+  }
+
+  it('saves a chosen baseline reasoning level', async () => {
+    const vm = await loadClientWith(sampleClient)
+    expect(vm.editedBaselineReasoningLevel.value).toBeNull()
+    expect(vm.isAdvancedSettingsButtonEnabled()).toBe(false)
+
+    vm.editedBaselineReasoningLevel.value = 'high'
+    expect(vm.isAdvancedSettingsButtonEnabled()).toBe(true)
+
+    await vm.saveAdvancedSettings()
+
+    const body = mockPatch.mock.calls[0][1].body as Record<string, unknown>
+    expect(body.baselineReasoningLevel).toBe('high')
+  })
+
+  // The patch leaves the stored level as it is when the field is absent, so a removed level is sent as an empty value.
+  it('clears a stored baseline reasoning level with an empty value', async () => {
+    const vm = await loadClientWith({ ...sampleClient, baselineReasoningLevel: 'medium' })
+    expect(vm.editedBaselineReasoningLevel.value).toBe('medium')
+
+    vm.editedBaselineReasoningLevel.value = null
+    expect(vm.isAdvancedSettingsButtonEnabled()).toBe(true)
+
+    await vm.saveAdvancedSettings()
+
+    const body = mockPatch.mock.calls[0][1].body as Record<string, unknown>
+    expect(body.baselineReasoningLevel).toBe('')
+  })
+
+  it('keeps sending a stored baseline reasoning level when another setting is saved', async () => {
+    const vm = await loadClientWith({ ...sampleClient, baselineReasoningLevel: 'medium' })
+    vm.editedEnableMultiPassUnion.value = true
+
+    await vm.saveAdvancedSettings()
+
+    const body = mockPatch.mock.calls[0][1].body as Record<string, unknown>
+    expect(body.baselineReasoningLevel).toBe('medium')
   })
 
   it('sends reviewPasses only when the pass list changed, dropping empty entries', async () => {
@@ -214,7 +262,7 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
 
     const body = mockPatch.mock.calls[0][1].body as Record<string, unknown>
     expect(body.reviewPasses).toEqual([
-      { ordinal: 0, configuredModelId: 'model-x', logicalModelName: null, lens: null, scope: null, shadow: false, reasoningEffort: 'none' },
+      { ordinal: 0, configuredModelId: 'model-x', logicalModelName: null, lens: null, scope: null, shadow: false, reasoningLevel: null },
     ])
   })
 

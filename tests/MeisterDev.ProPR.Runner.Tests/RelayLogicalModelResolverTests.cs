@@ -1,7 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Runner.Contracts;
 using MeisterDev.ProPR.Runner.Execution;
 using Microsoft.Extensions.AI;
@@ -32,43 +31,54 @@ public sealed class RelayLogicalModelResolverTests
         Assert.Equal(supported, resolved.Runtime.SupportsLowReasoningEffort);
     }
 
-    // A pass configured for no reasoning sends the effort none only to a model the manifest marks as accepting it,
-    // so the capability has to reach the runtime the pass reads it from.
+    // A pass sends a model only a level its list holds, and a call without a level gets the model's default level, so
+    // both have to reach the runtime the pass reads them from. An older control plane states the default level none
+    // only through the flag.
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task AResolvedModel_CarriesWhetherItAcceptsTheReasoningEffortNone(bool accepted)
+    [InlineData(null, true, "none")]
+    [InlineData(null, false, null)]
+    [InlineData("low", true, "low")]
+    public async Task AResolvedModel_CarriesTheLevelsAndTheDefaultLevelOfItsModel(string? defaultLevel, bool flag, string? expected)
     {
         var manifest = RunnerManifests.Sample() with
         {
-            DefaultModel = RunnerManifests.Model("reviewer-default", "None") with { SupportsReasoningEffortNone = accepted },
+            DefaultModel = RunnerManifests.Model("reviewer-default", "") with
+            {
+                SupportsReasoningEffortNone = flag,
+                DefaultReasoningLevel = defaultLevel,
+                ReasoningLevels = ["none", "low", "high"],
+            },
         };
         var resolver = CreateResolver(manifest, _ => Substitute.For<IChatClient>());
 
         var resolved = await resolver.ResolveChatRuntimeAsync(Guid.NewGuid(), "reviewer-default");
 
-        Assert.Equal(accepted, resolved.Runtime.Capabilities.SupportsReasoningEffortNone);
-        Assert.Equal(accepted, resolved.Runtime.Model.SupportsReasoningEffortNone);
+        Assert.Equal(expected, resolved.Runtime.Model.DefaultReasoningLevel);
+        Assert.Equal(expected, resolved.Runtime.Capabilities.DefaultReasoningLevel);
+        Assert.Equal(["none", "low", "high"], resolved.Runtime.Capabilities.ReasoningLevels);
     }
 
-    // A review pass whose model comes from a logical model with an effort other than None uses that effort, so the
-    // runtime reports the effort the manifest carries for the model. A value this build does not know reads as None.
+    // The runtime reports the level the manifest carries for its model by name. An empty value, and the enum name
+    // None an older control plane writes, read as no level.
     [Theory]
-    [InlineData("High", ReviewReasoningEffort.High)]
-    [InlineData("None", ReviewReasoningEffort.None)]
-    [InlineData("max", ReviewReasoningEffort.None)]
-    public async Task AResolvedModel_ReportsTheEffortOfItsLogicalModel(string manifestEffort, ReviewReasoningEffort expected)
+    [InlineData("high", "high")]
+    [InlineData("High", "high")]
+    [InlineData("max", "max")]
+    [InlineData("None", null)]
+    [InlineData("", null)]
+    public async Task AResolvedModel_ReportsTheLevelOfItsLogicalModel(string manifestLevel, string? expected)
     {
-        var manifest = RunnerManifests.Sample() with { DefaultModel = RunnerManifests.Model("reviewer-default", manifestEffort) };
+        var manifest = RunnerManifests.Sample() with { DefaultModel = RunnerManifests.Model("reviewer-default", manifestLevel) };
         var resolver = CreateResolver(manifest, _ => Substitute.For<IChatClient>());
 
         var resolved = await resolver.ResolveChatRuntimeAsync(Guid.NewGuid(), "reviewer-default");
 
-        Assert.Equal(expected, resolved.Runtime.LogicalModelReasoningEffort);
+        Assert.Equal(expected, resolved.Runtime.LogicalModelReasoningLevel);
+        Assert.Equal(expected, resolved.ReasoningLevel);
     }
 
     [Fact]
-    public async Task APassModel_ResolvesToItsOwnRelayAndItsOwnEffort()
+    public async Task APassModel_ResolvesToItsOwnRelayAndItsOwnLevel()
     {
         var asked = new List<string>();
         var resolver = CreateResolver(
@@ -81,7 +91,7 @@ public sealed class RelayLogicalModelResolverTests
         var resolved = await resolver.ResolveChatRuntimeAsync(Guid.NewGuid(), "reviewer-high");
 
         Assert.Equal("reviewer-high", resolved.RoleName);
-        Assert.Equal(ReviewReasoningEffort.High, resolved.ReasoningEffort);
+        Assert.Equal("high", resolved.ReasoningLevel);
         Assert.Equal(["reviewer-high"], asked);
     }
 

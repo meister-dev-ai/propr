@@ -34024,9 +34024,21 @@
             "type": "string",
             "nullable": true
           },
-          "supportsReasoningEffortNone": {
-            "type": "boolean",
-            "description": "Whether ProPR sends the reasoning effort `none` to this model. For a review pass, an evidence judge call\nor a contradiction check with the effort None, ProPR sends `none` to a model with this flag and leaves\nthe effort out for any other model, which then uses its own default. An operator sets the flag when the\nprovider documents the effort `none` for the model, because some reasoning models refuse it."
+          "defaultReasoningLevel": {
+            "type": "string",
+            "description": "The level ProPR sends to this model for a call that no other place chooses a level for, or null to leave the\nchoice to the provider's own default. It is one of ReasoningLevels.",
+            "nullable": true
+          },
+          "reasoningLevels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The reasoning levels the model accepts, by the provider's names and from the lowest to the highest effort. An\nempty list means that the model accepts no level; null means that no source knows the levels yet.",
+            "nullable": true
+          },
+          "reasoningLevelsSource": {
+            "$ref": "#/components/schemas/AiReasoningLevelSource"
           },
           "supportsChat": {
             "type": "boolean",
@@ -34135,9 +34147,25 @@
             "type": "string",
             "nullable": true
           },
-          "supportsReasoningEffortNone": {
+          "defaultReasoningLevel": {
+            "type": "string",
+            "description": "The level ProPR sends to this model for a call that no other place chooses a level for, by the provider's name,\nor null to leave the choice to the provider's own default. It has to be one of the model's reasoning levels.",
+            "nullable": true
+          },
+          "reasoningLevels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The reasoning levels the model accepts, by the provider's names, for example `none`, `low` or\n`max`. An empty list means that the model accepts no level. Leave it out to keep the stored levels of a\nsaved model, or to let ProPR fill the levels of a new model from the provider family and the model catalog.",
+            "nullable": true
+          },
+          "reasoningLevelsSource": {
+            "$ref": "#/components/schemas/AiReasoningLevelSource"
+          },
+          "detectReasoningLevels": {
             "type": "boolean",
-            "description": "Whether ProPR sends the reasoning effort `none` to this model. For a review pass, an evidence judge call\nor a contradiction check with the effort None, ProPR sends `none` to a model with this flag and leaves\nthe effort out for any other model, which then uses its own default. Set it when the provider documents\nthe effort `none` for the model."
+            "description": "Whether ProPR detects the levels again from the provider family and the model catalog and replaces the stated\nand stored levels with them."
           }
         },
         "additionalProperties": false,
@@ -34708,6 +34736,14 @@
           },
           "pricingLayer": {
             "$ref": "#/components/schemas/AiModelCatalogLayer"
+          },
+          "reasoningLevels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The reasoning levels the model accepts, from the lowest to the highest effort, or null when the catalog states none.",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -35162,6 +35198,16 @@
         },
         "additionalProperties": false,
         "description": "Purpose binding payload item for create and update flows."
+      },
+      "AiReasoningLevelSource": {
+        "enum": [
+          "provider",
+          "catalog",
+          "addIn",
+          "operator"
+        ],
+        "type": "string",
+        "description": "Where the reasoning levels of a configured model come from."
       },
       "AiUnresolvedValueDto": {
         "type": "object",
@@ -36482,8 +36528,9 @@
             },
             "nullable": true
           },
-          "baselineReasoningEffort": {
-            "$ref": "#/components/schemas/ReviewReasoningEffort"
+          "baselineReasoningLevel": {
+            "type": "string",
+            "nullable": true
           },
           "tenantId": {
             "type": "string",
@@ -40537,6 +40584,17 @@
           },
           "verificationStatus": {
             "$ref": "#/components/schemas/AiVerificationStatus"
+          },
+          "reasoningLevels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "defaultReasoningLevel": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -40564,8 +40622,9 @@
             "type": "string",
             "format": "uuid"
           },
-          "reasoningEffort": {
-            "$ref": "#/components/schemas/ReviewReasoningEffort"
+          "reasoningLevel": {
+            "type": "string",
+            "nullable": true
           },
           "protocolMode": {
             "type": "string",
@@ -40600,8 +40659,9 @@
             "type": "string",
             "format": "uuid"
           },
-          "reasoningEffort": {
-            "$ref": "#/components/schemas/ReviewReasoningEffort"
+          "reasoningLevel": {
+            "type": "string",
+            "nullable": true
           },
           "protocolMode": {
             "type": "string",
@@ -41548,8 +41608,9 @@
             },
             "nullable": true
           },
-          "baselineReasoningEffort": {
-            "$ref": "#/components/schemas/ReviewReasoningEffort"
+          "baselineReasoningLevel": {
+            "type": "string",
+            "nullable": true
           },
           "budgetConfig": {
             "$ref": "#/components/schemas/BudgetConfigDto"
@@ -44654,6 +44715,12 @@
           },
           "logicalModelName": {
             "type": "string",
+            "description": "The logical model the purpose runs on.",
+            "nullable": true
+          },
+          "reasoningLevel": {
+            "type": "string",
+            "description": "The reasoning level the assignment sets, or null.",
             "nullable": true
           }
         },
@@ -45671,12 +45738,14 @@
             "type": "boolean",
             "description": "Whether this pass runs in shadow mode. Additive metadata the runtime does not act on yet."
           },
-          "reasoningEffort": {
-            "$ref": "#/components/schemas/ReviewReasoningEffort"
+          "reasoningLevel": {
+            "type": "string",
+            "description": "Reasoning level this pass asks the model for, by the provider's name, for example `high` or `max`.\nWithout one, the pass takes the level of its logical model and then the default level of its configured model.\nThe model receives only a level it accepts.",
+            "nullable": true
           },
           "logicalModelName": {
             "type": "string",
-            "description": "The named logical model this pass runs on (its connection, model, reasoning effort, and protocol come from the\nresolved role). When set, it takes precedence and ConfiguredModelId is ignored. A pass\nshould set exactly one of LogicalModelName or ConfiguredModelId.",
+            "description": "The named logical model this pass runs on (its connection, model and protocol come from the resolved role). When set, it takes precedence and ConfiguredModelId is ignored. A pass\nshould set exactly one of LogicalModelName or ConfiguredModelId.",
             "nullable": true
           }
         },
@@ -45722,16 +45791,6 @@
         ],
         "type": "string",
         "description": "Indicates whether the effective review profile comes from the client or the system default."
-      },
-      "ReviewReasoningEffort": {
-        "enum": [
-          "none",
-          "low",
-          "medium",
-          "high"
-        ],
-        "type": "string",
-        "description": "How much reasoning effort a review pass asks the model to spend. Configured per pass at the client level and\napplied to the outbound chat request. MeisterDev.ProPR.Domain.Enums.ReviewReasoningEffort.None is the default. The remaining levels map to the\nprovider's low/medium/high reasoning-effort settings."
       },
       "ReviewRepositoryRefDto": {
         "type": "object",
@@ -47832,7 +47891,7 @@
           },
           "reasoningEffort": {
             "type": "string",
-            "description": "The reasoning effort this binding asks for.",
+            "description": "The reasoning level of the logical model this binding names, by the provider's name, or empty for no level. Every\nbinding of the same logical model carries the same level. A runner that knows only the levels none, low, medium\nand high reads any other name as no level.",
             "nullable": true
           },
           "tokenizerName": {
@@ -47880,7 +47939,25 @@
           },
           "supportsReasoningEffortNone": {
             "type": "boolean",
-            "description": "Whether the configured model accepts the reasoning effort `none`. A review pass, an evidence judge call\nor a contradiction check with the effort None then sends the effort `none`. Without the flag, the call\nleaves the effort out, and the model uses its own default."
+            "description": "Whether the default level of the configured model is `none`, for a runner that reads no level list: such a\nrunner sends the effort `none` for a call without a level when the flag is set."
+          },
+          "reasoningLevels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The levels the configured model accepts, or null when no source knows them.",
+            "nullable": true
+          },
+          "defaultReasoningLevel": {
+            "type": "string",
+            "description": "The default level of the configured model, or null.",
+            "nullable": true
+          },
+          "purposeReasoningLevel": {
+            "type": "string",
+            "description": "The reasoning level the assignment of the review purpose sets, on the default model only, or null. It applies\nbefore the level of the logical model to the stages that run on the default model, and the evidence judge does\nnot take it.",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -48343,6 +48420,11 @@
           "shadow": {
             "type": "boolean",
             "description": "Whether the pass runs for comparison only. A shadow pass records its full trace and never publishes,\nwhich is the reason for running one, so an executor that ignored this flag would post findings from a\npass the client is still evaluating."
+          },
+          "reasoningLevel": {
+            "type": "string",
+            "description": "The reasoning level the pass itself sets, by the provider's name, or null when the pass sets none and takes the\nlevel of its logical model. The level travels here, not in Model, because passes on the same\nlogical model share one binding on the executor.",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -48768,6 +48850,12 @@
         "properties": {
           "logicalModelName": {
             "type": "string",
+            "description": "The logical model the purpose runs on.",
+            "nullable": true
+          },
+          "reasoningLevel": {
+            "type": "string",
+            "description": "The reasoning level the purpose runs at, by the provider's name, or null to leave it to the level of the logical\nmodel and the default level of its configured model. A level the model does not accept is refused.",
             "nullable": true
           }
         },

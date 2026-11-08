@@ -25,10 +25,10 @@ decision below is judged on these numbers. See
 [pricing overrides](../ai/models-and-catalog.md#pricing-overrides), and for a model with no price,
 [the per-edition remedies](../ai/models-and-catalog.md#a-model-is-missing-its-context-window-or-price).
 
-## 3. Spend reasoning effort where it changes the answer
+## 3. Spend reasoning where it changes the answer
 
-Effort is a property of the logical-model name, so you can spend it unevenly across purposes - see
-[reasoning effort](../ai/purposes.md#reasoning-effort).
+A reasoning level can be set per purpose, per logical model and per model, so you can spend reasoning unevenly
+across purposes - see [reasoning level](../ai/purposes.md#reasoning-level).
 
 - The name mapped to Review default applies to every file of every review, so it is the expensive one.
 - Triage and Verification are the cheap half of the job. Point them at a smaller model and an ordinary file
@@ -37,11 +37,10 @@ Effort is a property of the logical-model name, so you can spend it unevenly acr
 
 All of them are mapped on one screen - see [purposes](../ai/purposes.md).
 
-Baseline reasoning effort is a separate per-client setting. ProPR applies it to the baseline review pass when the
-logical model of the file's tier has the effort `none`. Its default, `None`, switches reasoning off for a
-model with **Accepts Reasoning Effort None**, and any other model uses its own default - see
-[reasoning effort](../ai/purposes.md#reasoning-effort). Leave the setting at `None` unless you have measured a
-reason not to - see [what you can tune](../concepts/reviews.md#what-you-can-tune).
+The baseline reasoning level is a separate per-client setting. ProPR applies it to the baseline review pass when
+neither the purpose assignment nor the logical model of the file's tier sets a level. Leave it unset unless you have
+measured a reason not to, because a higher level raises the cost of every file - see
+[what you can tune](../concepts/reviews.md#what-you-can-tune).
 
 ## 4. Count your passes
 

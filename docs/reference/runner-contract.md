@@ -137,16 +137,20 @@ Each model binding has an optional `supportsLowReasoningEffort` flag. The contro
 when the exact model advertises low effort and the selected transport supports it. Missing or false
 runs the automatic judge with the effort `none`. The output budgets and bounded recovery still apply.
 
-Each model binding also has an optional `supportsReasoningEffortNone` flag. The control plane copies it from the
-setting **Accepts Reasoning Effort None** of the configured model. A review pass, an evidence judge call or a
-contradiction check with the effort `none` on such a model sends the chat option `reasoningEffort: "none"`, and the
-relay sends `none` to the provider on Chat Completions and on the Responses API. Without the flag, the runner
-leaves the effort out, and the model uses its own default. A control plane without support for `none`
-reads the value as no reasoning effort.
+The `reasoningEffort` of a model binding holds the reasoning level of the logical model that the binding names, by the
+provider's name, or an empty string for no level. Every binding of one logical model holds the same level, because a
+runner keeps one binding per logical model. A review pass carries its own level in the optional `reasoningLevel` of the
+pass, and the binding of the default model carries the level of the review purpose's assignment in the optional
+`purposeReasoningLevel`. A runner applies each of them before the level of the logical model, and the evidence judge
+does not take the level of the review purpose. Each binding also has optional `reasoningLevels`, the levels the model accepts, and `defaultReasoningLevel`, the model's default
+level. A runner sends a model only a level its list holds, as a review on the control plane does. The flag
+`supportsReasoningEffortNone` is true when the model's default level is `none`, for a runner that reads no level list.
+A runner reads the enum name `None` that an older control plane writes as no level, and an older runner reads a level
+it does not know, such as `xhigh` or `max`, as no level.
 
-The relay sends a chat option `reasoningEffort` of `low`, `medium` or `high` to the provider on the Responses API
-and on native protocols. On Chat Completions, the relay sends no effort for these values, as a review on the control
-plane does - see [reasoning effort](../ai/purposes.md#reasoning-effort).
+The chat option `reasoningEffort` that a runner relays carries the level by name. The relay sends a model only a level
+the model's list on the control plane holds, and on Chat Completions only `none` - see
+[reasoning level](../ai/purposes.md#reasoning-level).
 
 Chat options carry optional `toolMode: "none"` when tool declarations must remain present but no further
 lookups are allowed. An omitted mode preserves provider defaults. Prior-result responses use the

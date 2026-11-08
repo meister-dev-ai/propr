@@ -1416,7 +1416,29 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
-    private async Task<HttpResponseMessage> PatchReviewPassesAsync(Guid clientId, Guid configuredModelId)
+    // A level is checked where it is saved: a review pass, like a logical model and a purpose assignment, takes only a
+    // level that its model lists.
+    [Theory]
+    [InlineData("high", HttpStatusCode.OK)]
+    [InlineData("max", HttpStatusCode.BadRequest)]
+    public async Task PatchClient_ReviewPassLevel_IsCheckedAgainstTheLevelsOfItsModel(string level, HttpStatusCode expected)
+    {
+        var seeded = await this.SeedClientWithConnectionAsync($"review-pass-level-{level}");
+        var connectionId = await this.SetChatModelLevelsAsync(seeded.ChatModelId, ["low", "high"]);
+        await this.SeedClientLogicalModelAsync(seeded.ClientId, "deep-review", seeded.ChatModelId, connectionId);
+
+        var namedPass = await this.PatchReviewPassesWithLogicalModelAsync(seeded.ClientId, "deep-review", level);
+        var legacyPass = await this.PatchReviewPassesAsync(seeded.ClientId, seeded.ChatModelId, level);
+
+        Assert.Equal(expected, namedPass.StatusCode);
+        Assert.Equal(expected, legacyPass.StatusCode);
+        if (expected == HttpStatusCode.BadRequest)
+        {
+            Assert.Contains("does not accept the reasoning level 'max'", await namedPass.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        }
+    }
+
+    private async Task<HttpResponseMessage> PatchReviewPassesAsync(Guid clientId, Guid configuredModelId, string? reasoningLevel = null)
     {
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{clientId}");
@@ -1424,12 +1446,12 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         request.Content = JsonContent.Create(
             new
             {
-                reviewPasses = new[] { new { ordinal = 0, configuredModelId } },
+                reviewPasses = new[] { new { ordinal = 0, configuredModelId, reasoningLevel } },
             });
         return await client.SendAsync(request);
     }
 
-    private async Task<HttpResponseMessage> PatchReviewPassesWithLogicalModelAsync(Guid clientId, string logicalModelName)
+    private async Task<HttpResponseMessage> PatchReviewPassesWithLogicalModelAsync(Guid clientId, string logicalModelName, string? reasoningLevel = null)
     {
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{clientId}");
@@ -1437,12 +1459,24 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         request.Content = JsonContent.Create(
             new
             {
-                reviewPasses = new[] { new { ordinal = 0, logicalModelName } },
+                reviewPasses = new[] { new { ordinal = 0, logicalModelName, reasoningLevel } },
             });
         return await client.SendAsync(request);
     }
 
-    private async Task SeedClientLogicalModelAsync(Guid clientId, string name, Guid configuredModelId)
+    // Gives the seeded chat model a list of levels and returns its connection, which a logical model points at.
+    private async Task<Guid> SetChatModelLevelsAsync(Guid chatModelId, string[] levels)
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var model = await db.AiConfiguredModels.SingleAsync(candidate => candidate.Id == chatModelId);
+        model.ReasoningLevels = levels;
+        model.ReasoningLevelsSource = "Operator";
+        await db.SaveChangesAsync();
+        return model.ConnectionProfileId;
+    }
+
+    private async Task SeedClientLogicalModelAsync(Guid clientId, string name, Guid configuredModelId, Guid? connectionId = null)
     {
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
@@ -1454,9 +1488,9 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                 ClientId = clientId,
                 Name = name,
                 Capability = AiOperationKind.Chat,
-                ConnectionId = Guid.NewGuid(),
+                ConnectionId = connectionId ?? Guid.NewGuid(),
                 ConfiguredModelId = configuredModelId,
-                ReasoningEffort = ReviewReasoningEffort.None,
+                ReasoningLevel = null,
                 ProtocolMode = ProviderDeclaredProtocolModes.Auto,
                 CreatedAt = now,
                 UpdatedAt = now,

@@ -121,6 +121,26 @@ public sealed class BedrockConverseChatClient(IChatClient inner, bool supportsPr
         return copy;
     }
 
+    /// <summary>The effort a request asks for, read from the level by name when the request names one.</summary>
+    /// <remarks>
+    ///     The level <c>minimal</c> thinks as Low does, the lowest effort this family maps, and the levels <c>xhigh</c>
+    ///     and <c>max</c> think as ExtraHigh does, the highest. A request that names no level, or a level this family
+    ///     does not map, is read from its neutral effort.
+    /// </remarks>
+    /// <param name="request">The neutral request.</param>
+    private static ReasoningEffort? MapEffort(ProviderReasoningRequest request)
+    {
+        return request.Level switch
+        {
+            "none" => null,
+            "minimal" or "low" => ReasoningEffort.Low,
+            "medium" => ReasoningEffort.Medium,
+            "high" => ReasoningEffort.High,
+            "xhigh" or "max" => ReasoningEffort.ExtraHigh,
+            _ => MapEffort(request.Effort),
+        };
+    }
+
     private static ReasoningEffort? MapEffort(ProviderReasoningEffort effort)
     {
         return effort switch
@@ -146,7 +166,7 @@ public sealed class BedrockConverseChatClient(IChatClient inner, bool supportsPr
         var translated = options.Clone();
         translated.RawRepresentationFactory = null;
 
-        if (request is not null && MapEffort(request.Effort) is { } effort)
+        if (request is not null && MapEffort(request) is { } effort)
         {
             translated.Reasoning = new ReasoningOptions
             {

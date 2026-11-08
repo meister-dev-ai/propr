@@ -20,4 +20,15 @@ namespace MeisterDev.Ai.Providers.Contracts;
 ///     Whether the caller wants the reasoning itself back, where the provider makes that a separate choice from
 ///     doing the reasoning at all.
 /// </param>
-public sealed record ProviderReasoningRequest(ProviderReasoningEffort Effort, bool CaptureReasoning);
+public sealed record ProviderReasoningRequest(ProviderReasoningEffort Effort, bool CaptureReasoning)
+{
+    /// <summary>
+    ///     The reasoning level by the provider's name, for example <c>max</c>, or null when the caller states none.
+    /// </summary>
+    /// <remarks>
+    ///     The host sends only a level the model accepts. <see cref="Effort" /> carries the nearest neutral value for
+    ///     a family that does not read the name: <c>none</c> as None, <c>minimal</c> and <c>low</c> as Low, <c>medium</c>
+    ///     as Medium, and <c>high</c>, <c>xhigh</c> and <c>max</c> as High.
+    /// </remarks>
+    public string? Level { get; init; }
+}

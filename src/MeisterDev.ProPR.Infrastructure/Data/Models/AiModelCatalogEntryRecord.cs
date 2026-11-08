@@ -63,6 +63,9 @@ public sealed class AiModelCatalogEntryRecord
 
     public bool OpenWeights { get; set; }
 
+    /// <summary>The reasoning levels the model accepts, from the lowest to the highest effort; null when the snapshot states none.</summary>
+    public string[]? ReasoningLevels { get; set; }
+
     public DateOnly? ReleaseDate { get; set; }
 
     /// <summary>Which snapshot format produced this row, kept for provenance when a refresh is diagnosed.</summary>

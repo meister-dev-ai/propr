@@ -163,7 +163,8 @@ public sealed class RunnerExecutionController(
                 resolution => Infrastructure.AI.RunnerRelayedChatOptions.ToChatOptions(
                     request.Options,
                     resolution.CapturesReasoning,
-                    resolution.UsesResponsesApi),
+                    resolution.UsesResponsesApi,
+                    resolution.AcceptedLevels),
                 request.IdempotencyKey),
             ct);
 

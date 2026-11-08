@@ -235,6 +235,48 @@ public sealed class GoogleGenerateContentChatClientTests
         Assert.False(generation.TryGetProperty("thinkingConfig", out _));
     }
 
+    // The level decides over the neutral effort. The level minimal thinks as low does, the lowest level this family
+    // maps, and the levels xhigh and max think as high does, the highest, which leaves the amount to the model.
+    [Theory]
+    [InlineData("minimal", 2048)]
+    [InlineData("low", 2048)]
+    [InlineData("medium", 8192)]
+    [InlineData("high", -1)]
+    [InlineData("xhigh", -1)]
+    [InlineData("max", -1)]
+    public async Task ALevel_SetsTheThinkingBudgetOfTheLevel(string level, int budget)
+    {
+        var endpoint = new FakeGoogleEndpoint().Responds(TextResponse("ok"));
+
+        await Client(endpoint).GetResponseAsync(
+            [new ChatMessage(ChatRole.User, "hello")],
+            new ChatOptions
+            {
+                RawRepresentationFactory = _ => new ProviderReasoningRequest(ProviderReasoningEffort.Medium, false) { Level = level },
+            });
+
+        var thinking = JsonDocument.Parse(endpoint.Bodies[0]).RootElement
+            .GetProperty("generationConfig").GetProperty("thinkingConfig");
+        Assert.Equal(budget, thinking.GetProperty("thinkingBudget").GetInt32());
+    }
+
+    [Fact]
+    public async Task TheLevelNone_LeavesTheThinkingConfigOffWhateverTheNeutralEffort()
+    {
+        var endpoint = new FakeGoogleEndpoint().Responds(TextResponse("ok"));
+
+        await Client(endpoint).GetResponseAsync(
+            [new ChatMessage(ChatRole.User, "hello")],
+            new ChatOptions
+            {
+                Temperature = 0.2f,
+                RawRepresentationFactory = _ => new ProviderReasoningRequest(ProviderReasoningEffort.High, true) { Level = "none" },
+            });
+
+        var generation = JsonDocument.Parse(endpoint.Bodies[0]).RootElement.GetProperty("generationConfig");
+        Assert.False(generation.TryGetProperty("thinkingConfig", out _));
+    }
+
     // Google counts thinking outside the candidate total while still billing it as output, and its prompt count
     // already contains the cached portion. Both facts are the driver's mapping to act on, so what the client
     // reports is what Google reported.

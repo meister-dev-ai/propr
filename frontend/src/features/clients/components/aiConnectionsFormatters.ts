@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 import type {
+  AiConfiguredModelDto,
   AiConnectionAvailabilityDto,
   AiConnectionDto,
   AiConnectionVocabularyField,
@@ -12,6 +13,7 @@ import type {
 } from '@/services/aiConnectionsService'
 import type { EditableBinding, EditableModel } from './aiConnectionsForm.types'
 import type { AiModelCatalogEntryDto } from '@/services/modelCatalogService'
+import type { LogicalModelResponse } from '@/services/logicalModelsService'
 
 // Label, option and parse helpers for the AI-connections form.
 //
@@ -283,6 +285,119 @@ export const serializeMap = (map: Record<string, string> | null | undefined) =>
     .map(([key, value]) => `${key}=${value}`)
     .join('\n')
 
+/** The shared level names, from the lowest to the highest effort. */
+export const standardReasoningLevels = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
+
+const reasoningLevelName = /^[a-z][a-z0-9_-]{0,31}$/
+
+/** Whether a trimmed, lowercased name is a level name, as the server accepts it. */
+export const isReasoningLevelName = (name: string): boolean => reasoningLevelName.test(name)
+
+/**
+ * Trims and lowercases the names, drops names that are not level names and repeated names, and sorts the list by
+ * the shared order when every name is on it. The server normalizes a list the same way.
+ */
+export const normalizeReasoningLevels = (levels: readonly string[]): string[] => {
+  const normalized: string[] = []
+  for (const level of levels) {
+    const name = level.trim().toLowerCase()
+    if (isReasoningLevelName(name) && !normalized.includes(name)) {
+      normalized.push(name)
+    }
+  }
+
+  const rank = (name: string) => (standardReasoningLevels as readonly string[]).indexOf(name)
+  return normalized.every((name) => rank(name) >= 0) ? normalized.sort((left, right) => rank(left) - rank(right)) : normalized
+}
+
+/**
+ * The level a model receives for a chosen level, or null when it receives none. A model receives the chosen level
+ * when it accepts it or when no source knows its levels. Otherwise it receives the nearest lower level of the shared
+ * order that it accepts, and no level when it accepts none of them. The server applies the same rule.
+ */
+export const sendableReasoningLevel = (level: string | null, accepted: readonly string[] | null): string | null => {
+  if (!level) {
+    return null
+  }
+
+  if (accepted === null || accepted.includes(level)) {
+    return level
+  }
+
+  const order: readonly string[] = standardReasoningLevels
+  for (let lower = order.indexOf(level) - 1; lower >= 0; lower--) {
+    if (accepted.includes(order[lower]!)) {
+      return order[lower]!
+    }
+  }
+
+  return null
+}
+
+/**
+ * Replaces the reasoning levels of a model form. The default level has to be one of the levels, so the save refuses a
+ * default level a known list does not hold, and this clears it. A list that is to be detected again is not known until
+ * the save, and the save adds the default level to the detected levels, so the default level stays then.
+ */
+export const setReasoningLevels = (model: EditableModel, levels: string[] | null): void => {
+  model.reasoningLevels = levels
+  if (levels !== null && model.defaultReasoningLevel !== null && !levels.includes(model.defaultReasoningLevel)) {
+    model.defaultReasoningLevel = null
+  }
+}
+
+/**
+ * Detected levels with the default level of the model added when they lack it. A list that receives the default level
+ * is normalized by normalizeReasoningLevels, and any other list is returned as a copy. An operator who chose the default
+ * level stated that the model accepts it, so the server adds the default level to detected levels in the same way and
+ * keeps the source they were detected from.
+ */
+export const withDefaultReasoningLevel = (levels: readonly string[], defaultLevel: string | null): string[] =>
+  defaultLevel && !levels.includes(defaultLevel) ? normalizeReasoningLevels([...levels, defaultLevel]) : [...levels]
+
+/** Whether a model with these levels accepts a level. A model whose levels no source knows accepts any level name. */
+export const acceptsReasoningLevel = (levels: readonly string[] | null, level: string): boolean =>
+  levels === null || levels.includes(level)
+
+/**
+ * The reasoning level of a logical model in a table. An embedding model takes no level, and a chat logical model
+ * without a level inherits the default level of its model.
+ */
+export const logicalModelLevelLabel = (model: Pick<LogicalModelResponse, 'capability' | 'reasoningLevel'>): string =>
+  model.capability === 'embedding' ? 'Not applicable' : (model.reasoningLevel ?? 'Inherit')
+
+/** The levels a reasoning level select offers, and the level that applies when the place sets none. */
+export interface ReasoningLevelChoice {
+  /** The levels the referenced model accepts, or null when no source knows them. */
+  levels: string[] | null
+  inheritedLevel: string | null
+  /** The place the inherited level comes from. */
+  inheritedFrom: string
+}
+
+const fromModelDefault = "the model's default level"
+
+/** The choice for a place on a configured model: its levels, and its default level when the place sets none. */
+export const configuredModelLevelChoice = (
+  model: Pick<AiConfiguredModelDto, 'reasoningLevels' | 'defaultReasoningLevel'> | null | undefined,
+): ReasoningLevelChoice => ({
+  levels: model?.reasoningLevels ?? null,
+  inheritedLevel: model?.defaultReasoningLevel ?? null,
+  inheritedFrom: fromModelDefault,
+})
+
+/**
+ * The choice for a place on a logical model, such as a purpose assignment or a review pass: the levels of the model
+ * behind the logical model, and the level of the logical model when the place sets none, or else the default level of
+ * that model.
+ */
+export const logicalModelLevelChoice = (logicalModel: LogicalModelResponse | null | undefined): ReasoningLevelChoice => {
+  const referenced = logicalModel?.referencedModel
+  return logicalModel?.reasoningLevel
+    ? { levels: referenced?.reasoningLevels ?? null, inheritedLevel: logicalModel.reasoningLevel, inheritedFrom: 'the logical model' }
+    : configuredModelLevelChoice(referenced)
+}
+
 /**
  * Copies a catalog entry's facts onto a model form. Kept as a pure function so the mapping is testable and so
  * the picker never writes the form itself: the configured model stays the authority for what is actually used,
@@ -292,6 +407,7 @@ export const serializeMap = (map: Record<string, string> | null | undefined) =>
  * chat-versus-embedding discriminator and guessing one would be worse than leaving the operator's choice.
  */
 export const applyCatalogEntryToModel = (model: EditableModel, entry: AiModelCatalogEntryDto): void => {
+  const pickedSameModel = isSameRemoteModel(entry.remoteModelId, model.remoteModelId)
   model.remoteModelId = entry.remoteModelId ?? model.remoteModelId
   model.displayName = entry.displayName ?? model.displayName
   model.supportsToolUse = entry.supportsToolUse ?? model.supportsToolUse
@@ -306,6 +422,25 @@ export const applyCatalogEntryToModel = (model: EditableModel, entry: AiModelCat
   // The quirk the normalizing stage acts on. A model that does not declare one must not keep a stale value from
   // whatever was previously selected.
   model.reasoningContentField = entry.reasoningContentField ?? ''
+  // The levels belong to the model picked, and the save detects them from the catalog and the provider family, which
+  // can complete what the catalog lists. A default level was chosen for the previous model, which the picked model need
+  // not accept, so a pick of a different model clears it. A pick of the same model keeps it, and the save adds it to
+  // the detected levels when they lack it.
+  setReasoningLevels(model, null)
+  if (!pickedSameModel) {
+    model.defaultReasoningLevel = null
+  }
+  model.reasoningLevelsSource = null
+  model.detectReasoningLevels = true
+}
+
+/**
+ * Whether a picked remote model id is the id of the model that the form held before the pick. The save trims the id,
+ * and the server matches a model by its id without regard to case.
+ */
+const isSameRemoteModel = (picked: string | null | undefined, previous: string): boolean => {
+  const pickedId = picked?.trim().toLowerCase() ?? ''
+  return pickedId !== '' && pickedId === previous.trim().toLowerCase()
 }
 
 /** A value the catalog does not state leaves the existing entry alone: unknown is not zero. */

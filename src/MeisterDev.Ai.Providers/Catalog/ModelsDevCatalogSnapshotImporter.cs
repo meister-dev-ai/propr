@@ -3,6 +3,7 @@
 
 using System.Globalization;
 using System.Text.Json;
+using MeisterDev.Ai.Providers.Contracts;
 
 namespace MeisterDev.Ai.Providers.Catalog;
 
@@ -93,7 +94,44 @@ public sealed class ModelsDevCatalogSnapshotImporter : ICatalogSnapshotImporter
             cachedInput,
             cacheWrite,
             Bool(model.Value, "open_weights"),
-            Date(model.Value, "release_date"));
+            Date(model.Value, "release_date"),
+            ReasoningLevels(model.Value));
+    }
+
+    // models.dev states the reasoning controls of a model in reasoning_options: "effort" with the level names,
+    // "budget_tokens" with a minimum and a maximum budget, and "toggle". A budget model takes the levels low, medium
+    // and high, which a family translates into budgets, and also none when its minimum budget is 0. A toggle names no
+    // level that a request field could carry, so it adds none.
+    private static IReadOnlyList<string>? ReasoningLevels(JsonElement model)
+    {
+        if (!model.TryGetProperty("reasoning_options", out var options) || options.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        var levels = new List<string?>();
+        foreach (var option in options.EnumerateArray())
+        {
+            switch (String(option, "type"))
+            {
+                case "effort" when option.TryGetProperty("values", out var values) && values.ValueKind == JsonValueKind.Array:
+                    levels.AddRange(
+                        values.EnumerateArray()
+                            .Where(value => value.ValueKind == JsonValueKind.String)
+                            .Select(value => value.GetString()));
+                    break;
+                case "budget_tokens":
+                    if (Int(option, "min") is 0)
+                    {
+                        levels.Add("none");
+                    }
+
+                    levels.AddRange(["low", "medium", "high"]);
+                    break;
+            }
+        }
+
+        return ProviderReasoningLevels.Normalize(levels) is { Count: > 0 } normalized ? normalized : null;
     }
 
     private static JsonElement? Object(JsonElement? parent, string name)

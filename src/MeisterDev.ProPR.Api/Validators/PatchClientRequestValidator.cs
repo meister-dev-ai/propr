@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.Ai.Providers.Contracts;
 using FluentValidation;
 using MeisterDev.ProPR.Api.Controllers;
 using MeisterDev.ProPR.Application.DTOs;
@@ -54,10 +55,13 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
             .Must(_ => true)
             .When(r => r.WithholdOutOfScopeFindings.HasValue);
 
-        this.RuleFor(r => r.BaselineReasoningEffort)
-            .Must(effort => Enum.IsDefined(effort!.Value))
-            .WithMessage("BaselineReasoningEffort must be one of none, low, medium, high.")
-            .When(r => r.BaselineReasoningEffort.HasValue);
+        // An empty value clears the baseline level; any other value is a level name.
+        this.RuleFor(r => r.BaselineReasoningLevel)
+            .Must(level => string.IsNullOrWhiteSpace(level) || ProviderReasoningLevels.IsValidName(level.Trim().ToLowerInvariant()))
+            .WithMessage(
+                "baselineReasoningLevel must be a reasoning level name: 1 to 32 characters, lowercase letters, digits, "
+                + "hyphens and underscores, starting with a letter. An empty value clears it.")
+            .When(r => r.BaselineReasoningLevel is not null);
 
         this.RuleFor(r => r.FindingBadgeStyle)
             .Must(style => Enum.IsDefined(style!.Value))
@@ -212,8 +216,9 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
             return false;
         }
 
-        // Only a defined reasoning-effort level is permitted (none/low/medium/high).
-        if (passes.Any(pass => !Enum.IsDefined(pass.ReasoningEffort)))
+        // A pass level is a level name when it is set.
+        if (passes.Any(pass => !string.IsNullOrWhiteSpace(pass.ReasoningLevel)
+                               && !ProviderReasoningLevels.IsValidName(pass.ReasoningLevel.Trim().ToLowerInvariant())))
         {
             return false;
         }

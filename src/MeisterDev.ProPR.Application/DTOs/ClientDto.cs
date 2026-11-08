@@ -23,7 +23,7 @@ public sealed record ClientDto(
     bool EnableMultiPassUnion = false,
     bool IncludeLinkedItemsInContext = true,
     IReadOnlyList<ReviewPassDto>? ReviewPasses = null,
-    ReviewReasoningEffort BaselineReasoningEffort = ReviewReasoningEffort.None,
+    string? BaselineReasoningLevel = null,
     Guid? TenantId = null,
     string? TenantSlug = null,
     string? TenantDisplayName = null,
@@ -89,5 +89,5 @@ public sealed record ReviewPassDto(
     string? Lens = null,
     string? Scope = null,
     bool Shadow = false,
-    ReviewReasoningEffort ReasoningEffort = ReviewReasoningEffort.None,
+    string? ReasoningLevel = null,
     string? LogicalModelName = null);

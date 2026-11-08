@@ -69,11 +69,16 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         CancellationToken ct,
         IChatClient? overrideClient = null)
     {
-        // Clone before mutating so the client-level baseline effort applied to the standalone PR-wide strategy
-        // (which has no per-pass entry) never leaks back into the caller's shared context. Mirrors
-        // GenerateCandidatesAsync, which clones-then-mutates the pass context for the same reason.
+        // Clone before mutating so the level applied to the standalone PR-wide strategy (which has no per-pass entry)
+        // never leaks back into the caller's shared context. The strategy runs on the default review model and takes
+        // the level of its purpose assignment or logical model, then the client baseline level, then the default level
+        // of the configured model. Mirrors GenerateCandidatesAsync, which clones-then-mutates the pass context for the
+        // same reason.
         var prWideContext = CloneContext(baseContext, baseContext.ActiveProtocolId, baseContext.ProtocolRecorder);
-        prWideContext.ActiveReasoningEffort = baseContext.BaselineReasoningEffort;
+        prWideContext.ActiveReasoningLevel = ReasoningLevelSelection.FirstSet(
+            baseContext.RuntimeCapabilities.ConfiguredReasoningLevel,
+            baseContext.BaselineReasoningLevel,
+            baseContext.RuntimeCapabilities.DefaultReasoningLevel);
         this.AttachGenerationCapture(job, pr, prWideContext, 0, false);
         var (ownsProtocolPass, prWideContextWithProtocol) =
             await this.BeginProtocolIfNeededAsync(job, prWideContext, overrideClient, ct);
@@ -236,7 +241,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         PrWideGenerationBudget budget,
         int unionPassIndex,
         bool shadow,
-        ReviewReasoningEffort reasoningEffort,
+        string? reasoningLevel,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(runtime);
@@ -251,13 +256,15 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         passContext.RuntimeConnectionId = runtime.Connection?.Id;
         passContext.ConfiguredModelId = runtime.Model.Id;
         this.AttachGenerationCapture(job, pr, passContext, unionPassIndex, shadow);
-        // The pass's configured reasoning effort is applied to every stage's chat request unconditionally; CloneContext
-        // carries it forward if the protocol re-clone below runs. Whether the pass's model accepts the effort none
-        // comes from the pass's own model, because the effort None is sent as none only to such a model.
-        passContext.ActiveReasoningEffort = reasoningEffort;
+        // The pass's reasoning level is applied to every stage's chat request; CloneContext carries it forward if the
+        // protocol re-clone below runs. The levels the model accepts and the protocol the level travels on come from the
+        // pass's own model: a level other than none on a model served through Chat Completions would reach that API.
+        passContext.ActiveReasoningLevel = reasoningLevel;
         passContext.RuntimeCapabilities = passContext.RuntimeCapabilities with
         {
-            SupportsReasoningEffortNone = runtime.Model.SupportsReasoningEffortNone,
+            ReasoningLevels = runtime.Model.ReasoningLevels,
+            DefaultReasoningLevel = runtime.Model.DefaultReasoningLevel,
+            PrefersResponsesApi = runtime.Capabilities?.PrefersResponsesApi ?? passContext.RuntimeCapabilities.PrefersResponsesApi,
         };
         var overrideClient = runtime.ChatClient;
 
@@ -468,8 +475,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                     messages,
                     new ChatOptions { ModelId = baseContext.ModelId }.ApplyReasoning(
                         baseContext.CapturesReasoning(this._options),
-                        baseContext.ActiveReasoningEffort,
-                        baseContext.RuntimeCapabilities.SupportsReasoningEffortNone,
+                        baseContext.ActiveReasoningLevel,
+                        baseContext.RuntimeCapabilities.ReasoningLevels,
                         baseContext.RuntimeCapabilities.PrefersResponsesApi), ct);
                 await this.RecordAiResponseAsync(baseContext, 1, messages, response, "pr_wide_planning", ct);
                 var usage = AiTokenUsageExtractor.FromResponse(response);
@@ -704,8 +711,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                     messages,
                     new ChatOptions { ModelId = baseContext.ModelId }.ApplyReasoning(
                         baseContext.CapturesReasoning(this._options),
-                        baseContext.ActiveReasoningEffort,
-                        baseContext.RuntimeCapabilities.SupportsReasoningEffortNone,
+                        baseContext.ActiveReasoningLevel,
+                        baseContext.RuntimeCapabilities.ReasoningLevels,
                         baseContext.RuntimeCapabilities.PrefersResponsesApi), ct);
                 await this.RecordAiResponseAsync(baseContext, 1, messages, response, $"pr_wide_investigation_{task.Id}", ct);
                 var usage = AiTokenUsageExtractor.FromResponse(response);
@@ -1069,8 +1076,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                     messages,
                     new ChatOptions { ModelId = baseContext.ModelId }.ApplyReasoning(
                         baseContext.CapturesReasoning(this._options),
-                        baseContext.ActiveReasoningEffort,
-                        baseContext.RuntimeCapabilities.SupportsReasoningEffortNone,
+                        baseContext.ActiveReasoningLevel,
+                        baseContext.RuntimeCapabilities.ReasoningLevels,
                         baseContext.RuntimeCapabilities.PrefersResponsesApi), ct);
                 await this.RecordAiResponseAsync(baseContext, 1, messages, response, "pr_wide_synthesis", ct);
                 var usage = AiTokenUsageExtractor.FromResponse(response);
@@ -1373,7 +1380,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             new ReviewVerificationIntent(pr.Title, pr.Description, pr.LinkedItems ?? [], null, null),
             baseContext.ActiveProtocolId,
             PassReviewedWithRepositoryTools: baseContext.ReviewTools is not null,
-            SupportsReasoningEffortNone: baseContext.RuntimeCapabilities.SupportsReasoningEffortNone);
+            ReasoningLevels: baseContext.RuntimeCapabilities.ReasoningLevels,
+            DefaultReasoningLevel: baseContext.RuntimeCapabilities.DefaultReasoningLevel);
     }
 
     private async Task<CandidateReviewFinding> VerifySingleFindingAsync(

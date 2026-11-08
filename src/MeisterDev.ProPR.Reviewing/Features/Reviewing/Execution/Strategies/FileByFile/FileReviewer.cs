@@ -4,6 +4,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using MeisterDev.ProPR.CodeInsights.Contracts;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
@@ -146,8 +147,8 @@ internal sealed partial class FileReviewer(
 
         var tierPurpose = GetTierPurpose(tier);
 
-        var (tierClient, tierModelId, tierCapabilities, tierMaxContextTokens, tierTokenizerName, tierLogicalModelName, tierConnectionId, tierConfiguredModelId,
-                tierReasoningEffort) =
+        var (tierClient, tierModelId, tierCapabilities, tierMaxContextTokens, tierTokenizerName, tierLogicalModelName, tierConnectionId, tierConfiguredModelId
+                ) =
             await this.ResolveTierClientAsync(job, tierPurpose, ct);
 
         var protocolId = await this.BeginNewProtocolAsync(job, file, fileResult, tierCategory, tierModelId, tierLogicalModelName, ct);
@@ -202,12 +203,15 @@ internal sealed partial class FileReviewer(
 
             var pipelineProfile = ResolvePipelineProfile(job, pipelineProfileProvider);
             fileContext.Aggressiveness = pipelineProfile.Aggressiveness;
-            // The baseline (tier) pass takes the reasoning effort of the logical model its tier purpose resolved to,
-            // and the client-level baseline effort when that logical model sets None or the file falls back to the
-            // default client. Set before the dispatch pipeline so it survives on the same context the review core reads.
-            fileContext.ActiveReasoningEffort = tierClient is not null && tierReasoningEffort != ReviewReasoningEffort.None
-                ? tierReasoningEffort
-                : baseContext.BaselineReasoningEffort;
+            // The baseline (tier) pass takes the reasoning level of its tier purpose's assignment, then of the logical
+            // model that purpose resolved to, then the client-level baseline level, then the default level of the
+            // configured model. A file that falls back to the default client takes the same order on the default review
+            // model. Set before the dispatch pipeline so it survives on the same context the review core reads.
+            var levelSource = tierClient is not null && tierCapabilities is not null ? tierCapabilities : baseContext.RuntimeCapabilities;
+            fileContext.ActiveReasoningLevel = ReasoningLevelSelection.FirstSet(
+                levelSource.ConfiguredReasoningLevel,
+                baseContext.BaselineReasoningLevel,
+                levelSource.DefaultReasoningLevel);
             await this.RecordPipelineProfileAsync(protocolId, file.Path, pipelineProfile, ct);
             fileContext = await this.RunDispatchPipelineAsync(
                 job,
@@ -505,7 +509,7 @@ internal sealed partial class FileReviewer(
                     inputs.PipelineProfile,
                     plannedPass.MaxContextTokens,
                     plannedPass.TokenizerName,
-                    plannedPass.ReasoningEffort,
+                    plannedPass.ReasoningLevel,
                     plannedPass.LogicalModelName,
                     plannedPass.Shadow,
                     plannedPass.ConnectionId,
@@ -679,7 +683,7 @@ internal sealed partial class FileReviewer(
             else
             {
                 var runtime = resolution.Runtime;
-                var effort = resolution.Effort;
+                var level = resolution.Level;
                 passes.Add(
                     new PlannedResamplePass(
                         passIndex,
@@ -691,7 +695,7 @@ internal sealed partial class FileReviewer(
                         pass.Shadow,
                         runtime.Model.MaxContextTokens,
                         runtime.Model.TokenizerName,
-                        effort,
+                        level,
                         runtime.LogicalModelName,
                         runtime.Connection?.Id,
                         runtime.Model.Id));
@@ -1004,8 +1008,8 @@ internal sealed partial class FileReviewer(
             passContext.RuntimeConnectionId = inputs.PassConnectionId;
             passContext.ConfiguredModelId = inputs.PassConfiguredModelId;
 
-            // The pass's configured reasoning effort is applied to the outbound request unconditionally.
-            passContext.ActiveReasoningEffort = inputs.PassReasoningEffort;
+            // The pass's reasoning level is applied to the outbound request independent of reasoning capture.
+            passContext.ActiveReasoningLevel = inputs.PassReasoningLevel;
 
             passContext = await this.RunDispatchPipelineAsync(
                 inputs.Job,
@@ -1161,9 +1165,9 @@ internal sealed partial class FileReviewer(
         int passIndex,
         CancellationToken ct)
     {
-        // A pass that names a logical model resolves through the logical-model catalog. Its connection, model,
-        // reasoning effort, and protocol come from the resolved role. Legacy passes bind a concrete configured model
-        // and carry their own per-pass effort.
+        // A pass that names a logical model resolves through the logical-model catalog, and its connection, model and
+        // protocol come from the resolved role. Legacy passes bind a concrete configured model. A pass runs at its own
+        // level, then at the level of its logical model, then at the default level of its configured model.
         if (!string.IsNullOrEmpty(pass.LogicalModelName))
         {
             if (logicalModelResolver is null)
@@ -1177,7 +1181,10 @@ internal sealed partial class FileReviewer(
                 var resolved = await logicalModelResolver
                     .ResolveChatRuntimeAsync(job.ClientId, pass.LogicalModelName, ct: ct)
                     .ConfigureAwait(false);
-                return new PreparedReviewPassRuntime(resolved.Runtime, resolved.ReasoningEffort, null);
+                return new PreparedReviewPassRuntime(
+                    resolved.Runtime,
+                    ReasoningLevelSelection.FirstSet(pass.ReasoningLevel, resolved.ReasoningLevel, resolved.Runtime.Model.DefaultReasoningLevel),
+                    null);
             }
             catch (OperationCanceledException)
             {
@@ -1201,7 +1208,10 @@ internal sealed partial class FileReviewer(
         {
             var runtime = await aiRuntimeResolver.ResolveChatRuntimeForModelAsync(job.ClientId, pass.ConfiguredModelId, ct)
                 .ConfigureAwait(false);
-            return new PreparedReviewPassRuntime(runtime, pass.ReasoningEffort, null);
+            return new PreparedReviewPassRuntime(
+                runtime,
+                ReasoningLevelSelection.FirstSet(pass.ReasoningLevel, runtime.Model.DefaultReasoningLevel),
+                null);
         }
         catch (OperationCanceledException)
         {
@@ -1644,8 +1654,9 @@ internal sealed partial class FileReviewer(
             // repository tools although its findings are verified through the baseline evidence channel.
             PassReviewedWithRepositoryTools: state.FileContext.ReviewTools is not null,
             ReviewerReads: state.FileContext.ReviewerFileReads,
-            SupportsReasoningEffortNone: verificationSource.RuntimeCapabilities.SupportsReasoningEffortNone,
-            UsesResponsesApi: verificationSource.RuntimeCapabilities.PrefersResponsesApi);
+            ReasoningLevels: verificationSource.RuntimeCapabilities.ReasoningLevels,
+            UsesResponsesApi: verificationSource.RuntimeCapabilities.PrefersResponsesApi,
+            DefaultReasoningLevel: verificationSource.RuntimeCapabilities.DefaultReasoningLevel);
 
         return await localReviewVerificationExecutor.ApplyAsync(
             result,
@@ -1929,7 +1940,7 @@ internal sealed partial class FileReviewer(
     }
 
     private async Task<(IChatClient? tierClient, string? tierModelId, AgentReviewRuntimeCapabilities? tierCapabilities, int? tierMaxContextTokens, string?
-            tierTokenizerName, string? tierLogicalModelName, Guid? connectionId, Guid? configuredModelId, ReviewReasoningEffort tierReasoningEffort)>
+            tierTokenizerName, string? tierLogicalModelName, Guid? connectionId, Guid? configuredModelId)>
         ResolveTierClientAsync(
             ReviewJob job,
             AiPurpose tierPurpose,
@@ -1943,7 +1954,6 @@ internal sealed partial class FileReviewer(
         string? tierLogicalModelName = null;
         Guid? connectionId = null;
         Guid? configuredModelId = null;
-        var tierReasoningEffort = ReviewReasoningEffort.None;
 
         // The tier runtime is resolved, never constructed here. Two cases produce a null client: a host composed
         // without a runtime resolver, and a resolver with no binding for this tier. The caller treats a null
@@ -1961,7 +1971,6 @@ internal sealed partial class FileReviewer(
                 tierLogicalModelName = tierRuntime.LogicalModelName;
                 connectionId = tierRuntime.Connection?.Id;
                 configuredModelId = tierRuntime.Model.Id;
-                tierReasoningEffort = tierRuntime.LogicalModelReasoningEffort;
             }
             catch
             {
@@ -1973,12 +1982,10 @@ internal sealed partial class FileReviewer(
                 tierLogicalModelName = null;
                 connectionId = null;
                 configuredModelId = null;
-                tierReasoningEffort = ReviewReasoningEffort.None;
             }
         }
 
-        return (tierClient, tierModelId, tierCapabilities, tierMaxContextTokens, tierTokenizerName, tierLogicalModelName, connectionId, configuredModelId,
-            tierReasoningEffort);
+        return (tierClient, tierModelId, tierCapabilities, tierMaxContextTokens, tierTokenizerName, tierLogicalModelName, connectionId, configuredModelId);
     }
 
     private static IReadOnlyList<PrCommentThread> FilterThreadsForFile(
@@ -2086,7 +2093,7 @@ internal sealed partial class FileReviewer(
         bool Shadow = false,
         int? MaxContextTokens = null,
         string? TokenizerName = null,
-        ReviewReasoningEffort ReasoningEffort = ReviewReasoningEffort.None,
+        string? ReasoningLevel = null,
         string? LogicalModelName = null,
         Guid? ConnectionId = null,
         Guid? ConfiguredModelId = null);
@@ -2142,7 +2149,7 @@ internal sealed partial class FileReviewer(
         ReviewPipelineProfile PipelineProfile,
         int? PassMaxContextTokens,
         string? PassTokenizerName,
-        ReviewReasoningEffort PassReasoningEffort,
+        string? PassReasoningLevel,
         string? PassLogicalModelName,
         bool Shadow,
         Guid? PassConnectionId,

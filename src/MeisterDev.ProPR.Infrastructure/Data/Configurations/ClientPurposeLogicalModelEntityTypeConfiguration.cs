@@ -19,6 +19,7 @@ internal sealed class ClientPurposeLogicalModelEntityTypeConfiguration : IEntity
         builder.Property(x => x.ClientId).HasColumnName("client_id").IsRequired();
         builder.Property(x => x.Purpose).HasColumnName("purpose").HasConversion<int>().IsRequired();
         builder.Property(x => x.LogicalModelName).HasColumnName("logical_model_name").HasMaxLength(100).IsRequired();
+        builder.Property(x => x.ReasoningLevel).HasColumnName("reasoning_level").HasMaxLength(32);
 
         builder.HasOne(x => x.Client)
             .WithMany(client => client.PurposeLogicalModels)

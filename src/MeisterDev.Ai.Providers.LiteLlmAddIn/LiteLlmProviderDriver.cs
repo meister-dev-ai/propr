@@ -203,14 +203,16 @@ public sealed class LiteLlmProviderDriver : IAiProviderDriver
             return UnreachableClients.ChatClient("LiteLLM");
         }
 
+        // The adapter is wrapped so that the host hands the client its reasoning request in neutral terms. OpenAI
+        // options that the host builds are a foreign type for the copy of the OpenAI library this add-in loads.
         if (UsesResponsesApi(protocolMode, model))
         {
             var responses = new OpenAIClient(Credential(endpoint), options);
-            return responses.GetResponsesClient().AsIChatClient(model.RemoteModelId);
+            return new LiteLlmReasoningChatClient(responses.GetResponsesClient().AsIChatClient(model.RemoteModelId), usesResponsesApi: true);
         }
 
         var client = new ChatClient(model.RemoteModelId, Credential(endpoint), options);
-        return client.AsIChatClient();
+        return new LiteLlmReasoningChatClient(client.AsIChatClient(), usesResponsesApi: false);
     }
 
     /// <inheritdoc />

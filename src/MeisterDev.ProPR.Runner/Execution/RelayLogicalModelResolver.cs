@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.Ai.Providers.Enums;
@@ -76,7 +77,7 @@ public sealed class RelayLogicalModelResolver : ILogicalModelResolver
                 // not carry it: nothing the executor does depends on it, and the trace it would decorate is
                 // written where the resolution actually happened.
                 LogicalModelLayer.TenantCatalog,
-                ParseEffort(binding.ReasoningEffort)));
+                ParseLevel(binding.ReasoningEffort)));
     }
 
     /// <inheritdoc />
@@ -95,11 +96,23 @@ public sealed class RelayLogicalModelResolver : ILogicalModelResolver
         throw new NotSupportedException("A runner relays chat completions; embeddings are computed in the control plane.");
     }
 
-    internal static ReviewReasoningEffort ParseEffort(string effort)
+    /// <summary>The level a manifest names, or null for no level.</summary>
+    /// <remarks>
+    ///     A control plane writes the level by the provider's name and an empty value for no level. An older control
+    ///     plane writes the name of its effort enum, and its <c>None</c> stands for no level; the flag for the level
+    ///     none then states what a call without a level sends.
+    /// </remarks>
+    /// <param name="level">The level as the manifest states it.</param>
+    internal static string? ParseLevel(string? level)
     {
-        return Enum.TryParse<ReviewReasoningEffort>(effort, ignoreCase: true, out var parsed)
-            ? parsed
-            : ReviewReasoningEffort.None;
+        return level is null or "None" ? null : ReasoningLevelSelection.Normalize(level);
+    }
+
+    /// <summary>The default level of a manifest's model, also from the flag an older control plane sends.</summary>
+    /// <param name="binding">The model as the manifest describes it.</param>
+    internal static string? DefaultLevelOf(RunnerModelBinding binding)
+    {
+        return binding.DefaultReasoningLevel ?? (binding.SupportsReasoningEffortNone ? "none" : null);
     }
 }
 
@@ -136,7 +149,8 @@ public sealed class RelayChatRuntime : IResolvedAiChatRuntime
             SupportsStructuredOutput: binding.SupportsStructuredOutput,
             SupportsToolUse: binding.SupportsToolUse,
             SupportsPromptCaching: binding.SupportsPromptCaching,
-            SupportsReasoningEffortNone: binding.SupportsReasoningEffortNone);
+            DefaultReasoningLevel: RelayLogicalModelResolver.DefaultLevelOf(binding),
+            ReasoningLevels: binding.ReasoningLevels);
 
         this.Connection = new AiConnectionDto(
             binding.ConnectionId ?? Guid.Empty,
@@ -221,10 +235,12 @@ public sealed class RelayChatRuntime : IResolvedAiChatRuntime
             false,
             SupportsPromptCaching: this._binding.SupportsPromptCaching,
             SupportsPromptCacheRouting: false,
-            SupportsReasoningEffortNone: this._binding.SupportsReasoningEffortNone);
+            ReasoningLevels: this._binding.ReasoningLevels,
+            DefaultReasoningLevel: RelayLogicalModelResolver.DefaultLevelOf(this._binding),
+            ConfiguredReasoningLevel: RelayLogicalModelResolver.ParseLevel(this._binding.ReasoningEffort));
 
     public string? LogicalModelName => this._binding.LogicalModelName;
 
     /// <inheritdoc />
-    public ReviewReasoningEffort LogicalModelReasoningEffort => RelayLogicalModelResolver.ParseEffort(this._binding.ReasoningEffort);
+    public string? LogicalModelReasoningLevel => RelayLogicalModelResolver.ParseLevel(this._binding.ReasoningEffort);
 }

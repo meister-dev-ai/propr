@@ -34,6 +34,10 @@ namespace MeisterDev.Ai.Providers.Catalog;
 /// <param name="CacheWriteCostPer1MUsd">USD per million tokens written to the provider cache.</param>
 /// <param name="OpenWeights">Whether the model's weights are openly available, and that makes it self-hostable.</param>
 /// <param name="ReleaseDate">Release date as the source states it.</param>
+/// <param name="ReasoningLevels">
+///     The reasoning levels the model accepts, by the provider's names and from the lowest to the highest effort, or
+///     <see langword="null" /> when the source states none.
+/// </param>
 public sealed record ProviderCatalogEntry(
     string ProviderId,
     string ProviderName,
@@ -52,4 +56,5 @@ public sealed record ProviderCatalogEntry(
     decimal? CachedInputCostPer1MUsd = null,
     decimal? CacheWriteCostPer1MUsd = null,
     bool OpenWeights = false,
-    DateOnly? ReleaseDate = null);
+    DateOnly? ReleaseDate = null,
+    IReadOnlyList<string>? ReasoningLevels = null);

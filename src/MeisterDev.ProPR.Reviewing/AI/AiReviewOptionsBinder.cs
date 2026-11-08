@@ -1,6 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Contracts;
+using MeisterDev.ProPR.Application.AI;
 using System.Globalization;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Enums;
@@ -41,8 +43,7 @@ public static class AiReviewOptionsBinder
         opts.EvidenceJudgeMaxOutputTokens = TryGetInt(configuration, "AI_EVIDENCE_JUDGE_MAX_OUTPUT_TOKENS") ?? opts.EvidenceJudgeMaxOutputTokens;
         opts.EvidenceJudgeRetryMaxOutputTokens =
             TryGetInt(configuration, "AI_EVIDENCE_JUDGE_RETRY_MAX_OUTPUT_TOKENS") ?? opts.EvidenceJudgeRetryMaxOutputTokens;
-        opts.VerificationReasoningEffort =
-            TryGetEnum<ReviewReasoningEffort>(configuration, "AI_VERIFICATION_REASONING_EFFORT") ?? opts.VerificationReasoningEffort;
+        opts.VerificationReasoningLevel = VerificationLevel(configuration) ?? opts.VerificationReasoningLevel;
         opts.ConfidenceFloorError = TryGetInt(configuration, "AI_CONFIDENCE_FLOOR_ERROR") ?? opts.ConfidenceFloorError;
         opts.ConfidenceFloorWarning = TryGetInt(configuration, "AI_CONFIDENCE_FLOOR_WARNING") ?? opts.ConfidenceFloorWarning;
         opts.QualityFilterThreshold = TryGetInt(configuration, "AI_QUALITY_FILTER_THRESHOLD") ?? opts.QualityFilterThreshold;
@@ -84,6 +85,32 @@ public static class AiReviewOptionsBinder
         opts.MaxLinkedItemToolCalls = TryGetInt(configuration, "AI_MAX_LINKED_ITEM_TOOL_CALLS") ?? opts.MaxLinkedItemToolCalls;
         opts.MaxLinkedItemToolResultChars = TryGetInt(configuration, "AI_MAX_LINKED_ITEM_TOOL_RESULT_CHARS") ?? opts.MaxLinkedItemToolResultChars;
         opts.LinkedItemToolTimeoutMs = TryGetInt(configuration, "AI_LINKED_ITEM_TOOL_TIMEOUT_MS") ?? opts.LinkedItemToolTimeoutMs;
+    }
+
+    /// <summary>
+    ///     The level the evidence judge and both contradiction checks request, or null for their own defaults. A value
+    ///     that is not a level name leaves them on their defaults.
+    /// </summary>
+    /// <remarks>
+    ///     <c>AI_VERIFICATION_REASONING_LEVEL</c> takes any level name, <c>none</c> included. The former setting
+    ///     <c>AI_VERIFICATION_REASONING_EFFORT</c> is read when the new one is not set. Its value <c>none</c> was the
+    ///     documented default and meant that the judge and the checks keep their own defaults, so it reads as not set,
+    ///     and an installation that wrote the default out keeps the judge at <c>low</c>.
+    /// </remarks>
+    /// <param name="configuration">The configuration to read.</param>
+    private static string? VerificationLevel(IConfiguration configuration)
+    {
+        var level = ReasoningLevelSelection.Normalize(configuration["AI_VERIFICATION_REASONING_LEVEL"]);
+        if (level is null)
+        {
+            level = ReasoningLevelSelection.Normalize(configuration["AI_VERIFICATION_REASONING_EFFORT"]);
+            if (level == "none")
+            {
+                return null;
+            }
+        }
+
+        return level is not null && ProviderReasoningLevels.IsValidName(level) ? level : null;
     }
 
     private static int? TryGetInt(IConfiguration configuration, string key)

@@ -526,22 +526,24 @@ public sealed class ClientsValidatorTests
         Assert.True(result.IsValid);
     }
 
+    // An empty value clears the baseline level; any other value is a level name, also one the shared order lacks.
     [Theory]
-    [InlineData(ReviewReasoningEffort.None)]
-    [InlineData(ReviewReasoningEffort.Low)]
-    [InlineData(ReviewReasoningEffort.Medium)]
-    [InlineData(ReviewReasoningEffort.High)]
-    public void PatchClient_BaselineReasoningEffortDefinedValue_Passes(ReviewReasoningEffort effort)
+    [InlineData("none")]
+    [InlineData("Low")]
+    [InlineData("xhigh")]
+    [InlineData("max")]
+    [InlineData("")]
+    public void PatchClient_BaselineReasoningLevelName_Passes(string level)
     {
-        var result = PatchClientValidator.Validate(new PatchClientRequest(BaselineReasoningEffort: effort));
+        var result = PatchClientValidator.Validate(new PatchClientRequest(BaselineReasoningLevel: level));
 
         Assert.True(result.IsValid);
     }
 
     [Fact]
-    public void PatchClient_BaselineReasoningEffortUndefinedValue_Fails()
+    public void PatchClient_BaselineReasoningLevelThatIsNotALevelName_Fails()
     {
-        var result = PatchClientValidator.Validate(new PatchClientRequest(BaselineReasoningEffort: (ReviewReasoningEffort)99));
+        var result = PatchClientValidator.Validate(new PatchClientRequest(BaselineReasoningLevel: "very high"));
 
         Assert.False(result.IsValid);
     }
@@ -554,7 +556,7 @@ public sealed class ClientsValidatorTests
                 ReviewPasses:
                 [
                     new ReviewPassEntry(0, Guid.NewGuid()),
-                    new ReviewPassEntry(1, Guid.NewGuid(), ReasoningEffort: ReviewReasoningEffort.High),
+                    new ReviewPassEntry(1, Guid.NewGuid(), ReasoningLevel: "max"),
                 ]));
 
         Assert.True(result.IsValid);
@@ -600,13 +602,13 @@ public sealed class ClientsValidatorTests
     }
 
     [Fact]
-    public void PatchClient_ReviewPassListWithUndefinedReasoningEffort_Fails()
+    public void PatchClient_ReviewPassListWithAReasoningLevelThatIsNotALevelName_Fails()
     {
         var result = PatchClientValidator.Validate(
             new PatchClientRequest(
                 ReviewPasses:
                 [
-                    new ReviewPassEntry(0, Guid.NewGuid(), ReasoningEffort: (ReviewReasoningEffort)42),
+                    new ReviewPassEntry(0, Guid.NewGuid(), ReasoningLevel: "very high"),
                 ]));
 
         Assert.False(result.IsValid);

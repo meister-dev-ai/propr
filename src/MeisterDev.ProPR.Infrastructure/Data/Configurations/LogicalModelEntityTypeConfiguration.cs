@@ -29,9 +29,10 @@ internal sealed class LogicalModelEntityTypeConfiguration : IEntityTypeConfigura
         builder.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
         builder.Property(x => x.Name).HasColumnName("name").HasMaxLength(100).IsRequired();
 
-        // Enums stored as their int value (house default for real enums; matches ClientReviewPassRecord.ReasoningEffort).
+        // Enums stored as their int value (house default for real enums).
         builder.Property(x => x.Capability).HasColumnName("capability").HasConversion<int>().IsRequired();
-        builder.Property(x => x.ReasoningEffort).HasColumnName("reasoning_effort").HasConversion<int>().IsRequired();
+        // The reasoning level by the provider's name; null leaves it to the default level of the configured model.
+        builder.Property(x => x.ReasoningLevel).HasColumnName("reasoning_level").HasMaxLength(32);
         // The protocol mode is stored as its name, matching ai_purpose_bindings.protocol_mode and the
         // ai_configured_models.supported_protocol_modes array. A protocol mode travels with the family that speaks
         // it, so there is no numbering for a member to hold a position in, and a name a later build does not

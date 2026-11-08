@@ -1,9 +1,12 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Collections.Frozen;
+using System.Collections.Immutable;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Declaration;
 using MeisterDev.Ai.Providers.Enums;
@@ -19,8 +22,17 @@ namespace MeisterDev.Ai.Providers.OpenAiAddIn;
 ///     The list is the only administrative call this family makes, and it doubles as the verification call: an
 ///     endpoint that answers it with the configured credential is an endpoint a review can use.
 /// </remarks>
-internal static class OpenAiModels
+internal static partial class OpenAiModels
 {
+    // Immutable arrays, so that no caller can change the levels every later call reads.
+    private static readonly FrozenDictionary<string, ImmutableArray<string>> KnownReasoningLevels =
+        new Dictionary<string, ImmutableArray<string>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["gpt-6-luna"] = ["none", "low", "medium", "high", "xhigh", "max"],
+            ["gpt-6.1-terra"] = ["none", "low", "medium", "high", "xhigh", "max"],
+            ["gpt-6.1-sol"] = ["low", "medium", "high", "xhigh", "max"],
+        }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>What an endpoint answered when asked for its models.</summary>
     /// <param name="Status">The status the endpoint replied with.</param>
     /// <param name="Models">The model identifiers it listed, empty when it listed none or refused.</param>
@@ -149,6 +161,23 @@ internal static class OpenAiModels
             SupportsToolUse: true);
     }
 
+    /// <summary>
+    ///     The reasoning levels the Responses API accepts for a model the bundled catalog does not list, or null for a
+    ///     model the family has no values for.
+    /// </summary>
+    /// <remarks>
+    ///     The values are the ones the API accepted on requests with each effort: gpt-6-luna and gpt-6.1-terra accept
+    ///     none, low, medium, high, xhigh and max, and gpt-6.1-sol accepts the same levels without none. All three refuse
+    ///     minimal. A dated snapshot of a model, such as <c>gpt-6.1-terra-2026-10-01</c>, has the levels of the model.
+    /// </remarks>
+    /// <param name="remoteModelId">The identifier the request names.</param>
+    internal static IReadOnlyList<string>? ReasoningLevelsOf(string remoteModelId)
+    {
+        var match = DatedSnapshot().Match(remoteModelId.Trim());
+        var model = match.Success ? match.Groups["model"].Value : remoteModelId.Trim();
+        return KnownReasoningLevels.TryGetValue(model, out var levels) ? levels : null;
+    }
+
     private static HttpRequestMessage Request(ProviderEndpoint endpoint)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, Address(endpoint));
@@ -167,6 +196,10 @@ internal static class OpenAiModels
 
         return request;
     }
+
+    // A model identifier followed by the date of its snapshot.
+    [GeneratedRegex(@"^(?<model>.+?)-\d{4}-\d{2}-\d{2}$", RegexOptions.CultureInvariant)]
+    private static partial Regex DatedSnapshot();
 
     // The list sits beside the endpoint's own path rather than at the root of its host, because the vendor
     // surface is reached at a version prefix.

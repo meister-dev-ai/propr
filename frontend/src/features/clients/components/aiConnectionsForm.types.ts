@@ -1,7 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-import type { AiProtocolMode, AiPurpose } from '@/services/aiConnectionsService'
+import type { AiProtocolMode, AiPurpose, AiReasoningLevelSource } from '@/services/aiConnectionsService'
 
 export type ModelKind = 'chat' | 'embedding'
 
@@ -25,8 +25,20 @@ export type EditableModel = {
   supportsPromptCaching: boolean
   /** Field this model needs echoed back to preserve its chain of thought; empty when it has no such requirement. */
   reasoningContentField: string
-  /** Whether ProPR sends the reasoning effort none to this model for a call with the effort None. */
-  supportsReasoningEffortNone: boolean
+  /**
+   * The level ProPR sends to this model for a call that no other place chooses a level for, or null for the
+   * provider's own default. It is one of the reasoning levels while those are known.
+   */
+  defaultReasoningLevel: string | null
+  /**
+   * The reasoning levels the model accepts, from the lowest to the highest effort. Null while no source knows them;
+   * the save then fills them from the provider family and the model catalog.
+   */
+  reasoningLevels: string[] | null
+  /** Where the levels come from; 'operator' once an operator edits them. */
+  reasoningLevelsSource: AiReasoningLevelSource | null
+  /** Whether the save detects the levels again and replaces the current ones. */
+  detectReasoningLevels: boolean
 }
 
 export type EditableBinding = {

@@ -124,6 +124,11 @@ public sealed class TenantAiConnectionsController(
         }
 
         writeRequest = await this.FillEmbeddingDefaultsAsync(tenantId, writeRequest, ct);
+        writeRequest = await this.FillReasoningLevelsAsync(tenantId, writeRequest, stored: null, request.ConfiguredModels, ct);
+        if (!this.ModelState.IsValid)
+        {
+            return this.ValidationProblem();
+        }
 
         try
         {
@@ -493,6 +498,12 @@ public sealed class TenantAiConnectionsController(
                 continue;
             }
 
+            if (ConfiguredModelReasoningLevels.Refusal(remoteModelId, model.ReasoningLevels) is { } levelRefusal)
+            {
+                this.ModelState.AddModelError($"configuredModels[{index}].reasoningLevels", levelRefusal);
+                continue;
+            }
+
             var protocolModes = this.ResolveProtocolModes(providerKind, model, isEmbedding);
 
             models.Add(
@@ -517,7 +528,9 @@ public sealed class TenantAiConnectionsController(
                     model.SupportsReasoning,
                     model.SupportsPromptCaching,
                     string.IsNullOrWhiteSpace(model.ReasoningContentField) ? null : model.ReasoningContentField.Trim(),
-                    model.SupportsReasoningEffortNone));
+                    ReasoningLevelSelection.Normalize(model.DefaultReasoningLevel),
+                    ProviderReasoningLevels.Normalize(model.ReasoningLevels),
+                    model.ReasoningLevels is null ? null : model.ReasoningLevelsSource ?? AiReasoningLevelSource.Operator));
         }
 
         return models.AsReadOnly();
@@ -571,6 +584,38 @@ public sealed class TenantAiConnectionsController(
                 .ToList()
                 .AsReadOnly(),
         };
+    }
+
+    // The levels are completed after the request is validated: a stated list stays, a saved model keeps its stored
+    // list, and any other chat model gets the levels detected from its provider family and the tenant's catalog.
+    private async Task<AiConnectionWriteRequestDto> FillReasoningLevelsAsync(
+        Guid tenantId,
+        AiConnectionWriteRequestDto writeRequest,
+        IReadOnlyList<AiConfiguredModelDto>? stored,
+        IReadOnlyList<AiConfiguredModelRequest>? requestModels,
+        CancellationToken ct)
+    {
+        var catalog = modelCatalog is null ? [] : await modelCatalog.GetEffectiveForTenantAsync(tenantId, ct: ct);
+        var driver = providerDrivers.IsRegistered(writeRequest.ProviderKind) ? providerDrivers.GetRequired(writeRequest.ProviderKind) : null;
+        var completed = ConfiguredModelReasoningLevels.Complete(
+            writeRequest.ConfiguredModels,
+            stored,
+            ClientAiConnectionsController.DetectAgain(requestModels),
+            driver,
+            driver?.Declaration.Key ?? writeRequest.ProviderKind,
+            catalog);
+
+        // The default level of a model is one of its levels, checked once the save has completed the levels.
+        for (var index = 0; index < completed.Count; index++)
+        {
+            var model = completed[index];
+            if (ReasoningLevelSelection.Refusal(model.DefaultReasoningLevel, model.ReasoningLevels, model.RemoteModelId) is { } refusal)
+            {
+                this.ModelState.AddModelError($"configuredModels[{index}].defaultReasoningLevel", refusal);
+            }
+        }
+
+        return writeRequest with { ConfiguredModels = completed };
     }
 
     // The shapes a model serves when the request states none. An embedding model gets the two the host

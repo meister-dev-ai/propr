@@ -20,5 +20,11 @@ public sealed class ClientPurposeLogicalModelRecord
 
     public string LogicalModelName { get; set; } = string.Empty;
 
+    /// <summary>
+    ///     The reasoning level the purpose runs at on its logical model, or null when the purpose leaves it to the level
+    ///     of the logical model and the default level of the configured model.
+    /// </summary>
+    public string? ReasoningLevel { get; set; }
+
     public ClientRecord? Client { get; set; }
 }

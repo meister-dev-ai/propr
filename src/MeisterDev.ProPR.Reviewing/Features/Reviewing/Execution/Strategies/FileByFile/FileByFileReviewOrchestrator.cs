@@ -3,6 +3,7 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using System.Text.Json;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
@@ -247,21 +248,21 @@ internal sealed partial class FileByFileReviewOrchestrator(
             }
 
             IResolvedAiChatRuntime runtime;
-            ReviewReasoningEffort effort;
+            string? level;
             try
             {
-                // A pass that names a logical model resolves through the catalog (effort comes from the role) // NOSONAR
-                // legacy passes bind a concrete model and carry their own per-pass effort.
+                // A pass that names a logical model resolves through the catalog; legacy passes bind a concrete model. A
+                // pass runs at its own level, then at the level of its logical model, then at the model's default level.
                 if (!string.IsNullOrEmpty(pass.LogicalModelName) && logicalModelResolver is not null)
                 {
                     var resolvedRole = await logicalModelResolver.ResolveChatRuntimeAsync(job.ClientId, pass.LogicalModelName, ct: ct);
                     runtime = resolvedRole.Runtime;
-                    effort = resolvedRole.ReasoningEffort;
+                    level = ReasoningLevelSelection.FirstSet(pass.ReasoningLevel, resolvedRole.ReasoningLevel, runtime.Model.DefaultReasoningLevel);
                 }
                 else
                 {
                     runtime = await aiRuntimeResolver.ResolveChatRuntimeForModelAsync(job.ClientId, pass.ConfiguredModelId, ct);
-                    effort = pass.ReasoningEffort;
+                    level = ReasoningLevelSelection.FirstSet(pass.ReasoningLevel, runtime.Model.DefaultReasoningLevel);
                 }
             }
             catch (OperationCanceledException)
@@ -276,7 +277,7 @@ internal sealed partial class FileByFileReviewOrchestrator(
             }
 
             // The per-file baseline is pass 1, so a job-level entry numbers as its list ordinal plus two.
-            var candidates = await generator.GenerateCandidatesAsync(job, pr, baseContext, runtime, budget, ordinal + 2, pass.Shadow, effort, ct);
+            var candidates = await generator.GenerateCandidatesAsync(job, pr, baseContext, runtime, budget, ordinal + 2, pass.Shadow, level, ct);
 
             // A shadow entry still runs and records its full generation trace plus a shadow-completed event (both
             // inside the generator), but its candidates are never threaded into synthesis, so it never publishes.

@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -69,9 +70,12 @@ public sealed class LogicalModelMigrationBackfill(
                 continue;
             }
 
-            var effort = pass.ReasoningEffort ?? ReviewReasoningEffort.None;
+            // A logical model is saved only with a level its model accepts, so it takes the level that the pass's model
+            // receives for the pass's level today. The pass keeps its own level, which a call takes first, so the pass
+            // sends what it sent before.
+            var level = ReasoningLevelSelection.Sendable(pass.ReasoningLevel, binding.Model.ReasoningLevels);
 
-            var name = await this.FindOrCreateOverrideAsync(clientId, overrides, takenNames, AiOperationKind.Chat, binding, effort, ct);
+            var name = await this.FindOrCreateOverrideAsync(clientId, overrides, takenNames, AiOperationKind.Chat, binding, level, ct);
             if (name is null)
             {
                 // The configured model cannot serve chat — should not happen for a chat pass, but never let one bad
@@ -139,9 +143,9 @@ public sealed class LogicalModelMigrationBackfill(
                 continue;
             }
 
-            // Purpose bindings carry no reasoning effort, so the faithful translation is None: the resolver applies the
-            // logical model's effort, and None preserves the legacy binding's behavior exactly.
-            var name = await this.FindOrCreateOverrideAsync(clientId, overrides, takenNames, capability, binding, ReviewReasoningEffort.None, ct);
+            // Purpose bindings carry no reasoning level, so the faithful translation is no level: the resolver then
+            // applies the configured model's default level, as the legacy binding did.
+            var name = await this.FindOrCreateOverrideAsync(clientId, overrides, takenNames, capability, binding, null, ct);
             if (name is null)
             {
                 this._logger.LogWarning(
@@ -168,7 +172,7 @@ public sealed class LogicalModelMigrationBackfill(
         HashSet<string> takenNames,
         AiOperationKind capability,
         AiResolvedPurposeBindingDto binding,
-        ReviewReasoningEffort effort,
+        string? level,
         CancellationToken ct)
     {
         var protocol = binding.Binding.ProtocolMode;
@@ -177,21 +181,21 @@ public sealed class LogicalModelMigrationBackfill(
             entry.Capability == capability
             && entry.ConnectionId == binding.Connection.Id
             && entry.ConfiguredModelId == binding.Model.Id
-            && entry.ReasoningEffort == effort
+            && string.Equals(entry.ReasoningLevel, level, StringComparison.Ordinal)
             && entry.ProtocolMode == protocol);
         if (match is not null)
         {
             return match.Name;
         }
 
-        var name = GenerateUniqueName(BuildRoleName(binding.Model.RemoteModelId, effort), takenNames);
+        var name = GenerateUniqueName(BuildRoleName(binding.Model.RemoteModelId, level), takenNames);
         var dto = new LogicalModelDto(
             Guid.NewGuid(),
             name,
             capability,
             binding.Connection.Id,
             binding.Model.Id,
-            effort,
+            level,
             protocol);
         try
         {
@@ -207,10 +211,10 @@ public sealed class LogicalModelMigrationBackfill(
         return name;
     }
 
-    // Deterministic, human-readable role name; identical (model, effort) tuples collapse to one role.
-    private static string BuildRoleName(string remoteModelId, ReviewReasoningEffort effort)
+    // Deterministic, human-readable role name; identical (model, level) tuples collapse to one role.
+    private static string BuildRoleName(string remoteModelId, string? level)
     {
-        var suffix = effort == ReviewReasoningEffort.None ? string.Empty : $"-{effort.ToString().ToLowerInvariant()}";
+        var suffix = level is null ? string.Empty : $"-{level}";
         var name = $"migrated-{remoteModelId}{suffix}";
         return name.Length <= 100 ? name : name[..100];
     }

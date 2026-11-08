@@ -179,7 +179,6 @@ describe('ClientDetailView', () => {
         commentResolutionBehavior: 'silent',
         includeLinkedItemsInContext: true,
         outputLanguage: 'en',
-        baselineReasoningEffort: 'none',
       },
     })
   })
@@ -203,7 +202,6 @@ describe('ClientDetailView', () => {
         commentResolutionBehavior: 'silent',
         includeLinkedItemsInContext: true,
         outputLanguage: 'en',
-        baselineReasoningEffort: 'none',
       },
     })
   })
@@ -232,7 +230,6 @@ describe('ClientDetailView', () => {
         commentResolutionBehavior: 'withReply',
         includeLinkedItemsInContext: true,
         outputLanguage: 'en',
-        baselineReasoningEffort: 'none',
       },
     })
   })
@@ -281,7 +278,6 @@ describe('ClientDetailView', () => {
         commentResolutionBehavior: 'silent',
         includeLinkedItemsInContext: true,
         outputLanguage: 'de',
-        baselineReasoningEffort: 'none',
       },
     })
   })
@@ -333,6 +329,71 @@ describe('ClientDetailView', () => {
     await flushPromises()
 
     expect(wrapper.find<HTMLInputElement>('input[name="outputLanguage"]').element.value).toBe('pt-BR')
+  })
+
+  it('offers Not set and the shared level names for the baseline reasoning level and saves the chosen one', async () => {
+    hasClientRoleMock.mockImplementation((_clientId: string, minRole: number) => minRole <= 1)
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    const select = wrapper.find<HTMLSelectElement>('select[name="baselineReasoningLevel"]')
+    expect(select.findAll('option').map(option => [option.attributes('value'), option.text()])).toEqual([
+      ['', 'Not set'],
+      ['none', 'none'],
+      ['minimal', 'minimal'],
+      ['low', 'low'],
+      ['medium', 'medium'],
+      ['high', 'high'],
+      ['xhigh', 'xhigh'],
+      ['max', 'max'],
+    ])
+    expect(select.element.value).toBe('')
+
+    await select.setValue('high')
+    await wrapper.find('button.scm-advanced-settings-save-btn').trigger('click')
+    await flushPromises()
+
+    expect(patchClientMock).toHaveBeenCalledWith('/clients/{clientId}', {
+      params: { path: { clientId: 'client-1' } },
+      body: expect.objectContaining({ baselineReasoningLevel: 'high' }),
+    })
+  })
+
+  // The patch leaves the stored level as it is when the field is absent, so Not set is sent as an empty value.
+  it('shows the stored baseline reasoning level and clears it with an empty value', async () => {
+    hasClientRoleMock.mockImplementation((_clientId: string, minRole: number) => minRole <= 1)
+    getClientMock.mockResolvedValue({
+      data: {
+        id: 'client-1',
+        displayName: 'Acme Review Team',
+        isActive: true,
+        createdAt: '2026-04-25T10:00:00Z',
+        scmCommentPostingEnabled: true,
+        enableMultiPassUnion: false,
+        reviewEveryIncrementEnabled: false,
+        commentResolutionBehavior: 'silent',
+        includeLinkedItemsInContext: true,
+        baselineReasoningLevel: 'ultra',
+      },
+      response: { status: 200 },
+    })
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    // A name outside the shared names, set through the API, stays selectable.
+    const select = wrapper.find<HTMLSelectElement>('select[name="baselineReasoningLevel"]')
+    expect(select.element.value).toBe('ultra')
+
+    await select.setValue('')
+    await wrapper.find('button.scm-advanced-settings-save-btn').trigger('click')
+    await flushPromises()
+
+    expect(patchClientMock).toHaveBeenCalledWith('/clients/{clientId}', {
+      params: { path: { clientId: 'client-1' } },
+      body: expect.objectContaining({ baselineReasoningLevel: '' }),
+    })
   })
 
   it('enables the budget Save button after entering a cap value', async () => {

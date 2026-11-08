@@ -6,7 +6,6 @@ using System.ClientModel.Primitives;
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.AI;
 using MeisterDev.ProPR.Runner.Contracts;
 using Microsoft.Extensions.AI;
@@ -28,8 +27,8 @@ public sealed class ReviewReasoningRequestWireTests
     public async Task NoReasoning_ReachesAModelThatAcceptsNone_AsTheEffortNone(bool responsesApi, bool resolved)
     {
         var options = resolved
-            ? new ChatOptions().ApplyResolvedReasoning(false, ReviewReasoningEffort.None, supportsReasoningEffortNone: true)
-            : new ChatOptions().ApplyReasoning(false, ReviewReasoningEffort.None, supportsReasoningEffortNone: true);
+            ? new ChatOptions().ApplyResolvedReasoning(false, "none", ["none", "low", "medium", "high"])
+            : new ChatOptions().ApplyReasoning(false, "none", ["none", "low", "medium", "high"]);
 
         var request = await SendAsync(responsesApi, options);
 
@@ -46,8 +45,8 @@ public sealed class ReviewReasoningRequestWireTests
     public async Task NoReasoning_SendsNoReasoningParameter_ToAModelWithoutNone(bool responsesApi, bool resolved)
     {
         var options = resolved
-            ? new ChatOptions().ApplyResolvedReasoning(false, ReviewReasoningEffort.None)
-            : new ChatOptions().ApplyReasoning(false, ReviewReasoningEffort.None);
+            ? new ChatOptions().ApplyResolvedReasoning(false, null)
+            : new ChatOptions().ApplyReasoning(false, null);
 
         var request = await SendAsync(responsesApi, options);
 
@@ -59,20 +58,20 @@ public sealed class ReviewReasoningRequestWireTests
     // decision, which relayed calls and the verification calls use. Whether the model accepts the effort none changes
     // nothing for these efforts.
     [Theory]
-    [InlineData(ReviewReasoningEffort.Low, "low", false)]
-    [InlineData(ReviewReasoningEffort.Medium, "medium", false)]
-    [InlineData(ReviewReasoningEffort.High, "high", false)]
-    [InlineData(ReviewReasoningEffort.Low, "low", true)]
-    [InlineData(ReviewReasoningEffort.Medium, "medium", true)]
-    [InlineData(ReviewReasoningEffort.High, "high", true)]
+    [InlineData("low", "low", false)]
+    [InlineData("medium", "medium", false)]
+    [InlineData("high", "high", false)]
+    [InlineData("low", "low", true)]
+    [InlineData("medium", "medium", true)]
+    [InlineData("high", "high", true)]
     public async Task AConfiguredEffort_ReachesTheResponsesApiAndNotChatCompletions(
-        ReviewReasoningEffort effort,
+        string effort,
         string expected,
         bool resolved)
     {
         ChatOptions Options() => resolved
-            ? new ChatOptions().ApplyResolvedReasoning(false, effort, supportsReasoningEffortNone: true)
-            : new ChatOptions().ApplyReasoning(false, effort, supportsReasoningEffortNone: true);
+            ? new ChatOptions().ApplyResolvedReasoning(false, effort, ["none", "low", "medium", "high"])
+            : new ChatOptions().ApplyReasoning(false, effort, ["none", "low", "medium", "high"]);
 
         using var responses = await SendAsync(responsesApi: true, Options());
         using var chatCompletions = await SendAsync(responsesApi: false, Options());
@@ -104,12 +103,12 @@ public sealed class ReviewReasoningRequestWireTests
     // cannot use, as the host's options are for an add-in. For a model called through the Responses API, the
     // configured effort reaches the request through the shared reasoning setting.
     [Theory]
-    [InlineData(ReviewReasoningEffort.Low, "low", false)]
-    [InlineData(ReviewReasoningEffort.Medium, "medium", false)]
-    [InlineData(ReviewReasoningEffort.High, "high", false)]
-    [InlineData(ReviewReasoningEffort.High, "high", true)]
+    [InlineData("low", "low", false)]
+    [InlineData("medium", "medium", false)]
+    [InlineData("high", "high", false)]
+    [InlineData("high", "high", true)]
     public async Task AConfiguredEffort_ReachesAResponsesClientThatCannotReadTheHostsOptions(
-        ReviewReasoningEffort effort,
+        string effort,
         string expected,
         bool resolved)
     {
@@ -146,7 +145,7 @@ public sealed class ReviewReasoningRequestWireTests
     [Fact]
     public async Task AConfiguredEffortWithASummaryRequest_KeepsTheSummaryRequestOnTheResponsesApi()
     {
-        var options = new ChatOptions().ApplyReasoning(true, ReviewReasoningEffort.High, usesResponsesApi: true);
+        var options = new ChatOptions().ApplyReasoning(true, "high", usesResponsesApi: true);
 
         using var request = await SendAsync(responsesApi: true, options);
 
@@ -161,7 +160,7 @@ public sealed class ReviewReasoningRequestWireTests
     [InlineData(true)]
     public async Task NoReasoningWithASummaryRequest_StillSendsTheEffortNone(bool responsesApi)
     {
-        var options = new ChatOptions().ApplyReasoning(true, ReviewReasoningEffort.None, supportsReasoningEffortNone: true);
+        var options = new ChatOptions().ApplyReasoning(true, "none", ["none", "low", "medium", "high"]);
 
         var request = await SendAsync(responsesApi, options);
 

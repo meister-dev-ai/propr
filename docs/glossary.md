@@ -61,7 +61,7 @@ where it is defined in full and kept up to date.
 | Logical model | The indirection between a review configuration and a real model: a name you invent, pointing at one model on one connection, carrying its effort and protocol settings. | [Purposes and logical models](concepts/models.md) |
 | Tenant catalog | Logical-model names held on the tenant, which any client in it can use without defining its own. | [Two layers](ai/purposes.md#two-layers) |
 | Client override | A logical model one client defines under a name, shadowing the tenant-catalog entry of the same name. | [Two layers](ai/purposes.md#two-layers) |
-| Reasoning effort | How hard the model is asked to think - `none`, `low`, `medium` or `high` - set on a logical model and expressed in whatever form each provider takes. | [Reasoning effort](ai/purposes.md#reasoning-effort) |
+| Reasoning effort | How hard the model is asked to think - `none`, `low`, `medium` or `high` - set on a logical model and expressed in whatever form each provider takes. | [Reasoning effort](ai/purposes.md#reasoning-level) |
 | Protocol mode | Which wire format ProPR calls a model with, carried by the logical model alongside effort. | [Protocol mode](ai/purposes.md#protocol-mode) |
 | Model catalog | What ProPR already knows about public models: what each can do, how much context it has, what it lists at. Bundled with the product, not fetched. | [The model catalog](ai/models-and-catalog.md#the-model-catalog) |
 | Hand-defined model | A model whose metadata you type in yourself because no public catalog has it. Once saved it is indistinguishable from a catalog entry. | [Defining a model the catalog does not list](ai/models-and-catalog.md#defining-a-model-the-catalog-does-not-list) |

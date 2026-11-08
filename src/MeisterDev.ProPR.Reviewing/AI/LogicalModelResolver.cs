@@ -51,15 +51,19 @@ public sealed class LogicalModelResolver(
         var binding = SynthesizeBinding(AiPurpose.ReviewDefault, model, mapping.ProtocolMode);
         var runtime = runtimeFactory.CreateChatRuntime(connection, model, binding, roleName);
 
-        // The runtime carries the logical model's effort, so a caller that resolved a purpose through this logical
-        // model applies the effort the operator set on it, not only a caller that reads the result below.
+        // The runtime carries the logical model's level, so a caller that resolved a purpose through this logical
+        // model applies the level the operator set on it, not only a caller that reads the result below.
         if (runtime is ResolvedAiChatRuntime resolvedRuntime)
         {
-            runtime = resolvedRuntime with { LogicalModelReasoningEffort = mapping.ReasoningEffort };
+            runtime = resolvedRuntime with
+            {
+                LogicalModelReasoningLevel = mapping.ReasoningLevel,
+                Capabilities = resolvedRuntime.Capabilities with { ConfiguredReasoningLevel = mapping.ReasoningLevel },
+            };
         }
 
         await RecordResolutionAsync(recorder, protocolId, roleName, layer, mapping, ct);
-        return new ResolvedLogicalModelChatRuntime(runtime, roleName, layer, mapping.ReasoningEffort);
+        return new ResolvedLogicalModelChatRuntime(runtime, roleName, layer, mapping.ReasoningLevel);
     }
 
     public async Task<ResolvedLogicalModelEmbeddingRuntime> ResolveEmbeddingRuntimeAsync(
@@ -202,7 +206,7 @@ public sealed class LogicalModelResolver(
                 capability = mapping.Capability.ToString(),
                 connectionId = mapping.ConnectionId,
                 configuredModelId = mapping.ConfiguredModelId,
-                reasoningEffort = mapping.ReasoningEffort.ToString(),
+                reasoningLevel = mapping.ReasoningLevel,
                 protocolMode = mapping.ProtocolMode.ToString(),
             });
 

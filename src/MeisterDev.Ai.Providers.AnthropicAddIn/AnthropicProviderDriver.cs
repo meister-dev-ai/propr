@@ -239,6 +239,35 @@ public sealed class AnthropicProviderDriver : IAiProviderDriver
 
     /// <inheritdoc />
     /// <remarks>
+    ///     <para>
+    ///         Every Claude model can answer without thinking, because a request without a thinking setting turns it
+    ///         off, so the family puts the level <c>none</c> in front of the levels the catalog lists.
+    ///     </para>
+    ///     <para>
+    ///         For a model the catalog does not list, the family reads the generation from the model id. The Models API
+    ///         reports the efforts <c>low</c>, <c>medium</c>, <c>high</c>, <c>xhigh</c> and <c>max</c> for Claude Haiku,
+    ///         Sonnet and Opus 5.5, and the Fable and Mythos lines count as later. Earlier models from generation 4
+    ///         take <c>low</c>, <c>medium</c> and <c>high</c>, as adaptive efforts from generation 4.6 on and as thinking
+    ///         budgets before. A model id outside the Claude naming has no levels the family knows.
+    ///     </para>
+    /// </remarks>
+    public IReadOnlyList<string>? DescribeReasoningLevels(string remoteModelId, IReadOnlyList<string>? catalogLevels)
+    {
+        if (catalogLevels is { Count: > 0 })
+        {
+            return ["none", .. catalogLevels.Where(level => level != "none")];
+        }
+
+        return AnthropicMessagesChatClient.ClaudeGeneration(remoteModelId) switch
+        {
+            >= 505 => ["none", "low", "medium", "high", "xhigh", "max"],
+            >= 400 => ["none", "low", "medium", "high"],
+            _ => catalogLevels,
+        };
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
     ///     Anthropic offers no embedding models at all, so this is refused rather than left to fail at the first
     ///     call with a provider-worded rejection an operator cannot act on.
     /// </remarks>

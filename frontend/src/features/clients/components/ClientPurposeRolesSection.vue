@@ -25,6 +25,7 @@
         <tr>
           <th>Purpose</th>
           <th>Logical model</th>
+          <th>Reasoning level</th>
         </tr>
       </thead>
       <tbody>
@@ -35,16 +36,34 @@
               class="form-input-sm"
               :aria-label="purpose.label"
               :data-testid="`purpose-role-select-${purpose.value}`"
-              :value="mapped[purpose.value] ?? ''"
-              @change="onChange(purpose, ($event.target as HTMLSelectElement).value)"
+              :value="assignments[purpose.value]?.logicalModelName ?? ''"
+              @change="onLogicalModelChange(purpose, ($event.target as HTMLSelectElement).value)"
             >
               <option value="">— not mapped</option>
               <option v-for="name in optionsFor(purpose)" :key="name" :value="name">{{ name }}</option>
             </select>
           </td>
+          <td>
+            <!-- An embedding model takes no reasoning level. -->
+            <span v-if="purpose.embedding" class="muted">Not applicable</span>
+            <ReasoningLevelSelect
+              v-else
+              v-bind="levelChoiceFor(purpose)"
+              class="form-input-sm"
+              :model-value="assignments[purpose.value]?.reasoningLevel ?? null"
+              :disabled="!assignments[purpose.value]"
+              :aria-label="`${purpose.label} reasoning level`"
+              :test-id="`purpose-role-level-${purpose.value}`"
+              @update:model-value="onLevelChange(purpose, $event)"
+            />
+          </td>
         </tr>
       </tbody>
     </table>
+    <p class="muted purpose-roles-hint" data-testid="purpose-roles-level-hint">
+      A reasoning level set on a purpose takes precedence over the level of its logical model and the default level
+      of the model.
+    </p>
   </div>
 </template>
 
@@ -58,6 +77,8 @@ import {
   type AiPurpose,
   type LogicalModelResponse,
 } from '@/services/logicalModelsService'
+import ReasoningLevelSelect from './ReasoningLevelSelect.vue'
+import { acceptsReasoningLevel, logicalModelLevelChoice, type ReasoningLevelChoice } from './aiConnectionsFormatters'
 
 const props = defineProps<{ clientId: string }>()
 
@@ -81,8 +102,15 @@ const purposes: PurposeOption[] = [
   { value: 'insightsClassification', label: 'Insights classification', embedding: false },
 ]
 
+// One purpose assignment: the logical model the purpose runs on, and the level it runs at, or null to leave the level
+// to the logical model and its model.
+interface PurposeAssignment {
+  logicalModelName: string
+  reasoningLevel: string | null
+}
+
 const effective = ref<LogicalModelResponse[]>([])
-const mapped = ref<Record<string, string>>({})
+const assignments = ref<Record<string, PurposeAssignment>>({})
 const error = ref('')
 
 const chatModelNames = computed(() => modelNames(false))
@@ -94,7 +122,7 @@ const requiredPurposes: AiPurpose[] = ['reviewDefault', 'embeddingDefault']
 
 const unmappedRequired = computed(() =>
   purposes
-    .filter(purpose => requiredPurposes.includes(purpose.value) && !mapped.value[purpose.value])
+    .filter(purpose => requiredPurposes.includes(purpose.value) && !assignments.value[purpose.value])
     .map(purpose => purpose.label),
 )
 
@@ -109,35 +137,68 @@ function optionsFor(purpose: PurposeOption): string[] {
   return purpose.embedding ? embeddingModelNames.value : chatModelNames.value
 }
 
+function logicalModelNamed(name: string | undefined): LogicalModelResponse | undefined {
+  return name ? effective.value.find(model => model.name === name) : undefined
+}
+
+// The levels of the model behind the assigned logical model, and the level the purpose takes when it sets none.
+function levelChoiceFor(purpose: PurposeOption): ReasoningLevelChoice {
+  return logicalModelLevelChoice(logicalModelNamed(assignments.value[purpose.value]?.logicalModelName))
+}
+
 async function load(): Promise<void> {
   error.value = ''
   try {
     effective.value = await listEffectiveForClient(props.clientId)
     const rows = await listPurposeRoles(props.clientId)
-    const next: Record<string, string> = {}
+    const next: Record<string, PurposeAssignment> = {}
     for (const row of rows) {
       if (row.purpose && row.logicalModelName) {
-        next[row.purpose] = row.logicalModelName
+        next[row.purpose] = { logicalModelName: row.logicalModelName, reasoningLevel: row.reasoningLevel ?? null }
       }
     }
-    mapped.value = next
+    assignments.value = next
   } catch {
     error.value = 'Failed to load purpose mappings.'
   }
 }
 
-async function onChange(purpose: PurposeOption, name: string): Promise<void> {
+async function save(purpose: PurposeOption, assignment: PurposeAssignment | null): Promise<void> {
   error.value = ''
   try {
-    if (name === '') {
+    if (assignment === null) {
       await removePurposeRole(props.clientId, purpose.value)
     } else {
-      await setPurposeRole(props.clientId, purpose.value, name)
+      await setPurposeRole(props.clientId, purpose.value, assignment.logicalModelName, assignment.reasoningLevel)
     }
 
     await load()
-  } catch {
-    error.value = 'Failed to update the purpose mapping.'
+  } catch (failure) {
+    // The message from the server contains a refused level and the levels the model accepts.
+    error.value = failure instanceof Error && failure.message ? failure.message : 'Failed to update the purpose mapping.'
+  }
+}
+
+// The save refuses a level the model behind the new logical model does not accept, so such a level is dropped and the
+// purpose takes the level of the new logical model.
+async function onLogicalModelChange(purpose: PurposeOption, name: string): Promise<void> {
+  if (name === '') {
+    await save(purpose, null)
+    return
+  }
+
+  const level = assignments.value[purpose.value]?.reasoningLevel ?? null
+  const levels = logicalModelLevelChoice(logicalModelNamed(name)).levels
+  await save(purpose, {
+    logicalModelName: name,
+    reasoningLevel: level !== null && acceptsReasoningLevel(levels, level) ? level : null,
+  })
+}
+
+async function onLevelChange(purpose: PurposeOption, level: string | null): Promise<void> {
+  const assignment = assignments.value[purpose.value]
+  if (assignment) {
+    await save(purpose, { logicalModelName: assignment.logicalModelName, reasoningLevel: level })
   }
 }
 
@@ -154,5 +215,10 @@ defineExpose({ load })
 
 .purpose-roles-warning {
   color: var(--color-warning);
+}
+
+.purpose-roles-hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
 }
 </style>

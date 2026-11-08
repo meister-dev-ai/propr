@@ -1,8 +1,8 @@
-# Purposes, effort and protocol
+# Purposes, reasoning levels and protocol
 
 Every piece of AI work a review does asks for a purpose, and each purpose has to reach a logical model that names
 a real model on a real connection. This page is that mapping surface: which purposes exist, how one resolves, what
-happens when it does not, and the two properties a logical model carries - reasoning effort and protocol mode.
+happens when it does not, and the two properties a logical model carries - reasoning level and protocol mode.
 
 The distinction between a purpose and a logical model, and why the review loop never names a provider, is on
 [how model selection works](../concepts/models.md). Mapping is done on the client's **AI Providers → Purposes**
@@ -71,10 +71,10 @@ A purpose can only be mapped to a name that exists, so the names come first. On 
 |---|---|
 | Name | Whatever you want to refer to it by - `fast`, `deep`, `embed`. Purposes and review passes use this name |
 | Connection and model | Which attached model on which connection it resolves to |
-| Reasoning effort | How hard that model thinks under this name - see [reasoning effort](#reasoning-effort) |
+| Reasoning level | How hard that model thinks under this name, or nothing to leave it to the model's default level - see [reasoning level](#reasoning-level) |
 | Protocol mode | Leave on Auto unless your endpoint serves only one shape - see [protocol mode](#protocol-mode) |
 
-The same underlying model can back several names at different efforts, which is the point of the
+The same underlying model can back several names at different levels, which is the point of the
 indirection: `deep` and `fast` can be one model reasoning hard and reasoning not at all.
 
 Define at least one chat name and one embedding name before mapping purposes, since **Review default**
@@ -93,46 +93,58 @@ A client override can only point at a connection inside its own tenant.
 A Community installation has no tenant-catalog layer at all, so every name is a client one - see
 [tenant-owned connections](credentials.md#tenant-owned-connections).
 
-## Reasoning effort
+## Reasoning level
 
-A logical model can carry a reasoning effort of `none`, `low`, `medium` or `high`. Because it is a property of the
-name, you can reason hard on the name mapped to High effort and not at all on the one mapped to Triage. ProPR
-translates it to whatever the provider expresses - an OpenAI reasoning effort, the effort of Anthropic's adaptive
-thinking or, for Claude models before generation 4.6, a thinking budget, a Gemini thinking configuration - so the same
-setting means the same thing across providers.
+A reasoning level says how hard a model thinks, by the provider's name for it, for example `none`, `low`, `high`,
+`xhigh` or `max`. Each chat model on a connection lists the levels it accepts - see
+[reasoning levels of a model](models-and-catalog.md#reasoning-levels-of-a-model).
 
-A review pass uses the effort of the logical model it runs on. The baseline pass of a file runs on the logical model
-that the file's tier purpose resolves to. When that logical model has the effort `none`, the baseline pass uses the
-client's baseline reasoning effort. An additional review pass that names a logical model uses the effort of that
-logical model, also when it is `none`.
+Five places choose a level:
 
-The Responses API and the Anthropic, Google Vertex and Amazon Bedrock protocols receive `low`, `medium` and `high`.
-On Chat Completions, ProPR sends none of these three efforts, also in runner jobs, and the model uses its own
-default. OpenAI refuses function tools on Chat Completions from GPT-5.4 on with any effort other than
-`none`, and an OpenAI-compatible server whose model does not know the field can refuse the request.
+| Place | Where | Applies to |
+|---|---|---|
+| Review pass | **AI Providers → Review passes** | The calls of that pass |
+| Purpose assignment | **AI Providers → Purposes** | The calls of that purpose, for example High effort at `high` and Triage at `low` |
+| Logical model | **AI Providers → Logical models** | Every purpose and pass on the logical model that sets no level of its own |
+| Client baseline | **System → Baseline reasoning level** | The baseline review pass of each file |
+| Configured model | **Default Level** of the model on its connection | Every call to the model |
 
-Each chat model on a connection has the setting **Accepts Reasoning Effort None**. For a review pass with the
-effort `none`, ProPR sends the reasoning effort `none` to a model with this setting, on Chat Completions and on the
-Responses API. For a model without it, ProPR leaves the effort out, and the model uses its own default. A
-model that reasons by default then still reasons and bills reasoning tokens.
+For one call, ProPR takes the first level set in the order of the table: the pass, the purpose assignment, the
+logical model, the client baseline for the baseline review pass, and the configured model. When no place sets a
+level, ProPR sends none, and the provider applies its own default. The baseline pass of a file runs on the purpose
+of the file's tier, and a file without a model for its tier runs on Review default. A purpose that borrows the
+logical model of another purpose through its fallback chain takes the level of that logical model, not the level of
+the other purpose's assignment.
 
-Turn the setting on when the provider documents the effort `none` for the model. OpenAI lists the accepted efforts
-on the page of each model, and a model that does not accept `none` refuses the request with HTTP 400. Discovery and
-the model catalog leave the setting off.
+ProPR refuses to save a level that the referenced model does not list. The client baseline applies to the model of
+each file's tier, so ProPR saves it without that check. A stored level can still fall out of a model's list, for
+example when a logical model is pointed at another model. The model then receives the nearest
+lower level of the order `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` that its list holds, or no level.
+A model whose levels no source knows receives a level as configured. Every review pass records the event
+`reasoning_effort_sent` in its trace with the level it requested, the level the request names and whether ProPR
+substituted one.
 
-The effort of a logical model, the client's baseline reasoning effort and the effort of a review pass follow this
-rule. A review pass with the effort `none` records the event `reasoning_effort_sent` in its trace. The event holds
-`"reasoningParameter": "sent"` when ProPR sent `none`, and `"reasoningParameter": "omitted"` when ProPR left the
-effort out.
+ProPR sends the level to each provider in that provider's terms:
 
-The evidence judge requests `low` effort, including on its bounded output-budget retry, when the bundled
-catalog advertises that effort for the exact model and the selected transport supports it. This call
-setting overrides the selected logical model's effort. On any other model, the judge runs with the effort `none`,
-and both contradiction checks run with the effort `none` on every model. These calls follow the rule above, also
-when the judge runs on the reviewer's own model because no model resolves for the Verification purpose. The value `low`, `medium` or
-`high` in `AI_VERIFICATION_REASONING_EFFORT` replaces both rules with that effort on every model. Selecting the
-Verification purpose chooses a model; the supported call setting controls its reasoning effort. The effort of these calls
-reaches each transport as described above, also in runner jobs, so Chat Completions receives only `none`. See
+| Protocol | What the model receives |
+|---|---|
+| Responses API, also through Azure OpenAI, LiteLLM and an OpenAI-compatible endpoint | `reasoning.effort` with the name of the level |
+| Chat Completions | The level `none`. Any other level is left out |
+| Anthropic | Adaptive thinking with the effort of the level for Claude models from generation 4.6 on, a thinking budget for `low`, `medium` and `high` on older models, and no thinking for `none` |
+| Google Vertex | The thinking configuration of the model, from the lowest to the highest it takes |
+| Amazon Bedrock | The reasoning setting of the AWS adapter; `xhigh` and `max` reach it as its highest value |
+
+On Chat Completions, ProPR sends no level other than `none`, also in runner jobs. OpenAI refuses function tools on
+Chat Completions from GPT-5.4 on with any effort other than `none`, and an OpenAI-compatible server whose model does
+not know the field can refuse the request.
+
+The evidence judge takes the level of the purpose assignment of Verification, then `AI_VERIFICATION_REASONING_LEVEL`,
+then `low` when the model lists it and the selected transport supports it, then the level of the logical model and
+the default level of the model. The judge keeps `low` above the logical model, because purposes share logical models
+through their fallback chain, and a logical model set to `high` for the review would otherwise raise the cost of
+every judge call. The judge applies the level also on its bounded output-budget retry and when it runs on the
+reviewer's own model because no model resolves for the Verification purpose. Both contradiction checks run at
+`AI_VERIFICATION_REASONING_LEVEL`, otherwise at `none` on a model that lists it. See
 [verification](../concepts/reviews.md#what-happens-during-a-review) and
 [judge budgets](../operate/configuration.md#evidence-judge-budgets).
 

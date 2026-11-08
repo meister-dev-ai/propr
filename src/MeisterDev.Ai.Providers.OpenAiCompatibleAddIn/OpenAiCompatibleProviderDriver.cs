@@ -211,7 +211,10 @@ public sealed class OpenAiCompatibleProviderDriver : IAiProviderDriver
 
         var narrowed = AiProtocolModeSupport.NarrowToSupported(model, this.SupportedProtocolModes);
         var client = new ChatClient(narrowed.RemoteModelId, Credential(endpoint), options);
-        return client.AsIChatClient();
+
+        // The adapter is wrapped so that the host hands the client its reasoning request in neutral terms. OpenAI
+        // options that the host builds are a foreign type for the copy of the OpenAI library this add-in loads.
+        return new OpenAiCompatibleReasoningChatClient(client.AsIChatClient());
     }
 
     /// <inheritdoc />

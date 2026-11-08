@@ -1281,7 +1281,7 @@ public sealed partial class ReviewOrchestrationService(
         var enableMultiPassUnion = await clientRegistry.GetMultiPassUnionEnabledAsync(job.ClientId, ct);
         var includeLinkedItemsInContext = await clientRegistry.GetIncludeLinkedItemsInContextEnabledAsync(job.ClientId, ct);
         var reviewPasses = await clientRegistry.GetReviewPassesAsync(job.ClientId, ct);
-        var baselineReasoningEffort = await clientRegistry.GetBaselineReasoningEffortAsync(job.ClientId, ct);
+        var baselineReasoningLevel = await clientRegistry.GetBaselineReasoningLevelAsync(job.ClientId, ct);
         var captureReasoning = await this.ResolveTenantReasoningCaptureAsync(job.ClientId, ct);
 
         // The output language is resolved once for the job and carried on the context, so every prose stage of this
@@ -1344,7 +1344,7 @@ public sealed partial class ReviewOrchestrationService(
             EnableMultiPassUnion = enableMultiPassUnion,
             IncludeLinkedItemsInContext = includeLinkedItemsInContext,
             ReviewPasses = reviewPasses,
-            BaselineReasoningEffort = baselineReasoningEffort,
+            BaselineReasoningLevel = baselineReasoningLevel,
             ExclusionRules = exclusionRules,
             ModelId = job.AiModel,
             ProtocolRecorder = protocolRecorder,

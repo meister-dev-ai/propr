@@ -72,12 +72,11 @@ public sealed class ClientRecord
     public bool CodeInsightsCollectionEnabled { get; set; } = false;
 
     /// <summary>
-    ///     Reasoning effort applied to the implicit tier baseline review pass for this client.
-    ///     Defaults to <see cref="Domain.Enums.ReviewReasoningEffort.None" /> so no effort is sent until a user
-    ///     opts in (behavior and cost unchanged). Per-additional-pass effort lives on each
-    ///     <see cref="ClientReviewPassRecord" />.
+    ///     Reasoning level of the implicit tier baseline review pass for this client, by the provider's name, or null.
+    ///     The baseline pass uses it when neither the purpose assignment nor the logical model of the file's tier sets a
+    ///     level. The level of an additional pass lives on each <see cref="ClientReviewPassRecord" />.
     /// </summary>
-    public ReviewReasoningEffort BaselineReasoningEffort { get; set; } = ReviewReasoningEffort.None;
+    public string? BaselineReasoningLevel { get; set; }
 
     /// <summary>
     ///     Controls whether the work items (Azure DevOps) or issues (GitHub, GitLab, Forgejo) linked to a

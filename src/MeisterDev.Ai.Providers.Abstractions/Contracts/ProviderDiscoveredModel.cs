@@ -129,6 +129,21 @@ public sealed record ProviderDiscoveredModel(
         init => this._supportsToolUse = value;
     }
 
+    /// <summary>
+    ///     The reasoning levels the provider reports for the model, by the provider's names and from the lowest to the
+    ///     highest effort, or null when the provider reports none.
+    /// </summary>
+    /// <remarks>
+    ///     An init property and not a positional parameter, so that a family built against contract 1.1 binds. The
+    ///     host normalizes the list with <see cref="ProviderReasoningLevels.Normalize" />.
+    /// </remarks>
+    public IReadOnlyList<string>? ReasoningLevels { get; init; }
+
+    /// <summary>
+    ///     The level the provider applies to a request that names no level, when the provider reports it.
+    /// </summary>
+    public string? DefaultReasoningLevel { get; init; }
+
     private static string Named(string displayName, string remoteModelId)
     {
         return string.IsNullOrWhiteSpace(displayName) ? remoteModelId : displayName;

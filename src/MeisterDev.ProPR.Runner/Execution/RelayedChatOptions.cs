@@ -40,14 +40,15 @@ internal static class RelayedChatOptions
         var captureReasoning = false;
 
         // The reasoning factory answers a native-protocol client with the neutral request; posing as one
-        // recovers the effort and capture knobs without naming a provider. The neutral request has no word for
-        // the effort none, so a pass that asks a model accepting it for no reasoning is read from the standard
-        // setting, where the pipeline states that effort for Chat Completions.
+        // recovers the level and capture knobs without naming a provider. The request names the level by the
+        // provider's name; a request from a pipeline that states no name is read from its neutral effort, and the
+        // level none from the shared setting.
         if (options.RawRepresentationFactory?.Invoke(ReasoningProbe.Instance) is ProviderReasoningRequest reasoning)
         {
-            effort = reasoning.Effort == ProviderReasoningEffort.None
-                ? options.Reasoning?.Effort == ReasoningEffort.None ? "none" : null
-                : reasoning.Effort.ToString().ToLowerInvariant();
+            effort = reasoning.Level
+                     ?? (reasoning.Effort == ProviderReasoningEffort.None
+                         ? options.Reasoning?.Effort == ReasoningEffort.None ? "none" : null
+                         : reasoning.Effort.ToString().ToLowerInvariant());
             captureReasoning = reasoning.CaptureReasoning;
         }
 

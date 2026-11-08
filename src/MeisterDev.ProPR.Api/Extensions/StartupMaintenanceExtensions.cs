@@ -55,6 +55,26 @@ public static class StartupMaintenanceExtensions
             await catalogImport.SeedFromBundledSnapshotAsync();
         }
 
+        // Fills the reasoning levels of configured models from the catalog just imported and from the add-ins, and
+        // refreshes the levels that came from them. Best effort: a failure never blocks startup, and the next boot or
+        // a save of the connection fills the levels.
+        var reasoningLevelBackfill = scope.ServiceProvider.GetService<IConfiguredModelReasoningLevelBackfill>();
+        if (reasoningLevelBackfill is not null)
+        {
+            try
+            {
+                var filled = await reasoningLevelBackfill.BackfillAllAsync(CancellationToken.None);
+                if (filled > 0)
+                {
+                    Log.Information("Reasoning levels: filled or refreshed the levels of {Count} configured model(s).", filled);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Filling the reasoning levels of configured models failed at startup; the next boot tries again.");
+            }
+        }
+
         // Idempotent migration: move legacy configured-model review passes and unmapped AI purposes onto named logical
         // models. Best effort — a failure never blocks startup, and anything not yet migrated keeps resolving via its
         // legacy configured-model id / purpose binding until a later boot succeeds.

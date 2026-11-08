@@ -45,6 +45,29 @@ link-local host once that opt-in is set, and reaches a public host under no sett
 Forgejo, GitHub Enterprise or Azure DevOps Server on an internal address. `AI_ALLOW_PRIVATE_EGRESS` is read
 as the earlier name of the same setting.
 
+### Change from the reasoning effort to reasoning levels
+
+Review passes, logical models and the client baseline hold a reasoning level by the provider's name, for example
+`none`, `high` or `max`, and purpose assignments and configured models can hold one as well - see
+[reasoning level](../ai/purposes.md#reasoning-level). The first start converts the stored values. The effort None
+becomes no level, Low, Medium and High become `low`, `medium` and `high`, and a model with "Accepts reasoning effort
+none" gets the default level `none`. A review pass therefore sends the same level as before.
+
+A call that sets no level of its own now runs at the level of its purpose: the level of the purpose assignment,
+otherwise of the logical model, otherwise the default level of the model. This applies to purposes such as Triage,
+Memory reconsideration and Insights classification, and to calls on the Review default model such as the quality
+filter and synthesis. These calls sent no level before, and on a model that had "Accepts reasoning effort none" they
+now send `none`. If a logical model with the level `high` also serves such a call, directly or through a purpose's
+fallback chain, the call costs more after the upgrade. Set a level on the purpose assignment to choose another level
+for these calls.
+
+The API fields `reasoningEffort` of review passes and logical models and `baselineReasoningEffort` of a client are now
+`reasoningLevel` and `baselineReasoningLevel`. A configured model states `defaultReasoningLevel` in place of
+`supportsReasoningEffortNone`. Update scripts that write the former fields before you roll forward.
+
+`AI_VERIFICATION_REASONING_LEVEL` replaces `AI_VERIFICATION_REASONING_EFFORT`. ProPR reads the former variable when
+the new one is not set, and reads its value `none` as not set, as before.
+
 ## What to back up
 
 These things, and they only work together:

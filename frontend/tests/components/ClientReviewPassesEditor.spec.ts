@@ -99,7 +99,7 @@ describe('ClientReviewPassesEditor', () => {
     await wrapper.find('[data-testid="review-pass-save"]').trigger('click')
 
     expect(wrapper.findAll('[data-testid="review-pass-row"]')).toHaveLength(1)
-    expect(lastEmit(wrapper)).toEqual([{ ordinal: 0, configuredModelId: 'model-a1', lens: null, scope: null, shadow: false, reasoningEffort: 'none' }])
+    expect(lastEmit(wrapper)).toEqual([{ ordinal: 0, configuredModelId: 'model-a1', lens: null, scope: null, shadow: false, reasoningLevel: null }])
   })
 
   it('only lists chat models for the chosen connection', async () => {
@@ -123,8 +123,8 @@ describe('ClientReviewPassesEditor', () => {
     await addRawPass(wrapper, 'conn-b', 'model-b1')
 
     expect(lastEmit(wrapper)).toEqual([
-      { ordinal: 0, configuredModelId: 'model-a1', lens: null, scope: null, shadow: false, reasoningEffort: 'none' },
-      { ordinal: 1, configuredModelId: 'model-b1', lens: null, scope: null, shadow: false, reasoningEffort: 'none' },
+      { ordinal: 0, configuredModelId: 'model-a1', lens: null, scope: null, shadow: false, reasoningLevel: null },
+      { ordinal: 1, configuredModelId: 'model-b1', lens: null, scope: null, shadow: false, reasoningLevel: null },
     ])
   })
 
@@ -136,7 +136,7 @@ describe('ClientReviewPassesEditor', () => {
 
     await wrapper.findAll('[data-testid="review-pass-remove"]')[0].trigger('click')
 
-    expect(lastEmit(wrapper)).toEqual([{ ordinal: 0, configuredModelId: 'model-b1', lens: null, scope: null, shadow: false, reasoningEffort: 'none' }])
+    expect(lastEmit(wrapper)).toEqual([{ ordinal: 0, configuredModelId: 'model-b1', lens: null, scope: null, shadow: false, reasoningLevel: null }])
   })
 
   it('reorders passes with the move controls', async () => {
@@ -148,8 +148,8 @@ describe('ClientReviewPassesEditor', () => {
     await wrapper.findAll('[data-testid="review-pass-down"]')[0].trigger('click')
 
     expect(lastEmit(wrapper)).toEqual([
-      { ordinal: 0, configuredModelId: 'model-b1', lens: null, scope: null, shadow: false, reasoningEffort: 'none' },
-      { ordinal: 1, configuredModelId: 'model-a1', lens: null, scope: null, shadow: false, reasoningEffort: 'none' },
+      { ordinal: 0, configuredModelId: 'model-b1', lens: null, scope: null, shadow: false, reasoningLevel: null },
+      { ordinal: 1, configuredModelId: 'model-a1', lens: null, scope: null, shadow: false, reasoningLevel: null },
     ])
   })
 

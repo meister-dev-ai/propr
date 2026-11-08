@@ -57,22 +57,31 @@ public sealed class AiRuntimeFactory(
         // credential the client started with expires before then.
         var endpoint = connection.ToProviderEndpoint(hostContexts?.ForConnection(connection));
         var client = driver.CreateChatClient(endpoint, model.ToProviderModel(), binding.ProtocolMode);
-        // Whether the model accepts the reasoning effort none is stated per model on the connection, because the
-        // provider documents the accepted effort values per model and the family does not decide them.
+        // The levels the model accepts are stated per model on the connection, because the provider documents the
+        // accepted levels per model and the family does not decide them for every model.
         var capabilities = driver.GetChatRuntimeCapabilities(
                 endpoint,
                 model.ToProviderModel(),
                 binding.ProtocolMode).ToReviewCapabilities() with
             {
-                SupportsReasoningEffortNone = model.SupportsReasoningEffortNone,
+                ReasoningLevels = model.ReasoningLevels,
+                DefaultReasoningLevel = model.DefaultReasoningLevel,
             };
         var wrapped = this.WrapChatClient(client, driver, connection, model, logicalModelName, capabilities.SupportsPromptCacheRouting);
         return new ResolvedAiChatRuntime(connection, model, binding, wrapped, capabilities)
         {
             LogicalModelName = logicalModelName,
-            SupportsLowReasoningEffort = BundledModelReasoningSupport.SupportsLowEffort(model.RemoteModelId)
-                                         && driver.SupportsLowReasoningEffort(binding.ProtocolMode),
+            SupportsLowReasoningEffort = AcceptsLowEffort(model) && driver.SupportsLowReasoningEffort(binding.ProtocolMode),
         };
+    }
+
+    // Once a source knows the reasoning levels of the model, its list decides. Until then, the OpenAI entries of the
+    // bundled catalog decide, as they did before configured models carried their levels.
+    private static bool AcceptsLowEffort(AiConfiguredModelDto model)
+    {
+        return model.ReasoningLevels is { } levels
+            ? levels.Contains("low", StringComparer.Ordinal)
+            : BundledModelReasoningSupport.SupportsLowEffort(model.RemoteModelId);
     }
 
     public IResolvedAiEmbeddingRuntime CreateEmbeddingRuntime(

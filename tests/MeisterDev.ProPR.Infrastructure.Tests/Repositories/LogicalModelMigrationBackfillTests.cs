@@ -138,6 +138,34 @@ public sealed class LogicalModelMigrationBackfillTests(PostgresContainerFixture 
         Assert.Single(await this._catalog.GetClientOverridesAsync(this._clientId, default));
     }
 
+    // A logical model is saved only with a level its model accepts. A legacy pass whose level the model does not list
+    // migrates onto a logical model with the level the model receives for it, and keeps its own level, which a call
+    // takes first, so the pass sends what it sent before.
+    [Fact]
+    public async Task Backfill_MigratesAPassWhoseLevelTheModelDoesNotList_OntoTheLevelTheModelReceives()
+    {
+        var connProfileId = Guid.NewGuid();
+        var modelId = Guid.NewGuid();
+        this.SeedConnectionModel(connProfileId, modelId, "gpt-4o");
+        var model = AiConnectionTestFactory.CreateChatModel("gpt-4o", modelId) with { ReasoningLevels = ["none", "high"] };
+        var connection = AiConnectionTestFactory.CreateConnection(this._clientId, [model]) with { Id = connProfileId };
+        var binding = AiConnectionTestFactory.CreateBinding(AiPurpose.ReviewDefault, model, AiConnectionTestFactory.ResponsesProtocol);
+        this._connections.GetModelBindingAsync(this._clientId, modelId, Arg.Any<CancellationToken>())
+            .Returns(new AiResolvedPurposeBindingDto(connection, model, binding));
+        var legacy = this.NewLegacyPass(0, modelId);
+        legacy.ReasoningLevel = "low";
+        this._dbContext.ClientReviewPasses.Add(legacy);
+        await this._dbContext.SaveChangesAsync();
+
+        Assert.Equal(1, await this._backfill.BackfillClientReviewPassesAsync(this._clientId, default));
+
+        var role = Assert.Single(await this._catalog.GetClientOverridesAsync(this._clientId, default));
+        Assert.Equal("none", role.ReasoningLevel);
+        var pass = await this._dbContext.ClientReviewPasses.AsNoTracking().SingleAsync(p => p.ClientId == this._clientId);
+        Assert.Equal(role.Name, pass.LogicalModelName);
+        Assert.Equal("low", pass.ReasoningLevel);
+    }
+
     [Fact]
     public async Task BackfillPurposes_MapsUnmappedPurposes_DedupsAndHandlesEmbedding_Idempotently()
     {

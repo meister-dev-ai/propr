@@ -34,6 +34,7 @@ internal sealed class AiModelCatalogEntryEntityTypeConfiguration : IEntityTypeCo
         builder.Property(x => x.CachedInputCostPer1MUsd).HasColumnName("cached_input_cost_per_1m_usd").HasPrecision(18, 6);
         builder.Property(x => x.CacheWriteCostPer1MUsd).HasColumnName("cache_write_cost_per_1m_usd").HasPrecision(18, 6);
         builder.Property(x => x.OpenWeights).HasColumnName("open_weights").IsRequired();
+        builder.Property(x => x.ReasoningLevels).HasColumnName("reasoning_levels");
         builder.Property(x => x.ReleaseDate).HasColumnName("release_date");
         builder.Property(x => x.SourceFormat).HasColumnName("source_format").HasMaxLength(50).IsRequired();
         builder.Property(x => x.ImportedAt).HasColumnName("imported_at").IsRequired();

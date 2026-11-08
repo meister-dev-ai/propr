@@ -4,6 +4,7 @@
 
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { standardReasoningLevels } from '@/features/clients/components/aiConnectionsFormatters'
 import TenantAiConnectionsSection from '../TenantAiConnectionsSection.vue'
 
 const mocks = vi.hoisted(() => ({
@@ -119,6 +120,60 @@ describe('TenantAiConnectionsSection', () => {
       }),
     )
     expect(mocks.listTenantConnections).toHaveBeenCalledTimes(2)
+  })
+
+  // Tenant connections have no update endpoint, so the create request carries the default level of each chat model. An
+  // embedding model takes no level, so a level chosen while the model was a chat model is left out.
+  it('sends the default level of a chat model and leaves it out for an embedding model', async () => {
+    mocks.createTenantConnection.mockResolvedValue({})
+    const wrapper = mountSection()
+    await flushPromises()
+
+    await wrapper.find('[data-testid="tenant-conn-add"]').trigger('click')
+    await wrapper.find('[data-testid="tenant-conn-display-name"]').setValue('Shared OpenAI')
+    await wrapper.find('[data-testid="tenant-conn-base-url"]').setValue('https://api.openai.com/v1')
+    await wrapper.find('[data-testid="tenant-conn-api-key"]').setValue('secret-key')
+    await wrapper.find('[data-testid="tenant-conn-model-id-0"]').setValue('gpt-6.1-terra')
+    await wrapper.find('[data-testid="tenant-conn-model-default-level-0"]').setValue('high')
+    await wrapper.find('[data-testid="tenant-conn-add-model"]').trigger('click')
+    await wrapper.find('[data-testid="tenant-conn-model-id-1"]').setValue('text-embedding-3-small')
+    await wrapper.find('[data-testid="tenant-conn-model-default-level-1"]').setValue('low')
+    await wrapper.find('[data-testid="tenant-conn-model-capability-1"]').setValue('embedding')
+    await wrapper.find('[aria-label="Tokenizer"]').setValue('cl100k_base')
+    await wrapper.find('[aria-label="Max input tokens"]').setValue('8191')
+    await wrapper.find('[aria-label="Embedding dimensions"]').setValue('1536')
+    await wrapper.find('[data-testid="tenant-conn-create-form"]').trigger('submit')
+    await flushPromises()
+
+    expect(mocks.createTenantConnection).toHaveBeenCalledTimes(1)
+    const [, request] = mocks.createTenantConnection.mock.calls[0]!
+    expect(request.configuredModels).toEqual([
+      expect.objectContaining({ remoteModelId: 'gpt-6.1-terra', operationKinds: ['chat'], defaultReasoningLevel: 'high' }),
+      expect.objectContaining({ remoteModelId: 'text-embedding-3-small', operationKinds: ['embedding'] }),
+    ])
+    expect(request.configuredModels[1].defaultReasoningLevel).toBeUndefined()
+  })
+
+  // The server detects the levels of a new model when it creates the connection, so the select offers the shared level
+  // names.
+  it('offers a default level for a chat model only', async () => {
+    const wrapper = mountSection()
+    await flushPromises()
+
+    await wrapper.find('[data-testid="tenant-conn-add"]').trigger('click')
+
+    const select = wrapper.find('[data-testid="tenant-conn-model-default-level-0"]')
+    // The empty value is the Provider default option.
+    expect(select.findAll('option').map((option) => (option.element as HTMLOptionElement).value)).toEqual([
+      '',
+      ...standardReasoningLevels,
+    ])
+    expect(wrapper.find('[data-testid="tenant-conn-model-default-level-hint"]').exists()).toBe(true)
+
+    await wrapper.find('[data-testid="tenant-conn-model-capability-0"]').setValue('embedding')
+
+    expect(wrapper.find('[data-testid="tenant-conn-model-default-level-0"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="tenant-conn-model-default-level-hint"]').exists()).toBe(false)
   })
 
   it('verifies and deletes a connection', async () => {

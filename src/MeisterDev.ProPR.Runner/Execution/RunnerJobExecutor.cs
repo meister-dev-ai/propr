@@ -5,6 +5,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
@@ -351,7 +352,11 @@ public sealed partial class RunnerJobExecutor(
                 SupportsBackgroundResponses: false,
                 PrefersResponsesApi: false,
                 SupportsPromptCaching: manifest.DefaultModel.SupportsPromptCaching,
-                SupportsReasoningEffortNone: manifest.DefaultModel.SupportsReasoningEffortNone),
+                ReasoningLevels: manifest.DefaultModel.ReasoningLevels,
+                DefaultReasoningLevel: RelayLogicalModelResolver.DefaultLevelOf(manifest.DefaultModel),
+                ConfiguredReasoningLevel: ReasoningLevelSelection.FirstSet(
+                    RelayLogicalModelResolver.ParseLevel(manifest.DefaultModel.PurposeReasoningLevel),
+                    RelayLogicalModelResolver.ParseLevel(manifest.DefaultModel.ReasoningEffort))),
             OutputLanguage = manifest.Prompts.Language,
             FindingTypeVocabulary = manifest.Prompts.FindingTypeVocabulary is { Version: FindingTypeTaxonomy.Version, CustomTypes: not null } vocabulary
                 ? new FindingTypeVocabulary(
@@ -360,7 +365,9 @@ public sealed partial class RunnerJobExecutor(
                 : FindingTypeVocabulary.Core,
             ExclusionRules = ReviewExclusionRules.FromPatterns(manifest.Exclusions),
             PromptOverrides = manifest.Prompts.Overrides,
-            BaselineReasoningEffort = ParseEffort(manifest.Prompts.Aggressiveness),
+            // The default model's binding states the level of the review purpose's assignment and of its logical model;
+            // the client baseline level and the model's default level follow them, as on the control plane.
+            BaselineReasoningLevel = RelayLogicalModelResolver.ParseLevel(manifest.Prompts.Aggressiveness),
             ReviewPasses =
             [
                 .. manifest.Passes.Select(pass => new ReviewPassSpec(
@@ -368,7 +375,7 @@ public sealed partial class RunnerJobExecutor(
                     pass.Lens,
                     pass.Scope,
                     pass.Shadow,
-                    ParseEffort(pass.Model.ReasoningEffort),
+                    RelayLogicalModelResolver.ParseLevel(pass.ReasoningLevel),
                     pass.Model.LogicalModelName))
             ],
 
@@ -522,13 +529,6 @@ public sealed partial class RunnerJobExecutor(
         {
             LogTraceTruncated(logger, spool.JobId, spool.DroppedEvents);
         }
-    }
-
-    private static ReviewReasoningEffort ParseEffort(string? effort)
-    {
-        return Enum.TryParse<ReviewReasoningEffort>(effort, ignoreCase: true, out var parsed)
-            ? parsed
-            : ReviewReasoningEffort.None;
     }
 
     [LoggerMessage(EventId = 6401, Level = LogLevel.Information, Message = "Reviewing job {JobId}: {FileCount} changed files in scope")]

@@ -65,6 +65,20 @@ public static class ReviewPassSignature
 
         return string.Create(
             CultureInfo.InvariantCulture,
-            $"{ordinal}:{model}:{pass.Lens ?? "-"}:{pass.Scope ?? "-"}:{pass.ReasoningEffort}");
+            $"{ordinal}:{model}:{pass.Lens ?? "-"}:{pass.Scope ?? "-"}:{LevelKey(pass.ReasoningLevel)}");
+    }
+
+    // The levels that existed as an effort enum keep the spelling the recorded signatures carry, so a pass list that
+    // did not change matches its recorded signature after the upgrade.
+    private static string LevelKey(string? level)
+    {
+        return level switch
+        {
+            null or "" => "None",
+            "low" => "Low",
+            "medium" => "Medium",
+            "high" => "High",
+            _ => level,
+        };
     }
 }

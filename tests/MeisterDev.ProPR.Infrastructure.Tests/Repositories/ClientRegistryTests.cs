@@ -650,7 +650,7 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
     }
 
     [Fact]
-    public async Task ReviewPasses_PatchPersistsReasoningEffort_AndGetEchoesIt()
+    public async Task ReviewPasses_PatchPersistsReasoningLevel_AndGetEchoesIt()
     {
         var client = await this.SeedClientAsync();
         var adminService = new ClientAdminService(this._dbContext, new UnlimitedStockQuotaGate());
@@ -664,7 +664,7 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
             reviewPasses: new List<ReviewPassDto>
             {
                 new(0, defaultModel),
-                new(1, highModel, ReasoningEffort: ReviewReasoningEffort.High),
+                new(1, highModel, ReasoningLevel: "high"),
             },
             ct: CancellationToken.None);
 
@@ -672,41 +672,45 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
         Assert.Equal(
             new[]
             {
-                new ReviewPassDto(0, defaultModel, ReasoningEffort: ReviewReasoningEffort.None),
-                new ReviewPassDto(1, highModel, ReasoningEffort: ReviewReasoningEffort.High),
+                new ReviewPassDto(0, defaultModel, ReasoningLevel: null),
+                new ReviewPassDto(1, highModel, ReasoningLevel: "high"),
             },
             updated!.ReviewPassesOrEmpty.ToArray());
 
-        // The effort survives to the review-pipeline projection so it reaches the outbound request. An unset
-        // per-pass effort reads back as None (the column is null in the database).
+        // The level survives to the review-pipeline projection so it reaches the outbound request. A pass without a
+        // level reads back as null (the column is null in the database).
         var passes = await this._registry.GetReviewPassesAsync(client.Id, CancellationToken.None);
         Assert.Equal(
-            new[] { ReviewReasoningEffort.None, ReviewReasoningEffort.High },
-            passes.Select(pass => pass.ReasoningEffort).ToArray());
+            new[] { null, "high" },
+            passes.Select(pass => pass.ReasoningLevel).ToArray());
     }
 
     [Fact]
-    public async Task BaselineReasoningEffort_PatchPersists_AndRegistryEchoesIt()
+    public async Task BaselineReasoningLevel_PatchPersists_AndRegistryEchoesIt()
     {
         var client = await this.SeedClientAsync();
         var adminService = new ClientAdminService(this._dbContext, new UnlimitedStockQuotaGate());
 
-        // Default before any opt-in is None (byte-identical to today: no effort sent).
-        var initial = await this._registry.GetBaselineReasoningEffortAsync(client.Id, CancellationToken.None);
-        Assert.Equal(ReviewReasoningEffort.None, initial);
+        // Before any opt-in the client sets no baseline level.
+        var initial = await this._registry.GetBaselineReasoningLevelAsync(client.Id, CancellationToken.None);
+        Assert.Null(initial);
 
         var updated = await adminService.PatchAsync(
             client.Id,
             null,
             null,
-            baselineReasoningEffort: ReviewReasoningEffort.Medium,
+            baselineReasoningLevel: "medium",
             ct: CancellationToken.None);
 
         Assert.NotNull(updated);
-        Assert.Equal(ReviewReasoningEffort.Medium, updated!.BaselineReasoningEffort);
+        Assert.Equal("medium", updated!.BaselineReasoningLevel);
 
-        var persisted = await this._registry.GetBaselineReasoningEffortAsync(client.Id, CancellationToken.None);
-        Assert.Equal(ReviewReasoningEffort.Medium, persisted);
+        var persisted = await this._registry.GetBaselineReasoningLevelAsync(client.Id, CancellationToken.None);
+        Assert.Equal("medium", persisted);
+
+        // An empty level clears the setting.
+        await adminService.PatchAsync(client.Id, null, null, baselineReasoningLevel: string.Empty, ct: CancellationToken.None);
+        Assert.Null(await this._registry.GetBaselineReasoningLevelAsync(client.Id, CancellationToken.None));
     }
 
     [Fact]

@@ -45,21 +45,40 @@ public sealed class AiRuntimeFactoryTests
         Assert.Equal(expected, runtime.SupportsLowReasoningEffort);
     }
 
-    // Whether a model accepts the reasoning effort none is stated per model on the connection, so the capability the
-    // review reads comes from the configured model and not from the family.
+    // Once a source knows the levels of a model, its list decides whether the model takes the effort low, also for a
+    // model the bundled catalog does not list and against what the bundled catalog says.
+    [Theory]
+    [InlineData("gpt-6.1-terra", new[] { "none", "low", "high" }, true)]
+    [InlineData("gpt-5", new[] { "medium", "high" }, false)]
+    [InlineData("gpt-5", new string[0], false)]
+    public void LowEffortCapability_FollowsTheLevelsOfTheConfiguredModel(string modelId, string[] levels, bool expected)
+    {
+        var (registry, driver, _, connection, model, binding) = SetupChat(modelId);
+        driver.SupportsLowReasoningEffort(binding.ProtocolMode).Returns(true);
+
+        var runtime = new AiRuntimeFactory(registry).CreateChatRuntime(connection, model with { ReasoningLevels = levels }, binding);
+
+        Assert.Equal(expected, runtime.SupportsLowReasoningEffort);
+    }
+
+    // The levels a model accepts and its default level are stated per model on the connection, so the capabilities the
+    // review reads come from the configured model and not from the family.
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void ReasoningEffortNoneCapability_ComesFromTheConfiguredModel(bool accepted)
+    public void ReasoningLevelCapabilities_ComeFromTheConfiguredModel(bool acceptsNone)
     {
         var (registry, _, _, connection, model, binding) = SetupChat();
+        IReadOnlyList<string> levels = acceptsNone ? ["none", "low", "medium", "high"] : ["low", "medium", "high"];
+        var defaultLevel = acceptsNone ? "none" : "medium";
 
         var runtime = new AiRuntimeFactory(registry).CreateChatRuntime(
             connection,
-            model with { SupportsReasoningEffortNone = accepted },
+            model with { ReasoningLevels = levels, DefaultReasoningLevel = defaultLevel },
             binding);
 
-        Assert.Equal(accepted, runtime.Capabilities.SupportsReasoningEffortNone);
+        Assert.Equal(levels, runtime.Capabilities.ReasoningLevels);
+        Assert.Equal(defaultLevel, runtime.Capabilities.DefaultReasoningLevel);
         Assert.True(runtime.Capabilities.SupportsProviderManagedSessions);
     }
 

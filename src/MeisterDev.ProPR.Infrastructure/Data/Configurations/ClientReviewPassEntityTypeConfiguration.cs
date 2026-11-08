@@ -47,11 +47,10 @@ internal sealed class ClientReviewPassEntityTypeConfiguration : IEntityTypeConfi
             .HasColumnName("shadow")
             .HasDefaultValue(false);
 
-        // Reasoning effort for this pass, stored as the enum's int. Nullable — null reads as None (no effort sent),
-        // so existing rows and the default configuration keep current behavior.
-        builder.Property(pass => pass.ReasoningEffort)
-            .HasColumnName("reasoning_effort")
-            .HasConversion<int?>();
+        // Reasoning level of this pass by the provider's name; null leaves it to the logical model and the model.
+        builder.Property(pass => pass.ReasoningLevel)
+            .HasColumnName("reasoning_level")
+            .HasMaxLength(32);
 
         builder.HasOne(pass => pass.Client)
             .WithMany(client => client.ReviewPasses)

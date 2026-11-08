@@ -3,7 +3,7 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using System.Text.Json;
-using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Runner.Contracts;
 using Microsoft.Extensions.AI;
 
@@ -39,10 +39,18 @@ public static class RunnerRelayedChatOptions
     ///     caller that has not resolved the job's policy.
     /// </param>
     /// <param name="usesResponsesApi">
-    ///     Whether the model the relay resolved is called through the Responses API. A relayed Low, Medium or High is
-    ///     then also stated in the shared reasoning setting, which reaches a provider add-in.
+    ///     Whether the model the relay resolved is called through the Responses API. A relayed level is then also stated
+    ///     in the shared reasoning setting, which reaches a provider add-in.
     /// </param>
-    public static ChatOptions? ToChatOptions(RunnerChatOptions? wire, bool? captureReasoning = null, bool usesResponsesApi = false)
+    /// <param name="acceptedLevels">
+    ///     The levels the model the relay resolved accepts, or null when no source knows them. The model receives only a
+    ///     level its list holds.
+    /// </param>
+    public static ChatOptions? ToChatOptions(
+        RunnerChatOptions? wire,
+        bool? captureReasoning = null,
+        bool usesResponsesApi = false,
+        IReadOnlyList<string>? acceptedLevels = null)
     {
         if (wire is null)
         {
@@ -59,17 +67,15 @@ public static class RunnerRelayedChatOptions
             ToolMode = string.Equals(wire.ToolMode, "none", StringComparison.OrdinalIgnoreCase) ? ChatToolMode.None : null,
         };
 
-        var effort = ParseEffort(wire.ReasoningEffort);
-
-        // A runner states the effort none only for a model its manifest marks as accepting it, and the request then
-        // asks the provider for no reasoning.
-        var statesNone = string.Equals(wire.ReasoningEffort, "none", StringComparison.OrdinalIgnoreCase);
-
+        // A runner names the level by the provider's name. A name the model does not accept reaches it as the nearest
+        // lower level it accepts, or as no level, so a newer runner naming a level this build or the model does not know
+        // still gets its completion.
+        var level = ReasoningLevelSelection.Normalize(wire.ReasoningEffort);
         return captureReasoning is { } resolved
-            ? options.ApplyResolvedReasoning(resolved, effort, statesNone, usesResponsesApi)
-            : effort != ReviewReasoningEffort.None || statesNone
-                ? options.ApplyResolvedReasoning(wire.CaptureReasoning, effort, statesNone, usesResponsesApi)
-                : options.ApplyReasoning(wire.CaptureReasoning, effort);
+            ? options.ApplyResolvedReasoning(resolved, level, acceptedLevels, usesResponsesApi)
+            : level is not null
+                ? options.ApplyResolvedReasoning(wire.CaptureReasoning, level, acceptedLevels, usesResponsesApi)
+                : options.ApplyReasoning(wire.CaptureReasoning, null);
     }
 
     /// <summary>
@@ -85,20 +91,6 @@ public static class RunnerRelayedChatOptions
     private static int? AcceptedMaxOutputTokens(int? relayed)
     {
         return relayed is > 0 and <= MaximumRelayedOutputTokens ? relayed : null;
-    }
-
-    private static ReviewReasoningEffort ParseEffort(string? effort)
-    {
-        // Unknown values fall back to None rather than failing the call: a newer runner naming a level this
-        // build does not know should still get its completion, at the provider's default effort. The effort none
-        // maps to None as well; the caller reads it separately.
-        return effort?.ToLowerInvariant() switch
-        {
-            "low" => ReviewReasoningEffort.Low,
-            "medium" => ReviewReasoningEffort.Medium,
-            "high" => ReviewReasoningEffort.High,
-            _ => ReviewReasoningEffort.None,
-        };
     }
 
     private sealed class RelayedToolDeclaration(RunnerChatToolDefinition definition) : AIFunction

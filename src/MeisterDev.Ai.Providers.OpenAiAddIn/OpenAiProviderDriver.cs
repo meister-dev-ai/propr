@@ -262,13 +262,15 @@ public sealed class OpenAiProviderDriver : IAiProviderDriver
 
         var credential = Credential(endpoint);
 
+        // The adapter is wrapped so that the host hands the client its reasoning request in neutral terms. OpenAI
+        // options that the host builds are a foreign type for the copy of the OpenAI library this add-in loads.
         if (UsesResponsesApi(protocolMode, model))
         {
             var client = new OpenAIClient(credential, options);
-            return client.GetResponsesClient().AsIChatClient(model.RemoteModelId);
+            return new OpenAiReasoningChatClient(client.GetResponsesClient().AsIChatClient(model.RemoteModelId), usesResponsesApi: true);
         }
 
-        return new ChatClient(model.RemoteModelId, credential, options).AsIChatClient();
+        return new OpenAiReasoningChatClient(new ChatClient(model.RemoteModelId, credential, options).AsIChatClient(), usesResponsesApi: false);
     }
 
     /// <inheritdoc />
@@ -299,6 +301,16 @@ public sealed class OpenAiProviderDriver : IAiProviderDriver
         return ProviderVocabulary.ValuesEqual(protocolMode, ProviderDeclaredProtocolModes.Auto)
                || ProviderVocabulary.ValuesEqual(protocolMode, ResponsesProtocol)
                || ProviderVocabulary.ValuesEqual(protocolMode, ChatCompletionsProtocol);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    ///     The catalog's levels apply to every model it lists. For the gpt-6 models, which the bundled snapshot
+    ///     predates, the family reports the values the Responses API accepts for each of them.
+    /// </remarks>
+    public IReadOnlyList<string>? DescribeReasoningLevels(string remoteModelId, IReadOnlyList<string>? catalogLevels)
+    {
+        return catalogLevels ?? OpenAiModels.ReasoningLevelsOf(remoteModelId);
     }
 
     /// <inheritdoc />

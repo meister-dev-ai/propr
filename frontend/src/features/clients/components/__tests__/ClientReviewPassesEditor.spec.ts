@@ -10,10 +10,23 @@ import ClientReviewPassesEditor from '../ClientReviewPassesEditor.vue'
 
 type ReviewPassEntry = components['schemas']['ReviewPassEntry']
 
-// Two chat logical models and one embedding model — a review pass may only pick a chat model.
+// Two chat logical models and one embedding model — a review pass may only pick a chat model. The logical model "deep"
+// sets a level, and "fast" leaves it to the default level of its model.
 const logicalModels = [
-    { id: 'lm1', name: 'deep', capability: 'chat' },
-    { id: 'lm2', name: 'fast', capability: 'chat' },
+    {
+        id: 'lm1',
+        name: 'deep',
+        capability: 'chat',
+        reasoningLevel: 'high',
+        referencedModel: { availability: 'available', reasoningLevels: ['low', 'high', 'max'], defaultReasoningLevel: 'low' },
+    },
+    {
+        id: 'lm2',
+        name: 'fast',
+        capability: 'chat',
+        reasoningLevel: null,
+        referencedModel: { availability: 'available', reasoningLevels: ['none', 'medium'], defaultReasoningLevel: 'medium' },
+    },
     { id: 'lm3', name: 'embed', capability: 'embedding' },
 ] as unknown as LogicalModelResponse[]
 
@@ -23,7 +36,7 @@ const connections = [
         id: 'conn-1',
         displayName: 'Azure',
         configuredModels: [
-            { id: 'm1', displayName: 'Model One', supportsChat: true },
+            { id: 'm1', displayName: 'Model One', supportsChat: true, reasoningLevels: ['none', 'low', 'medium', 'high'], defaultReasoningLevel: 'none' },
             { id: 'm2', displayName: 'Model Two', supportsChat: true },
             { id: 'm3', displayName: 'Model Three', supportsChat: true },
         ],
@@ -162,7 +175,7 @@ describe('ClientReviewPassesEditor lens selector', () => {
         await wrapper.find('[data-testid="review-pass-lens"]').setValue('security')
         await save(wrapper)
 
-        expect(lastEmittedPasses(wrapper)).toEqual([{ ordinal: 0, configuredModelId: 'm1', lens: 'security', scope: null, shadow: false, reasoningEffort: 'none' }])
+        expect(lastEmittedPasses(wrapper)).toEqual([{ ordinal: 0, configuredModelId: 'm1', lens: 'security', scope: null, shadow: false, reasoningLevel: null }])
     })
 
     it('emits a null lens when a pass is switched back to None', async () => {
@@ -177,7 +190,7 @@ describe('ClientReviewPassesEditor lens selector', () => {
         await wrapper.find('[data-testid="review-pass-lens"]').setValue('')
         await save(wrapper)
 
-        expect(lastEmittedPasses(wrapper)).toEqual([{ ordinal: 0, configuredModelId: 'm1', lens: null, scope: null, shadow: false, reasoningEffort: 'none' }])
+        expect(lastEmittedPasses(wrapper)).toEqual([{ ordinal: 0, configuredModelId: 'm1', lens: null, scope: null, shadow: false, reasoningLevel: null }])
     })
 
     it('hydrates the lens from the persisted value', async () => {
@@ -214,7 +227,7 @@ describe('ClientReviewPassesEditor scope and shadow', () => {
         await save(wrapper)
 
         expect(lastEmittedPasses(wrapper)).toEqual([
-            { ordinal: 0, configuredModelId: 'm1', lens: null, scope: 'pr_wide', shadow: true, reasoningEffort: 'none' },
+            { ordinal: 0, configuredModelId: 'm1', lens: null, scope: 'pr_wide', shadow: true, reasoningLevel: null },
         ])
     })
 
@@ -230,7 +243,7 @@ describe('ClientReviewPassesEditor scope and shadow', () => {
         await wrapper.find('[data-testid="review-pass-scope"]').setValue('')
         await save(wrapper)
 
-        expect(lastEmittedPasses(wrapper)).toEqual([{ ordinal: 0, configuredModelId: 'm1', lens: null, scope: null, shadow: false, reasoningEffort: 'none' }])
+        expect(lastEmittedPasses(wrapper)).toEqual([{ ordinal: 0, configuredModelId: 'm1', lens: null, scope: null, shadow: false, reasoningLevel: null }])
     })
 
     it('hydrates scope and shadow from the persisted value', async () => {
@@ -247,49 +260,97 @@ describe('ClientReviewPassesEditor scope and shadow', () => {
     })
 })
 
-describe('ClientReviewPassesEditor reasoning effort', () => {
-    it('offers None, Low, Medium, and High reasoning options', async () => {
+describe('ClientReviewPassesEditor reasoning level', () => {
+    function levelSelect(wrapper: ReturnType<typeof mount>) {
+        return wrapper.find<HTMLSelectElement>('[data-testid="review-pass-reasoning-level"]')
+    }
+
+    it('offers the levels of the configured model of a pass and inherits its default level', async () => {
         const wrapper = mount(ClientReviewPassesEditor, {
             props: { modelValue: [{ ordinal: 0, configuredModelId: 'm1' }] as ReviewPassEntry[], connections },
         })
 
         await openEdit(wrapper)
-        expect(optionValues(wrapper, 'review-pass-reasoning')).toEqual(['none', 'low', 'medium', 'high'])
+        expect(optionValues(wrapper, 'review-pass-reasoning-level')).toEqual(['', 'none', 'low', 'medium', 'high'])
+        expect(levelSelect(wrapper).find('option').text()).toBe("Inherit (none, from the model's default level)")
     })
 
-    it('defaults a new pass to None reasoning effort', async () => {
+    it('starts a new pass without a level of its own', async () => {
         const wrapper = mount(ClientReviewPassesEditor, {
             props: { modelValue: [] as ReviewPassEntry[], connections },
         })
 
         await wrapper.find('[data-testid="review-passes-add"]').trigger('click')
-        expect((wrapper.find('[data-testid="review-pass-reasoning"]').element as HTMLSelectElement).value).toBe('none')
+        expect(levelSelect(wrapper).element.value).toBe('')
     })
 
-    it('emits the chosen reasoning effort on the entry after saving', async () => {
+    it('emits the chosen level on the entry after saving', async () => {
         const wrapper = mount(ClientReviewPassesEditor, {
             props: { modelValue: [{ ordinal: 0, configuredModelId: 'm1' }] as ReviewPassEntry[], connections },
         })
 
         await openEdit(wrapper)
-        await wrapper.find('[data-testid="review-pass-reasoning"]').setValue('high')
+        await levelSelect(wrapper).setValue('high')
         await save(wrapper)
 
         expect(lastEmittedPasses(wrapper)).toEqual([
-            { ordinal: 0, configuredModelId: 'm1', lens: null, scope: null, shadow: false, reasoningEffort: 'high' },
+            { ordinal: 0, configuredModelId: 'm1', lens: null, scope: null, shadow: false, reasoningLevel: 'high' },
         ])
     })
 
-    it('hydrates the reasoning effort from the persisted value', async () => {
+    it('hydrates the level from the persisted value and shows it in the pass table', async () => {
         const wrapper = mount(ClientReviewPassesEditor, {
             props: {
-                modelValue: [{ ordinal: 0, configuredModelId: 'm1', reasoningEffort: 'medium' }] as ReviewPassEntry[],
+                modelValue: [
+                    { ordinal: 0, configuredModelId: 'm1', reasoningLevel: 'medium' },
+                    { ordinal: 1, configuredModelId: 'm2' },
+                ] as ReviewPassEntry[],
                 connections,
             },
         })
 
+        expect(wrapper.findAll('[data-testid="review-pass-level-cell"]').map(cell => cell.text())).toEqual(['medium', 'Inherit'])
+
         await openEdit(wrapper)
-        expect((wrapper.find('[data-testid="review-pass-reasoning"]').element as HTMLSelectElement).value).toBe('medium')
+        expect(levelSelect(wrapper).element.value).toBe('medium')
+    })
+
+    // The server saves a pass level without checking it against the model, which then receives the nearest lower
+    // level it accepts.
+    it('warns about a level the model of the pass does not accept', async () => {
+        const wrapper = mount(ClientReviewPassesEditor, {
+            props: { modelValue: [{ ordinal: 0, configuredModelId: 'm1', reasoningLevel: 'xhigh' }] as ReviewPassEntry[], connections },
+        })
+
+        await openEdit(wrapper)
+        expect(wrapper.find('[data-testid="review-pass-reasoning-level-warning"]').text()).toContain('It receives high')
+    })
+
+    it('offers the levels of the model behind a logical model and inherits the level of the logical model', async () => {
+        const wrapper = mount(ClientReviewPassesEditor, {
+            props: { modelValue: [{ ordinal: 0, logicalModelName: 'deep' }] as ReviewPassEntry[], connections, logicalModels },
+        })
+
+        await openEdit(wrapper)
+        expect(optionValues(wrapper, 'review-pass-reasoning-level')).toEqual(['', 'low', 'high', 'max'])
+        expect(levelSelect(wrapper).find('option').text()).toBe('Inherit (high, from the logical model)')
+
+        await wrapper.find('[data-testid="review-pass-logical-model"]').setValue('fast')
+        expect(levelSelect(wrapper).find('option').text()).toBe("Inherit (medium, from the model's default level)")
+    })
+
+    it('emits the level of a pass on a logical model', async () => {
+        const wrapper = mount(ClientReviewPassesEditor, {
+            props: { modelValue: [{ ordinal: 0, logicalModelName: 'deep' }] as ReviewPassEntry[], connections, logicalModels },
+        })
+
+        await openEdit(wrapper)
+        await levelSelect(wrapper).setValue('max')
+        await save(wrapper)
+
+        expect(lastEmittedPasses(wrapper)).toEqual([
+            { ordinal: 0, logicalModelName: 'deep', lens: null, scope: null, shadow: false, reasoningLevel: 'max' },
+        ])
     })
 })
 
@@ -305,7 +366,7 @@ describe('ClientReviewPassesEditor logical models', () => {
         expect(options).not.toContain('embed')
     })
 
-    it('hides the raw connection/model/reasoning inputs when a logical model is chosen', async () => {
+    it('hides the raw connection and model inputs when a logical model is chosen and keeps the level', async () => {
         const wrapper = mount(ClientReviewPassesEditor, {
             props: { modelValue: [{ ordinal: 0, configuredModelId: 'm1' }] as ReviewPassEntry[], connections, logicalModels },
         })
@@ -315,11 +376,11 @@ describe('ClientReviewPassesEditor logical models', () => {
 
         expect(wrapper.find('[data-testid="review-pass-connection"]').exists()).toBe(false)
         expect(wrapper.find('[data-testid="review-pass-model"]').exists()).toBe(false)
-        expect(wrapper.find('[data-testid="review-pass-reasoning"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="review-pass-reasoning-level"]').exists()).toBe(true)
         expect(wrapper.find('[data-testid="review-pass-from-logical"]').exists()).toBe(true)
     })
 
-    it('emits a logical-model pass with no raw model or reasoning effort after saving', async () => {
+    it('emits a logical-model pass with no raw model after saving', async () => {
         const wrapper = mount(ClientReviewPassesEditor, {
             props: { modelValue: [{ ordinal: 0, configuredModelId: 'm1' }] as ReviewPassEntry[], connections, logicalModels },
         })
@@ -329,7 +390,7 @@ describe('ClientReviewPassesEditor logical models', () => {
         await save(wrapper)
 
         expect(lastEmittedPasses(wrapper)).toEqual([
-            { ordinal: 0, logicalModelName: 'deep', lens: null, scope: null, shadow: false },
+            { ordinal: 0, logicalModelName: 'deep', lens: null, scope: null, shadow: false, reasoningLevel: null },
         ])
     })
 

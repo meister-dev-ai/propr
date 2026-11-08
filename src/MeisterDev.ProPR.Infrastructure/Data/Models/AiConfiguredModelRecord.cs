@@ -59,10 +59,19 @@ public sealed class AiConfiguredModelRecord
     public string? ReasoningContentField { get; set; }
 
     /// <summary>
-    ///     Whether the model accepts the reasoning effort none. A call with the effort None sends none to such a model
-    ///     and leaves the effort out for any other model.
+    ///     The level ProPR sends to the model for a call that no other place chooses a level for, or null to leave the
+    ///     choice to the provider's own default.
     /// </summary>
-    public bool SupportsReasoningEffortNone { get; set; }
+    public string? DefaultReasoningLevel { get; set; }
+
+    /// <summary>
+    ///     The reasoning levels the model accepts, from the lowest to the highest effort. Empty when the model accepts no
+    ///     level, null while no source knows the levels.
+    /// </summary>
+    public string[]? ReasoningLevels { get; set; }
+
+    /// <summary>Where <see cref="ReasoningLevels" /> come from, by the name of the source; null while no source knows them.</summary>
+    public string? ReasoningLevelsSource { get; set; }
 
     public AiConnectionProfileRecord? ConnectionProfile { get; set; }
 

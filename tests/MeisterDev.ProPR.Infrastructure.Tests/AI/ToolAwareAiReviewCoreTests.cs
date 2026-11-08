@@ -1514,7 +1514,7 @@ public class ToolAwareAiReviewCoreTests
         context.ActiveProtocolId = Guid.NewGuid();
         context.ProtocolRecorder = recorder;
         context.CaptureReasoning = false;
-        context.ActiveReasoningEffort = ReviewReasoningEffort.High;
+        context.ActiveReasoningLevel = "high";
 
         var sut = new ToolAwareAiReviewCore(
             mockClient,

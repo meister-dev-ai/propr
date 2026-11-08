@@ -146,6 +146,51 @@ public sealed class ModelsDevCatalogSnapshotImporterTests
         Assert.Empty(await Import("[]"));
     }
 
+    // The source lists effort names in its own order; the entry keeps the shared names in the order of increasing
+    // effort.
+    [Fact]
+    public async Task ReasoningLevels_AreTheEffortValuesInTheOrderOfIncreasingEffort()
+    {
+        var entry = Assert.Single(
+            await Import(ModelWithReasoningOptions("""[{ "type": "effort", "values": ["high", "none", "low", "max", "medium", "xhigh"] }]""")));
+
+        Assert.Equal(["none", "low", "medium", "high", "xhigh", "max"], entry.ReasoningLevels);
+    }
+
+    [Theory]
+    [InlineData("""[{ "type": "budget_tokens", "min": 1024 }]""", new[] { "low", "medium", "high" })]
+    [InlineData("""[{ "type": "budget_tokens", "min": 0, "max": 24576 }]""", new[] { "none", "low", "medium", "high" })]
+    public async Task ReasoningLevels_OfABudgetModel_AreLowMediumAndHigh_AndNoneWhenTheMinimumBudgetIsZero(string options, string[] expected)
+    {
+        var entry = Assert.Single(await Import(ModelWithReasoningOptions(options)));
+
+        Assert.Equal(expected, entry.ReasoningLevels);
+    }
+
+    [Theory]
+    [InlineData("""[{ "type": "toggle" }]""")]
+    [InlineData("""[]""")]
+    [InlineData("""[{ "type": "effort", "values": ["", "Not A Level"] }]""")]
+    public async Task ReasoningLevels_AreAbsent_WhenTheOptionsNameNoLevel(string options)
+    {
+        var entry = Assert.Single(await Import(ModelWithReasoningOptions(options)));
+
+        Assert.Null(entry.ReasoningLevels);
+    }
+
+    [Fact]
+    public async Task ReasoningLevels_AreAbsent_ForAModelWithoutReasoningOptions()
+    {
+        var entry = Assert.Single(await Import("""{ "openai": { "models": { "gpt-4o": { "id": "gpt-4o" } } } }"""));
+
+        Assert.Null(entry.ReasoningLevels);
+    }
+
+    private static string ModelWithReasoningOptions(string options)
+    {
+        return $$"""{ "openai": { "models": { "m": { "id": "m", "reasoning": true, "reasoning_options": {{options}} } } } }""";
+    }
+
     private static async Task<IReadOnlyList<ProviderCatalogEntry>> Import(string json)
     {
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));

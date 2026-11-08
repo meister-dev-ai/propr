@@ -143,17 +143,63 @@ describe('applyCatalogEntryToModel', () => {
     supportsReasoning: false,
     supportsPromptCaching: false,
     reasoningContentField: '',
-    supportsReasoningEffortNone: false,
+    defaultReasoningLevel: null,
+    reasoningLevels: null,
+    reasoningLevelsSource: null,
+    detectReasoningLevels: false,
   })
 
-  // The catalog states nothing about the reasoning effort none, so the operator's setting survives a catalog pick.
-  it('keeps whether the model accepts the reasoning effort none', () => {
+  // The default level is one of the levels of the previous model, which the picked model need not accept.
+  it('clears the default level together with the levels of the previous model', () => {
     const target = model()
-    target.supportsReasoningEffortNone = true
+    target.reasoningLevels = ['low', 'high']
+    target.defaultReasoningLevel = 'high'
 
     applyCatalogEntryToModel(target, entry())
 
-    expect(target.supportsReasoningEffortNone).toBe(true)
+    expect(target.defaultReasoningLevel).toBeNull()
+  })
+
+  // The default level was chosen for the model picked again. The save detects the levels again and adds the default
+  // level to them when they lack it.
+  it('keeps the default level when the operator picks the same model again', () => {
+    const target = model()
+    target.remoteModelId = 'deepseek-reasoner'
+    target.reasoningLevels = ['low', 'high']
+    target.reasoningLevelsSource = 'catalog'
+    target.defaultReasoningLevel = 'high'
+
+    applyCatalogEntryToModel(target, entry())
+
+    expect(target.defaultReasoningLevel).toBe('high')
+    expect(target.reasoningLevels).toBeNull()
+    expect(target.reasoningLevelsSource).toBeNull()
+    expect(target.detectReasoningLevels).toBe(true)
+  })
+
+  // The save trims the remote model id, and the server matches a model by its id without regard to case.
+  it('takes an id that differs only in case or surrounding spaces for the same model', () => {
+    const target = model()
+    target.remoteModelId = ' DeepSeek-Reasoner '
+    target.defaultReasoningLevel = 'high'
+
+    applyCatalogEntryToModel(target, entry())
+
+    expect(target.remoteModelId).toBe('deepseek-reasoner')
+    expect(target.defaultReasoningLevel).toBe('high')
+  })
+
+  // The levels belong to the model picked, and the save detects them from the catalog and the provider family.
+  it('lets the save detect the reasoning levels of the model picked', () => {
+    const target = model()
+    target.reasoningLevels = ['max']
+    target.reasoningLevelsSource = 'operator'
+
+    applyCatalogEntryToModel(target, entry())
+
+    expect(target.reasoningLevels).toBeNull()
+    expect(target.reasoningLevelsSource).toBeNull()
+    expect(target.detectReasoningLevels).toBe(true)
   })
 
   it('fills the fields the catalog states', () => {

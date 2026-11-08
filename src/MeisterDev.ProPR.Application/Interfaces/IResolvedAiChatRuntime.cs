@@ -39,10 +39,14 @@ public interface IResolvedAiChatRuntime
     string? LogicalModelName { get; }
 
     /// <summary>
-    ///     Gets the reasoning effort of the logical model this runtime was resolved from, or
-    ///     <see cref="ReviewReasoningEffort.None" /> when it was resolved from a purpose binding or a raw model. A review
-    ///     pass whose model comes from a logical model with an effort other than None uses that effort instead of the
-    ///     client's baseline effort.
+    ///     Gets the reasoning level of the logical model this runtime was resolved from, or <see langword="null" /> when
+    ///     the logical model sets none or the runtime was resolved from a purpose binding or a raw model.
     /// </summary>
-    ReviewReasoningEffort LogicalModelReasoningEffort => ReviewReasoningEffort.None;
+    string? LogicalModelReasoningLevel => null;
+
+    /// <summary>
+    ///     Gets the reasoning level the purpose assignment this runtime was resolved for sets, or <see langword="null" />
+    ///     when it sets none or the runtime was resolved without a purpose assignment of its own.
+    /// </summary>
+    string? PurposeReasoningLevel => null;
 }

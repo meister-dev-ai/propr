@@ -3,6 +3,7 @@
 
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.Ai.Providers.Transport;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -26,6 +27,19 @@ public sealed class LogicalModelCapabilityValidator(IAiConnectionRepository conn
                              $"connection '{entry.ConnectionId}' does not exist.");
 
         ValidateMapping(entry, connection);
+
+        // A level is checked where it is saved. The check of every mapping when a connection changes leaves the levels
+        // out, because a level that falls out of a model's list reaches the model as the nearest lower level it accepts.
+        var model = connection.ConfiguredModels.First(candidate => candidate.Id == entry.ConfiguredModelId);
+        var refusal = entry.Capability == AiOperationKind.Chat
+            ? ReasoningLevelSelection.Refusal(entry.ReasoningLevel, model.ReasoningLevels, model.RemoteModelId)
+            : entry.ReasoningLevel is null
+                ? null
+                : $"model '{model.RemoteModelId}' serves embeddings, which take no reasoning level.";
+        if (refusal is not null)
+        {
+            throw new LogicalModelReferenceInvalidException(entry.Name, refusal);
+        }
     }
 
     internal static void ValidateMapping(LogicalModelDto entry, AiConnectionDto connection)

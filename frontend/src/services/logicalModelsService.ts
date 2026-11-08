@@ -7,7 +7,7 @@
  * role; tenant-catalog operations require the tenant-administrator role (enforced server-side).
  */
 
-import { createAdminClient } from '@/services/api'
+import { createAdminClient, getApiErrorMessage } from '@/services/api'
 import type { components } from '@/services/generated/openapi'
 
 export type LogicalModelResponse = components['schemas']['LogicalModelResponse']
@@ -18,6 +18,19 @@ export type AiPurpose = components['schemas']['AiPurpose']
 export type AiConnectionDto = components['schemas']['AiConnectionDto']
 export type CreateAiConnectionRequest = components['schemas']['CreateAiConnectionRequest']
 export type AiVerificationResultDto = components['schemas']['AiVerificationResultDto']
+
+/**
+ * The error for a refused write, with the server's reason. The admin client resolves a 400 without throwing, so each
+ * write checks the response, and a form does not report a refused level or capability as saved. The title of a
+ * validation answer is always "One or more validation errors occurred.", so its first field error is read first.
+ */
+function refusal(error: unknown, fallback: string): Error {
+  const fieldErrors = error && typeof error === 'object' ? (error as { errors?: unknown }).errors : undefined
+  const fieldError = fieldErrors && typeof fieldErrors === 'object'
+    ? Object.values(fieldErrors as Record<string, unknown>).flat().find((message) => typeof message === 'string' && message)
+    : undefined
+  return new Error(typeof fieldError === 'string' ? fieldError : getApiErrorMessage(error, fallback))
+}
 
 /** The logical models effective for a client: its overrides plus the inherited (non-shadowed) tenant catalog. */
 export async function listEffectiveForClient(clientId: string): Promise<LogicalModelResponse[]> {
@@ -40,10 +53,14 @@ export async function createClientOverride(
   clientId: string,
   request: LogicalModelWriteRequest,
 ): Promise<LogicalModelResponse> {
-  const { data } = await createAdminClient().POST('/clients/{clientId}/logical-models/overrides', {
+  const { data, error, response } = await createAdminClient().POST('/clients/{clientId}/logical-models/overrides', {
     params: { path: { clientId } },
     body: request,
   })
+  if (!response.ok) {
+    throw refusal(error, 'Failed to create the override.')
+  }
+
   return data as LogicalModelResponse
 }
 
@@ -53,10 +70,13 @@ export async function updateClientOverride(
   name: string,
   request: LogicalModelWriteRequest,
 ): Promise<void> {
-  await createAdminClient().PUT('/clients/{clientId}/logical-models/overrides/{name}', {
+  const { error, response } = await createAdminClient().PUT('/clients/{clientId}/logical-models/overrides/{name}', {
     params: { path: { clientId, name } },
     body: request,
   })
+  if (!response.ok) {
+    throw refusal(error, 'Failed to update the logical model.')
+  }
 }
 
 /** Deletes a per-client override by name. */
@@ -74,12 +94,23 @@ export async function listPurposeRoles(clientId: string): Promise<PurposeRoleRes
   return (data as PurposeRoleResponse[]) ?? []
 }
 
-/** Maps an internal AI purpose to a logical model for the client. */
-export async function setPurposeRole(clientId: string, purpose: AiPurpose, logicalModelName: string): Promise<void> {
-  await createAdminClient().PUT('/clients/{clientId}/logical-models/purposes/{purpose}', {
+/**
+ * Maps an internal AI purpose to a logical model for the client, with the reasoning level the purpose runs at, or null
+ * to leave the level to the logical model and its model. The server refuses a level the model does not accept.
+ */
+export async function setPurposeRole(
+  clientId: string,
+  purpose: AiPurpose,
+  logicalModelName: string,
+  reasoningLevel: string | null,
+): Promise<void> {
+  const { error, response } = await createAdminClient().PUT('/clients/{clientId}/logical-models/purposes/{purpose}', {
     params: { path: { clientId, purpose } },
-    body: { logicalModelName },
+    body: { logicalModelName, reasoningLevel },
   })
+  if (!response.ok) {
+    throw refusal(error, 'Failed to update the purpose mapping.')
+  }
 }
 
 /** Removes a purpose mapping (the purpose then resolves through the client's AI purpose bindings again). */
@@ -104,10 +135,14 @@ export async function createTenantEntry(
   tenantId: string,
   request: LogicalModelWriteRequest,
 ): Promise<LogicalModelResponse> {
-  const { data } = await createAdminClient().POST('/tenants/{tenantId}/logical-models', {
+  const { data, error, response } = await createAdminClient().POST('/tenants/{tenantId}/logical-models', {
     params: { path: { tenantId } },
     body: request,
   })
+  if (!response.ok) {
+    throw refusal(error, 'Failed to create the logical model.')
+  }
+
   return data as LogicalModelResponse
 }
 
@@ -117,10 +152,13 @@ export async function updateTenantEntry(
   name: string,
   request: LogicalModelWriteRequest,
 ): Promise<void> {
-  await createAdminClient().PUT('/tenants/{tenantId}/logical-models/{name}', {
+  const { error, response } = await createAdminClient().PUT('/tenants/{tenantId}/logical-models/{name}', {
     params: { path: { tenantId, name } },
     body: request,
   })
+  if (!response.ok) {
+    throw refusal(error, 'Failed to update the logical model.')
+  }
 }
 
 /** Renames a tenant-catalog entry. */

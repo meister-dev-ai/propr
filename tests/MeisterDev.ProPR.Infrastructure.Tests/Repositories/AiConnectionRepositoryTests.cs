@@ -206,10 +206,10 @@ public sealed class AiConnectionRepositoryTests
         Assert.Equal(changeEndpoint ? original.ConfigurationRevision + 1 : original.ConfigurationRevision, stored.ConfigurationRevision);
     }
 
-    // Whether a model accepts the reasoning effort none decides what a pass configured for no reasoning sends, so
-    // the flag is stored with the model it describes and read back with it.
+    // The default level of a model decides what a call sends when no other place chooses a level for it, so the level
+    // is stored with the model it describes and read back with it.
     [Fact]
-    public async Task UpdateAsync_StoresWhetherAModelAcceptsTheReasoningEffortNone()
+    public async Task UpdateAsync_StoresTheDefaultReasoningLevelOfAModel()
     {
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
@@ -219,9 +219,9 @@ public sealed class AiConnectionRepositoryTests
         await db.SaveChangesAsync();
         var repository = CreateRepository(db);
         var original = (await repository.GetByIdAsync(profile.Id))!;
-        Assert.All(original.ConfiguredModels, model => Assert.False(model.SupportsReasoningEffortNone));
+        Assert.All(original.ConfiguredModels, model => Assert.Null(model.DefaultReasoningLevel));
         var models = original.ConfiguredModels
-            .Select(model => model.RemoteModelId == "gpt-4o" ? model with { SupportsReasoningEffortNone = true } : model)
+            .Select(model => model.RemoteModelId == "gpt-4o" ? model with { DefaultReasoningLevel = "none" } : model)
             .ToList();
         var request = new AiConnectionWriteRequestDto(
             original.DisplayName, original.ProviderKind, original.BaseUrl,
@@ -230,10 +230,48 @@ public sealed class AiConnectionRepositoryTests
         Assert.True(await repository.UpdateAsync(profile.Id, request));
 
         var stored = (await repository.GetByIdAsync(profile.Id))!;
-        Assert.True(stored.ConfiguredModels.Single(model => model.RemoteModelId == "gpt-4o").SupportsReasoningEffortNone);
+        Assert.Equal("none", stored.ConfiguredModels.Single(model => model.RemoteModelId == "gpt-4o").DefaultReasoningLevel);
         Assert.All(
             stored.ConfiguredModels.Where(model => model.RemoteModelId != "gpt-4o"),
-            model => Assert.False(model.SupportsReasoningEffortNone));
+            model => Assert.Null(model.DefaultReasoningLevel));
+    }
+
+    // The levels of a model, an empty list and an unknown list are three different statements, and the source decides
+    // whether a later detection may replace them, so all of it is stored and read back as written.
+    [Fact]
+    public async Task UpdateAsync_StoresTheReasoningLevelsOfAModelWithTheirSource()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var profile = MakeProfile(clientId, true, true);
+        profile.AuthMode = "ApiKey";
+        db.Add(profile);
+        await db.SaveChangesAsync();
+        var repository = CreateRepository(db);
+        var original = (await repository.GetByIdAsync(profile.Id))!;
+        Assert.All(original.ConfiguredModels, model => Assert.Null(model.ReasoningLevels));
+        var models = original.ConfiguredModels
+            .Select(model => model.RemoteModelId == "gpt-4o"
+                ? model with { ReasoningLevels = ["none", "low", "max"], ReasoningLevelsSource = AiReasoningLevelSource.AddIn }
+                : model with { ReasoningLevels = [], ReasoningLevelsSource = AiReasoningLevelSource.Operator })
+            .ToList();
+        var request = new AiConnectionWriteRequestDto(
+            original.DisplayName, original.ProviderKind, original.BaseUrl,
+            original.AuthMode, original.DiscoveryMode, models, original.PurposeBindings);
+
+        Assert.True(await repository.UpdateAsync(profile.Id, request));
+
+        var stored = (await repository.GetByIdAsync(profile.Id))!;
+        var described = stored.ConfiguredModels.Single(model => model.RemoteModelId == "gpt-4o");
+        Assert.Equal(["none", "low", "max"], described.ReasoningLevels);
+        Assert.Equal(AiReasoningLevelSource.AddIn, described.ReasoningLevelsSource);
+        Assert.All(
+            stored.ConfiguredModels.Where(model => model.RemoteModelId != "gpt-4o"),
+            model =>
+            {
+                Assert.Empty(model.ReasoningLevels!);
+                Assert.Equal(AiReasoningLevelSource.Operator, model.ReasoningLevelsSource);
+            });
     }
 
     [Theory]
@@ -910,7 +948,7 @@ public sealed class AiConnectionRepositoryTests
             Capability = AiOperationKind.Chat,
             ConnectionId = connectionId,
             ConfiguredModelId = modelId,
-            ReasoningEffort = ReviewReasoningEffort.None,
+            ReasoningLevel = null,
             ProtocolMode = ProviderDeclaredProtocolModes.Auto,
             CreatedAt = now,
             UpdatedAt = now,

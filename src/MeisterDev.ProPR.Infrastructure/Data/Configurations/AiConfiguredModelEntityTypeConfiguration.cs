@@ -46,7 +46,9 @@ internal sealed class AiConfiguredModelEntityTypeConfiguration : IEntityTypeConf
         builder.Property(x => x.SupportsReasoning).HasColumnName("supports_reasoning").IsRequired();
         builder.Property(x => x.SupportsPromptCaching).HasColumnName("supports_prompt_caching").IsRequired();
         builder.Property(x => x.ReasoningContentField).HasColumnName("reasoning_content_field").HasMaxLength(100);
-        builder.Property(x => x.SupportsReasoningEffortNone).HasColumnName("supports_reasoning_effort_none").IsRequired();
+        builder.Property(x => x.DefaultReasoningLevel).HasColumnName("default_reasoning_level").HasMaxLength(32);
+        builder.Property(x => x.ReasoningLevels).HasColumnName("reasoning_levels");
+        builder.Property(x => x.ReasoningLevelsSource).HasColumnName("reasoning_levels_source").HasMaxLength(50);
 
         builder.HasIndex(x => new { x.ConnectionProfileId, x.RemoteModelId })
             .HasDatabaseName("ix_ai_configured_models_connection_model")

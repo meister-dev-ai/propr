@@ -241,17 +241,17 @@ public sealed class DbClientRegistry(
                 pass.Lens,
                 pass.Scope,
                 pass.Shadow,
-                pass.ReasoningEffort ?? ReviewReasoningEffort.None,
+                pass.ReasoningLevel,
                 pass.LogicalModelName))
             .ToListAsync(ct);
     }
 
     /// <inheritdoc />
-    public async Task<ReviewReasoningEffort> GetBaselineReasoningEffortAsync(Guid clientId, CancellationToken ct = default)
+    public async Task<string?> GetBaselineReasoningLevelAsync(Guid clientId, CancellationToken ct = default)
     {
         return await dbContext.Clients
             .Where(c => c.Id == clientId)
-            .Select(c => c.BaselineReasoningEffort)
+            .Select(c => c.BaselineReasoningLevel)
             .FirstOrDefaultAsync(ct);
     }
 

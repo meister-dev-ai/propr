@@ -7,6 +7,7 @@ import type { components } from '@/types'
 export type AiConnectionDto = components['schemas']['AiConnectionDto']
 export type AiConfiguredModelDto = components['schemas']['AiConfiguredModelDto']
 export type AiConfiguredModelRequest = components['schemas']['AiConfiguredModelRequest']
+export type AiReasoningLevelSource = components['schemas']['AiReasoningLevelSource']
 export type AiPurposeBindingDto = components['schemas']['AiPurposeBindingDto']
 export type AiPurposeBindingRequest = components['schemas']['AiPurposeBindingRequest']
 export type AiVerificationResultDto = components['schemas']['AiVerificationResultDto']

@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.Ai.Providers.Drivers;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Features.Budgeting;
@@ -38,7 +39,8 @@ public sealed class AiRuntimeResolver(
         if (roleName is not null)
         {
             var resolvedRole = await logicalModelResolver!.ResolveChatRuntimeAsync(clientId, roleName, ct: ct);
-            return resolvedRole.Runtime;
+            var assignmentLevel = await logicalModelCatalog!.GetPurposeReasoningLevelAsync(clientId, purpose, ct);
+            return WithPurposeLevel(resolvedRole.Runtime, assignmentLevel);
         }
 
         var resolved = await aiConnectionRepository.GetActiveBindingForPurposeAsync(clientId, purpose, ct);
@@ -53,8 +55,9 @@ public sealed class AiRuntimeResolver(
             var fallbackRole = await this.TryGetFallbackPurposeRoleAsync(clientId, purpose, ct);
             if (fallbackRole is not null)
             {
+                // The purpose borrows the logical model of another purpose, and not that purpose's level.
                 var resolvedFallback = await logicalModelResolver!.ResolveChatRuntimeAsync(clientId, fallbackRole, ct: ct);
-                return resolvedFallback.Runtime;
+                return WithPurposeLevel(resolvedFallback.Runtime, assignmentLevel: null);
             }
 
             throw new AiPurposeBindingNotConfiguredException(purpose);
@@ -67,7 +70,36 @@ public sealed class AiRuntimeResolver(
 
         await this.RefuseForbiddenProviderAsync(clientId, resolved.Connection, ct);
 
-        return runtimeFactory.CreateChatRuntime(resolved.Connection, resolved.Model, resolved.Binding);
+        return WithPurposeLevel(runtimeFactory.CreateChatRuntime(resolved.Connection, resolved.Model, resolved.Binding), assignmentLevel: null);
+    }
+
+    /// <summary>
+    ///     The runtime of a purpose with the purpose's reasoning level applied to every call that states none: the level
+    ///     of the purpose assignment, otherwise of the logical model, otherwise the default level of the configured model.
+    /// </summary>
+    /// <param name="runtime">The runtime the purpose resolved to.</param>
+    /// <param name="assignmentLevel">The level the purpose assignment sets, or null.</param>
+    private static IResolvedAiChatRuntime WithPurposeLevel(IResolvedAiChatRuntime runtime, string? assignmentLevel)
+    {
+        if (runtime is not ResolvedAiChatRuntime resolved)
+        {
+            return runtime;
+        }
+
+        var configured = ReasoningLevelSelection.FirstSet(assignmentLevel, resolved.LogicalModelReasoningLevel);
+        var level = ReasoningLevelSelection.FirstSet(configured, resolved.Model.DefaultReasoningLevel);
+        return resolved with
+        {
+            PurposeReasoningLevel = assignmentLevel,
+            Capabilities = resolved.Capabilities with { ConfiguredReasoningLevel = configured },
+            ChatClient = level is null
+                ? resolved.ChatClient
+                : new PurposeReasoningChatClient(
+                    resolved.ChatClient,
+                    level,
+                    resolved.Capabilities.ReasoningLevels,
+                    resolved.Capabilities.PrefersResponsesApi),
+        };
     }
 
     public async Task<IResolvedAiChatRuntime> ResolveChatRuntimeForModelAsync(

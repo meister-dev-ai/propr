@@ -217,15 +217,22 @@ public sealed partial class AnthropicMessagesChatClient : INativeProtocolChatCli
     private JsonObject BuildRequest(IReadOnlyList<ChatMessage> messages, ChatOptions? options)
     {
         var reasoning = options?.RawRepresentationFactory?.Invoke(this) as ProviderReasoningRequest;
-        var effort = reasoning?.Effort ?? ProviderReasoningEffort.None;
-        var thinkingAllowance = ThinkingAllowance(effort);
-        var adaptiveThinking = thinkingAllowance is not null && UsesAdaptiveThinking(this._model.RemoteModelId);
+        var level = ThinkingLevel(reasoning);
+        var adaptiveThinking = level is not null && UsesAdaptiveThinking(this._model.RemoteModelId);
+
+        // A model with a thinking budget has no level above high, so it thinks at xhigh and max with the budget of high.
+        if (!adaptiveThinking && level is "xhigh" or "max")
+        {
+            level = "high";
+        }
+
+        var thinkingAllowance = ThinkingAllowance(level);
 
         var payload = new JsonObject
         {
             ["model"] = this._model.RemoteModelId,
 
-            // The cap covers the thinking as well as the answer, so the allowance of the effort is added to the
+            // The cap covers the thinking as well as the answer, so the allowance of the level is added to the
             // caller's cap, not taken out of it. A model that thought hard would otherwise run out of room
             // mid-answer and return a truncated one.
             ["max_tokens"] = (options?.MaxOutputTokens ?? DefaultMaxTokens) + (thinkingAllowance ?? 0),
@@ -262,7 +269,7 @@ public sealed partial class AnthropicMessagesChatClient : INativeProtocolChatCli
             }
 
             payload["thinking"] = thinking;
-            payload["output_config"] = new JsonObject { ["effort"] = AdaptiveEffort(effort) };
+            payload["output_config"] = new JsonObject { ["effort"] = level };
         }
         else if (thinkingAllowance is { } budget)
         {
@@ -407,29 +414,52 @@ public sealed partial class AnthropicMessagesChatClient : INativeProtocolChatCli
     }
 
     /// <summary>
-    ///     The tokens a neutral effort level allows for thinking. A model with a thinking budget receives them as its
-    ///     budget, whose floor is 1024, so the lowest rung is set clear of it. A model with adaptive thinking decides
-    ///     itself how much to think, and the allowance keeps room for the answer under the output cap.
+    ///     The tokens a level of thinking allows for thinking, or null for no thinking. A model with a thinking budget
+    ///     receives them as its budget, whose floor is 1024, so the lowest rung is set clear of it. A model with adaptive
+    ///     thinking decides itself how much to think, and the allowance keeps room for the answer under the output cap.
     /// </summary>
-    private static int? ThinkingAllowance(ProviderReasoningEffort effort)
+    /// <param name="level">The level of thinking: low, medium, high, xhigh or max, or null for no thinking.</param>
+    private static int? ThinkingAllowance(string? level)
     {
-        return effort switch
+        return level switch
         {
-            ProviderReasoningEffort.Low => 2048,
-            ProviderReasoningEffort.Medium => 8192,
-            ProviderReasoningEffort.High => 24576,
+            "low" => 2048,
+            "medium" => 8192,
+            "high" => 24576,
+            "xhigh" => 32768,
+            "max" => 65536,
             _ => null,
         };
     }
 
-    /// <summary>The effort of adaptive thinking that matches a neutral effort level.</summary>
-    private static string AdaptiveEffort(ProviderReasoningEffort effort)
+    /// <summary>
+    ///     The level of thinking a request asks for, as low, medium, high, xhigh or max, or null for no thinking.
+    /// </summary>
+    /// <remarks>
+    ///     These five levels are the efforts of adaptive thinking, so a request that names one of them, or none, is
+    ///     read by that name. A request that names no level, or a level this family does not send, is read from its
+    ///     neutral effort.
+    /// </remarks>
+    /// <param name="reasoning">The neutral request, or null when the caller sent none.</param>
+    private static string? ThinkingLevel(ProviderReasoningRequest? reasoning)
     {
-        return effort switch
+        var level = reasoning?.Level;
+        if (level is "low" or "medium" or "high" or "xhigh" or "max")
+        {
+            return level;
+        }
+
+        if (level is "none")
+        {
+            return null;
+        }
+
+        return reasoning?.Effort switch
         {
             ProviderReasoningEffort.Low => "low",
             ProviderReasoningEffort.Medium => "medium",
-            _ => "high",
+            ProviderReasoningEffort.High => "high",
+            _ => null,
         };
     }
 
@@ -463,7 +493,7 @@ public sealed partial class AnthropicMessagesChatClient : INativeProtocolChatCli
 
     // The generation of a Claude model id as the major version times 100 plus the minor version, or null for a model
     // id outside the Claude naming. The Fable and Mythos lines count as later than every numbered generation.
-    private static int? ClaudeGeneration(string remoteModelId)
+    internal static int? ClaudeGeneration(string remoteModelId)
     {
         var match = ClaudeModelId().Match(remoteModelId);
         if (!match.Success)

@@ -125,9 +125,8 @@ public sealed class LogicalModelCatalogRepositoryTests(PostgresContainerFixture 
         Assert.DoesNotContain(forB, m => m.Name == "fast");
     }
 
-    // AC #2 (round-trip): the stored override reads back with the same mapping + settings. Uses an EMBEDDING model
-    // with non-zero enum values across all three converted columns so a broken HasConversion<int>() cannot hide behind
-    // the zero-valued Chat/None/Auto defaults.
+    // The stored override reads back with the same mapping and settings. Uses an EMBEDDING model, a reasoning level and
+    // the embeddings protocol mode, so a broken column mapping cannot hide behind the Chat/no level/Auto defaults.
     [Fact]
     public async Task ClientOverride_RoundTripsAllFields()
     {
@@ -139,7 +138,7 @@ public sealed class LogicalModelCatalogRepositoryTests(PostgresContainerFixture 
             AiOperationKind.Embedding,
             connectionId,
             modelId,
-            ReviewReasoningEffort.High,
+            "high",
             ProviderDeclaredProtocolModes.Embeddings);
 
         await this._repo.AddClientOverrideAsync(this._clientA, entry, default);
@@ -151,7 +150,7 @@ public sealed class LogicalModelCatalogRepositoryTests(PostgresContainerFixture 
         Assert.True(read.IsEmbedding);
         Assert.Equal(connectionId, read.ConnectionId);
         Assert.Equal(modelId, read.ConfiguredModelId);
-        Assert.Equal(ReviewReasoningEffort.High, read.ReasoningEffort);
+        Assert.Equal("high", read.ReasoningLevel);
         Assert.Equal(ProviderDeclaredProtocolModes.Embeddings, read.ProtocolMode);
     }
 
@@ -390,7 +389,7 @@ public sealed class LogicalModelCatalogRepositoryTests(PostgresContainerFixture 
             AiOperationKind.Chat,
             Guid.NewGuid(),
             Guid.NewGuid(),
-            ReviewReasoningEffort.None,
+            null,
             ProviderDeclaredProtocolModes.Auto);
     }
 

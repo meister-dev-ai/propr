@@ -14,17 +14,16 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution.Ver
 
 public sealed partial class EvidenceBackedReviewVerifierTests
 {
-    // A configured verification effort reaches the judge and the independent check on the Responses API. Chat
-    // Completions receives no low, medium or high effort, as for a review pass.
+    // A configured verification level reaches the judge and the independent check on the Responses API. Chat
+    // Completions receives no level other than none, as for a review pass.
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task TheVerificationEffort_ReachesTheJudgeAndTheIndependentCheck(bool configured)
+    public async Task TheVerificationLevel_ReachesTheJudgeAndTheIndependentCheck(bool configured)
     {
         var (judge, efforts) = JudgeRecordingEfforts();
         var verifier = new EvidenceBackedReviewVerifier(
-            reviewOptions: Microsoft.Extensions.Options.Options.Create(
-                new AiReviewOptions { VerificationReasoningEffort = configured ? ReviewReasoningEffort.Medium : ReviewReasoningEffort.None }));
+            reviewOptions: Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { VerificationReasoningLevel = configured ? "medium" : null }));
 
         var outcome = Assert.Single(
             await verifier.VerifyAsync(
@@ -36,16 +35,17 @@ public sealed partial class EvidenceBackedReviewVerifierTests
         Assert.Equal([expected, expected], efforts);
     }
 
-    // Without a configured verification effort, the judge runs with the effort None where it has no low effort to ask
-    // for, and the independent check runs with it always. Each call then sends none to a model that accepts it, on
-    // Chat Completions and on the Responses API, and no effort to any other model, as a review pass does.
+    // Without a configured verification level and without low to ask for, the judge runs at the default level of its
+    // model, and the independent check asks for the level none from a model whose levels hold it. A model that accepts
+    // none and has it as its default level receives none from both calls, on Chat Completions and on the Responses API,
+    // and any other model receives no level, as in a review pass.
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task WithTheEffortNone_TheJudgeAndTheCheck_SendNoneOnlyToAModelThatAcceptsIt(bool accepted)
+    public async Task WithoutAConfiguredLevel_TheJudgeAndTheCheck_SendNoneOnlyToAModelThatAcceptsIt(bool accepted)
     {
         var (judge, efforts) = JudgeRecordingEfforts();
-        var resolver = ResolverFor(judge, acceptsReasoningEffortNone: accepted, supportsLowReasoningEffort: false);
+        var resolver = ResolverFor(judge, acceptsNone: accepted, supportsLowReasoningEffort: false);
 
         var outcome = Assert.Single(
             await new EvidenceBackedReviewVerifier().VerifyAsync(
@@ -58,13 +58,13 @@ public sealed partial class EvidenceBackedReviewVerifierTests
         Assert.Equal([expected, expected], efforts);
     }
 
-    // The judge asks a model with low effort support for low effort, which reaches the Responses API only. The
-    // independent check on the same model has no such rule and runs with the effort None.
+    // The judge asks a model with low effort support for low, which reaches the Responses API only. The independent
+    // check on the same model has no such rule and asks for the level none, which the model's levels hold.
     [Fact]
     public async Task AJudgeModelWithLowEffortSupport_IsAskedForLow_AndTheCheckSendsNone()
     {
         var (judge, efforts) = JudgeRecordingEfforts();
-        var resolver = ResolverFor(judge, acceptsReasoningEffortNone: true, supportsLowReasoningEffort: true);
+        var resolver = ResolverFor(judge, acceptsNone: true, supportsLowReasoningEffort: true);
 
         var outcome = Assert.Single(
             await new EvidenceBackedReviewVerifier().VerifyAsync(
@@ -76,13 +76,66 @@ public sealed partial class EvidenceBackedReviewVerifierTests
         Assert.Equal([new JudgeEffort(null, "low"), new JudgeEffort(ReasoningEffort.None, "none")], efforts);
     }
 
-    // A judge model called through the Responses API also receives its effort in the shared reasoning setting, which
-    // reaches a provider add-in. The independent check on the same model runs with the effort None.
+    // The judge takes the level of its purpose assignment first, then the configured verification level, then low where
+    // the model and its transport take it, then the level of its logical model, and the default level of its model
+    // last. The independent check takes the configured verification level, and otherwise the level none from a model
+    // whose levels hold it.
+    [Theory]
+    [InlineData("high", "medium", true, "none", "high", "medium")]
+    [InlineData(null, "medium", true, "high", "medium", "medium")]
+    [InlineData(null, null, true, "high", "low", "none")]
+    [InlineData(null, null, false, "high", "high", "none")]
+    public async Task TheJudgeAndTheCheck_TakeTheirLevelsInTheirOrder(
+        string? purposeLevel,
+        string? verificationLevel,
+        bool supportsLow,
+        string logicalModelLevel,
+        string expectedJudgeLevel,
+        string expectedCheckLevel)
+    {
+        var (judge, efforts) = JudgeRecordingEfforts();
+        var resolver = ResolverFor(
+            judge, acceptsNone: true, supportsLowReasoningEffort: supportsLow, purposeLevel: purposeLevel, logicalModelLevel: logicalModelLevel);
+        var verifier = new EvidenceBackedReviewVerifier(
+            reviewOptions: Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { VerificationReasoningLevel = verificationLevel }));
+
+        var outcome = Assert.Single(
+            await verifier.VerifyAsync(
+                [CreateWorkItem(LookupPath, 1, severity: CommentSeverity.Warning)], [],
+                new ReviewVerificationContext(
+                    AllocationTools(LookupSource), "source", Substitute.For<IChatClient>(), "reviewer-model", Guid.NewGuid(), resolver)));
+
+        Assert.Equal(FinalGateDecision.PublishDisposition, outcome.RecommendedDisposition);
+        Assert.Equal([expectedJudgeLevel, expectedCheckLevel], efforts.Select(effort => effort.Responses).ToList());
+    }
+
+    // A model whose levels no source knows and whose default level is none accepts none, which is what a runner learns
+    // from an older control plane that sends only the flag, so the check still asks it for no reasoning.
+    [Fact]
+    public async Task TheCheck_AsksForNone_FromAModelWithoutAListWhoseDefaultLevelIsNone()
+    {
+        var (judge, efforts) = JudgeRecordingEfforts();
+        var resolver = ResolverFor(judge, acceptsNone: true, supportsLowReasoningEffort: false);
+        var runtime = await resolver.ResolveChatRuntimeAsync(Guid.Empty, AiPurpose.ReviewVerification);
+        runtime.Capabilities.Returns(new AgentReviewRuntimeCapabilities(false, false, false, false, ReasoningLevels: null, DefaultReasoningLevel: "none"));
+
+        var outcome = Assert.Single(
+            await new EvidenceBackedReviewVerifier().VerifyAsync(
+                [CreateWorkItem(LookupPath, 1, severity: CommentSeverity.Warning)], [],
+                new ReviewVerificationContext(
+                    AllocationTools(LookupSource), "source", Substitute.For<IChatClient>(), "reviewer-model", Guid.NewGuid(), resolver)));
+
+        Assert.Equal(FinalGateDecision.PublishDisposition, outcome.RecommendedDisposition);
+        Assert.Equal("none", efforts[^1].Responses);
+    }
+
+    // A judge model called through the Responses API also receives its level in the shared reasoning setting, which
+    // reaches a provider add-in. The independent check on the same model asks for the level none.
     [Fact]
     public async Task AJudgeModelOnTheResponsesApi_AlsoReceivesItsEffortInTheSharedSetting()
     {
         var (judge, efforts) = JudgeRecordingEfforts();
-        var resolver = ResolverFor(judge, acceptsReasoningEffortNone: true, supportsLowReasoningEffort: true, usesResponsesApi: true);
+        var resolver = ResolverFor(judge, acceptsNone: true, supportsLowReasoningEffort: true, usesResponsesApi: true);
 
         var outcome = Assert.Single(
             await new EvidenceBackedReviewVerifier().VerifyAsync(
@@ -94,14 +147,14 @@ public sealed partial class EvidenceBackedReviewVerifierTests
         Assert.Equal([new JudgeEffort(ReasoningEffort.Low, "low"), new JudgeEffort(ReasoningEffort.None, "none")], efforts);
     }
 
-    // A judge that falls back to the reviewer's own model states a configured effort in the shared setting when that
+    // A judge that falls back to the reviewer's own model states a configured level in the shared setting when that
     // model is called through the Responses API.
     [Fact]
     public async Task AJudgeOnTheReviewerModel_OnTheResponsesApi_AlsoReceivesTheEffortInTheSharedSetting()
     {
         var (judge, efforts) = JudgeRecordingEfforts();
         var verifier = new EvidenceBackedReviewVerifier(
-            reviewOptions: Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { VerificationReasoningEffort = ReviewReasoningEffort.Medium }));
+            reviewOptions: Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { VerificationReasoningLevel = "medium" }));
 
         var outcome = Assert.Single(
             await verifier.VerifyAsync(
@@ -113,18 +166,21 @@ public sealed partial class EvidenceBackedReviewVerifierTests
         Assert.Equal([expected, expected], efforts);
     }
 
-    // A judge with no resolved runtime runs on the reviewer's own model and follows the setting of that model.
+    // A judge with no resolved runtime runs on the reviewer's own model and follows the levels and the default level of
+    // that model.
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task AJudgeOnTheReviewerModel_FollowsWhetherThatModelAcceptsTheEffortNone(bool accepted)
+    public async Task AJudgeOnTheReviewerModel_FollowsTheLevelsOfThatModel(bool accepted)
     {
         var (judge, efforts) = JudgeRecordingEfforts();
 
         var outcome = Assert.Single(
             await new EvidenceBackedReviewVerifier().VerifyAsync(
                 [CreateWorkItem(LookupPath, 1, severity: CommentSeverity.Warning)], [],
-                new ReviewVerificationContext(AllocationTools(LookupSource), "source", judge, "judge-model", SupportsReasoningEffortNone: accepted)));
+                new ReviewVerificationContext(
+                    AllocationTools(LookupSource), "source", judge, "judge-model",
+                    ReasoningLevels: LevelsOf(accepted), DefaultReasoningLevel: accepted ? "none" : null)));
 
         Assert.Equal(FinalGateDecision.PublishDisposition, outcome.RecommendedDisposition);
         var expected = accepted ? new JudgeEffort(ReasoningEffort.None, "none") : new JudgeEffort(null, null);
@@ -149,20 +205,33 @@ public sealed partial class EvidenceBackedReviewVerifierTests
         return (judge, efforts);
     }
 
+    // A judging model that accepts the level none lists it among its levels and has it as its default level.
     private static IAiRuntimeResolver ResolverFor(
         IChatClient judge,
-        bool acceptsReasoningEffortNone,
+        bool acceptsNone,
         bool supportsLowReasoningEffort,
-        bool usesResponsesApi = false)
+        bool usesResponsesApi = false,
+        string? purposeLevel = null,
+        string? logicalModelLevel = null)
     {
         var runtime = RuntimeFor(judge, "gpt-6-luna");
-        var model = runtime.Model with { SupportsReasoningEffortNone = acceptsReasoningEffortNone };
+        var model = runtime.Model with { ReasoningLevels = LevelsOf(acceptsNone), DefaultReasoningLevel = acceptsNone ? "none" : null };
         runtime.Model.Returns(model);
         runtime.SupportsLowReasoningEffort.Returns(supportsLowReasoningEffort);
-        runtime.Capabilities.Returns(new AgentReviewRuntimeCapabilities(false, false, false, usesResponsesApi));
+        runtime.PurposeReasoningLevel.Returns(purposeLevel);
+        runtime.LogicalModelReasoningLevel.Returns(logicalModelLevel);
+        runtime.Capabilities.Returns(
+            new AgentReviewRuntimeCapabilities(
+                false, false, false, usesResponsesApi, ReasoningLevels: model.ReasoningLevels, DefaultReasoningLevel: model.DefaultReasoningLevel));
         var resolver = Substitute.For<IAiRuntimeResolver>();
         resolver.ResolveChatRuntimeAsync(Arg.Any<Guid>(), Arg.Any<AiPurpose>(), Arg.Any<CancellationToken>()).Returns(runtime);
         return resolver;
+    }
+
+    // The levels of a model that accepts the level none, or of a reasoning model that refuses it.
+    private static IReadOnlyList<string> LevelsOf(bool acceptsNone)
+    {
+        return acceptsNone ? ["none", "low", "medium", "high"] : ["low", "medium", "high"];
     }
 
     /// <summary>The effort of one judge call as each OpenAI transport receives it.</summary>

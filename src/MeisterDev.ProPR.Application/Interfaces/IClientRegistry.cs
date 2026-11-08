@@ -142,13 +142,12 @@ public interface IClientRegistry
     Task<IReadOnlyList<ReviewPassSpec>> GetReviewPassesAsync(Guid clientId, CancellationToken ct = default);
 
     /// <summary>
-    ///     Returns the reasoning effort configured at the client level for the implicit tier baseline review pass.
-    ///     Defaults to <see cref="ReviewReasoningEffort.None" /> (no effort sent) if the client does not exist or
-    ///     has not opted in.
+    ///     Returns the reasoning level configured at the client level for the implicit tier baseline review pass, or
+    ///     <see langword="null" /> when the client sets none or does not exist.
     /// </summary>
     /// <param name="clientId">Client identifier.</param>
     /// <param name="ct">Cancellation token.</param>
-    Task<ReviewReasoningEffort> GetBaselineReasoningEffortAsync(Guid clientId, CancellationToken ct = default);
+    Task<string?> GetBaselineReasoningLevelAsync(Guid clientId, CancellationToken ct = default);
 
     /// <summary>
     ///     Returns the default review pipeline profile configured for the given client, or <see langword="null" /> if not set.

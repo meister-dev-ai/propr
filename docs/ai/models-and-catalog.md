@@ -51,6 +51,29 @@ ProPR stores embedding vectors with 1536 dimensions. The Embedding purpose accep
 dimensions and refuses any other width, so `text-embedding-3-large`, which returns 3072, cannot serve it. A width that
 ProPR filled in is an assumption until a model check has measured the vectors the model returns.
 
+## Reasoning levels of a model
+
+Each chat model on a connection lists the reasoning levels it accepts, by the provider's names and from the lowest to
+the highest effort, for example `none`, `low`, `medium`, `high`, `xhigh` and `max` for gpt-6.1-terra. When a model is
+saved without levels, ProPR fills the list from the model catalog and from the add-in of the provider family:
+
+- The catalog lists the levels of many models. A catalog entry with a thinking budget gives `low`, `medium` and
+  `high`, and also `none` when its smallest budget is 0.
+- The add-in completes or replaces the catalog's list for the models of its family. The OpenAI add-in lists the levels
+  of gpt-6-luna and gpt-6.1-terra (`none` to `max`) and of gpt-6.1-sol (`low` to `max`), which the bundled catalog
+  does not contain. The Anthropic add-in puts `none` in front of the catalog's levels, because a request without a
+  thinking setting turns thinking off, and gives the levels of a Claude model the catalog does not list by its
+  generation.
+
+A model that neither source knows has no levels until you add them, which is the usual case for a model on an
+OpenAI-compatible server. The model editor shows where the list comes from. A list you edit stays as you left it on
+later saves and at startup, and **Detect Again** replaces it with the detected levels on the next save. At startup,
+ProPR fills the levels of models saved without them and refreshes a list that came from the catalog or an add-in.
+
+The model editor also sets the model's **Default Level**, the level ProPR sends to the model for a call that no other
+place chooses a level for. It is one of the model's levels, or none for the provider's own default. The evidence
+judge reads the list to decide whether it can request `low` - see [reasoning level](purposes.md#reasoning-level).
+
 ## Checking the models
 
 Verification proves the address and the credential. It does not prove a model: a model id with a typo, or one the

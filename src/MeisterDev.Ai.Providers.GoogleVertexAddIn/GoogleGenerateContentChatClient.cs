@@ -218,7 +218,7 @@ public sealed class GoogleGenerateContentChatClient : INativeProtocolChatClient
         // at all. A budget of -1 lets the model decide how much to think, which is the closest thing it has to
         // "as much as is useful".
         var reasoning = options?.RawRepresentationFactory?.Invoke(this) as ProviderReasoningRequest;
-        if (ThinkingBudget(reasoning?.Effort ?? ProviderReasoningEffort.None) is { } budget)
+        if (ThinkingBudget(EffortOf(reasoning)) is { } budget)
         {
             generation["thinkingConfig"] = new JsonObject
             {
@@ -248,6 +248,25 @@ public sealed class GoogleGenerateContentChatClient : INativeProtocolChatClient
         }
 
         return payload;
+    }
+
+    /// <summary>The effort a request asks for, read from the level by name when the request names one.</summary>
+    /// <remarks>
+    ///     The level <c>minimal</c> thinks as Low does, the lowest effort this family maps, and the levels <c>xhigh</c>
+    ///     and <c>max</c> think as High does, the highest. A request that names no level, or a level this family does
+    ///     not map, is read from its neutral effort.
+    /// </remarks>
+    /// <param name="reasoning">The neutral request, or null when the caller sent none.</param>
+    private static ProviderReasoningEffort EffortOf(ProviderReasoningRequest? reasoning)
+    {
+        return reasoning?.Level switch
+        {
+            "none" => ProviderReasoningEffort.None,
+            "minimal" or "low" => ProviderReasoningEffort.Low,
+            "medium" => ProviderReasoningEffort.Medium,
+            "high" or "xhigh" or "max" => ProviderReasoningEffort.High,
+            _ => reasoning?.Effort ?? ProviderReasoningEffort.None,
+        };
     }
 
     private static int? ThinkingBudget(ProviderReasoningEffort effort)

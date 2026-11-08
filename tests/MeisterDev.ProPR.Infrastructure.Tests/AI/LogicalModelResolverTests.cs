@@ -51,7 +51,7 @@ public sealed class LogicalModelResolverTests
         var modelId = Guid.NewGuid();
         var model = AiConnectionTestFactory.CreateChatModel("deep-model", modelId);
         var connection = AiConnectionTestFactory.CreateConnection(ClientId, [model]);
-        var mapping = ChatMapping("deep", connection.Id, modelId, ReviewReasoningEffort.High, AiConnectionTestFactory.ResponsesProtocol);
+        var mapping = ChatMapping("deep", connection.Id, modelId, "high", AiConnectionTestFactory.ResponsesProtocol);
         this.SetTenantEntries(mapping);
         this._connections.GetByIdAsync(connection.Id, Arg.Any<CancellationToken>()).Returns(connection);
         var runtime = Substitute.For<IResolvedAiChatRuntime>();
@@ -61,7 +61,7 @@ public sealed class LogicalModelResolverTests
 
         Assert.Same(runtime, result.Runtime);
         Assert.Equal(LogicalModelLayer.TenantCatalog, result.Layer);
-        Assert.Equal(ReviewReasoningEffort.High, result.ReasoningEffort);
+        Assert.Equal("high", result.ReasoningLevel);
         // The synthesized binding must carry the mapping's protocol mode, and the runtime is tagged with the role name.
         this._runtimeFactory.Received(1).CreateChatRuntime(
             connection, model, Arg.Is<AiPurposeBindingDto>(b => b.ProtocolMode == AiConnectionTestFactory.ResponsesProtocol), "deep");
@@ -70,9 +70,9 @@ public sealed class LogicalModelResolverTests
     // The runtime carries the effort of the logical model, so a caller that resolved a purpose through the logical
     // model applies the effort set on it. The name the runtime was tagged with stays.
     [Theory]
-    [InlineData(ReviewReasoningEffort.None)]
-    [InlineData(ReviewReasoningEffort.High)]
-    public async Task ResolveChat_RuntimeCarriesTheEffortOfTheLogicalModel(ReviewReasoningEffort effort)
+    [InlineData(null)]
+    [InlineData("high")]
+    public async Task ResolveChat_RuntimeCarriesTheLevelOfTheLogicalModel(string? effort)
     {
         var modelId = Guid.NewGuid();
         var model = AiConnectionTestFactory.CreateChatModel("deep-model", modelId);
@@ -89,7 +89,8 @@ public sealed class LogicalModelResolverTests
 
         var result = await this.Sut().ResolveChatRuntimeAsync(ClientId, "deep");
 
-        Assert.Equal(effort, result.Runtime.LogicalModelReasoningEffort);
+        Assert.Equal(effort, result.Runtime.LogicalModelReasoningLevel);
+        Assert.Equal(effort, result.Runtime.Capabilities.ConfiguredReasoningLevel);
         Assert.Equal("deep", result.Runtime.LogicalModelName);
         Assert.Same(created.ChatClient, result.Runtime.ChatClient);
     }
@@ -101,13 +102,12 @@ public sealed class LogicalModelResolverTests
         var tenantModelId = Guid.NewGuid();
         var tenantModel = AiConnectionTestFactory.CreateChatModel("tenant-model", tenantModelId);
         var tenantConnection = AiConnectionTestFactory.CreateConnection(ClientId, [tenantModel]);
-        this.SetTenantEntries(ChatMapping("deep", tenantConnection.Id, tenantModelId, ReviewReasoningEffort.Low, ProviderDeclaredProtocolModes.Auto));
+        this.SetTenantEntries(ChatMapping("deep", tenantConnection.Id, tenantModelId, "low", ProviderDeclaredProtocolModes.Auto));
 
         var overrideModelId = Guid.NewGuid();
         var overrideModel = AiConnectionTestFactory.CreateChatModel("override-model", overrideModelId);
         var overrideConnection = AiConnectionTestFactory.CreateConnection(ClientId, [overrideModel]);
-        this.SetOverrides(
-            ChatMapping("deep", overrideConnection.Id, overrideModelId, ReviewReasoningEffort.Medium, AiConnectionTestFactory.ChatCompletionsProtocol));
+        this.SetOverrides(ChatMapping("deep", overrideConnection.Id, overrideModelId, "medium", AiConnectionTestFactory.ChatCompletionsProtocol));
 
         this._connections.GetByIdAsync(overrideConnection.Id, Arg.Any<CancellationToken>()).Returns(overrideConnection);
         var runtime = Substitute.For<IResolvedAiChatRuntime>();
@@ -117,7 +117,7 @@ public sealed class LogicalModelResolverTests
 
         Assert.Same(runtime, result.Runtime);
         Assert.Equal(LogicalModelLayer.ClientOverride, result.Layer);
-        Assert.Equal(ReviewReasoningEffort.Medium, result.ReasoningEffort);
+        Assert.Equal("medium", result.ReasoningLevel);
         // The tenant connection must never be loaded when an override wins.
         await this._connections.DidNotReceive().GetByIdAsync(tenantConnection.Id, Arg.Any<CancellationToken>());
     }
@@ -129,7 +129,7 @@ public sealed class LogicalModelResolverTests
         this.SetTenantEntries(
             new LogicalModelDto(
                 Guid.NewGuid(), "embed", AiOperationKind.Embedding, Guid.NewGuid(), Guid.NewGuid(),
-                ReviewReasoningEffort.None, ProviderDeclaredProtocolModes.Embeddings));
+                null, ProviderDeclaredProtocolModes.Embeddings));
 
         var ex = await Assert.ThrowsAsync<LogicalModelCapabilityMismatchException>(() => this.Sut().ResolveChatRuntimeAsync(ClientId, "embed"));
         Assert.Equal(AiOperationKind.Chat, ex.Expected);
@@ -140,7 +140,7 @@ public sealed class LogicalModelResolverTests
     [Fact]
     public async Task ResolveEmbedding_OnChatRole_Throws()
     {
-        this.SetTenantEntries(ChatMapping("deep", Guid.NewGuid(), Guid.NewGuid(), ReviewReasoningEffort.None, ProviderDeclaredProtocolModes.Auto));
+        this.SetTenantEntries(ChatMapping("deep", Guid.NewGuid(), Guid.NewGuid(), null, ProviderDeclaredProtocolModes.Auto));
 
         var ex = await Assert.ThrowsAsync<LogicalModelCapabilityMismatchException>(() => this.Sut().ResolveEmbeddingRuntimeAsync(ClientId, "deep"));
         Assert.Equal(AiOperationKind.Embedding, ex.Expected);
@@ -157,7 +157,7 @@ public sealed class LogicalModelResolverTests
         this.SetOverrides(
             new LogicalModelDto(
                 Guid.NewGuid(), "embed", AiOperationKind.Embedding, connection.Id, modelId,
-                ReviewReasoningEffort.None, ProviderDeclaredProtocolModes.Embeddings));
+                null, ProviderDeclaredProtocolModes.Embeddings));
         this._connections.GetByIdAsync(connection.Id, Arg.Any<CancellationToken>()).Returns(connection);
         var runtime = Substitute.For<IResolvedAiEmbeddingRuntime>();
         this._runtimeFactory
@@ -183,7 +183,7 @@ public sealed class LogicalModelResolverTests
     public async Task ResolveChat_MissingConnection_Throws()
     {
         var connectionId = Guid.NewGuid();
-        this.SetTenantEntries(ChatMapping("deep", connectionId, Guid.NewGuid(), ReviewReasoningEffort.None, ProviderDeclaredProtocolModes.Auto));
+        this.SetTenantEntries(ChatMapping("deep", connectionId, Guid.NewGuid(), null, ProviderDeclaredProtocolModes.Auto));
         this._connections.GetByIdAsync(connectionId, Arg.Any<CancellationToken>()).Returns((AiConnectionDto?)null);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => this.Sut().ResolveChatRuntimeAsync(ClientId, "deep"));
@@ -197,7 +197,7 @@ public sealed class LogicalModelResolverTests
         var modelId = Guid.NewGuid();
         var model = AiConnectionTestFactory.CreateChatModel("deep-model", modelId);
         var connection = AiConnectionTestFactory.CreateConnection(ClientId, [model]);
-        this.SetTenantEntries(ChatMapping("deep", connection.Id, modelId, ReviewReasoningEffort.High, AiConnectionTestFactory.ResponsesProtocol));
+        this.SetTenantEntries(ChatMapping("deep", connection.Id, modelId, "high", AiConnectionTestFactory.ResponsesProtocol));
         this._connections.GetByIdAsync(connection.Id, Arg.Any<CancellationToken>()).Returns(connection);
         this._runtimeFactory.CreateChatRuntime(connection, model, Arg.Any<AiPurposeBindingDto>(), Arg.Any<string?>())
             .Returns(Substitute.For<IResolvedAiChatRuntime>());
@@ -222,7 +222,7 @@ public sealed class LogicalModelResolverTests
         var modelId = Guid.NewGuid();
         var model = AiConnectionTestFactory.CreateChatModel("deep-model", modelId);
         var connection = AiConnectionTestFactory.CreateConnection(ClientId, [model]);
-        this.SetTenantEntries(ChatMapping("deep", connection.Id, modelId, ReviewReasoningEffort.None, ProviderDeclaredProtocolModes.Auto));
+        this.SetTenantEntries(ChatMapping("deep", connection.Id, modelId, null, ProviderDeclaredProtocolModes.Auto));
         this._connections.GetByIdAsync(connection.Id, Arg.Any<CancellationToken>()).Returns(connection);
         this._runtimeFactory.CreateChatRuntime(connection, model, Arg.Any<AiPurposeBindingDto>(), Arg.Any<string?>())
             .Returns(Substitute.For<IResolvedAiChatRuntime>());
@@ -242,7 +242,7 @@ public sealed class LogicalModelResolverTests
         // The connection has some other model, not the one the mapping points at.
         var otherModel = AiConnectionTestFactory.CreateChatModel("other-model");
         var connection = AiConnectionTestFactory.CreateConnection(ClientId, [otherModel]);
-        this.SetTenantEntries(ChatMapping("deep", connection.Id, missingModelId, ReviewReasoningEffort.None, ProviderDeclaredProtocolModes.Auto));
+        this.SetTenantEntries(ChatMapping("deep", connection.Id, missingModelId, null, ProviderDeclaredProtocolModes.Auto));
         this._connections.GetByIdAsync(connection.Id, Arg.Any<CancellationToken>()).Returns(connection);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => this.Sut().ResolveChatRuntimeAsync(ClientId, "deep"));
@@ -258,7 +258,7 @@ public sealed class LogicalModelResolverTests
         var modelId = Guid.NewGuid();
         var model = AiConnectionTestFactory.CreateChatModel("deep-model", modelId);
         var foreignConnection = AiConnectionTestFactory.CreateConnection(Guid.NewGuid(), [model]);
-        this.SetTenantEntries(ChatMapping("deep", foreignConnection.Id, modelId, ReviewReasoningEffort.None, ProviderDeclaredProtocolModes.Auto));
+        this.SetTenantEntries(ChatMapping("deep", foreignConnection.Id, modelId, null, ProviderDeclaredProtocolModes.Auto));
         this._connections.GetByIdAsync(foreignConnection.Id, Arg.Any<CancellationToken>()).Returns(foreignConnection);
         this._scopeGuard.ValidateAsync(foreignConnection, TenantId, Arg.Any<CancellationToken>())
             .Returns("connection belongs to a different tenant and cannot be referenced.");
@@ -294,7 +294,7 @@ public sealed class LogicalModelResolverTests
         var modelId = Guid.NewGuid();
         var model = AiConnectionTestFactory.CreateChatModel("deep-model", modelId);
         var connection = AiConnectionTestFactory.CreateConnection(ClientId, [model]);
-        this.SetTenantEntries(ChatMapping("deep", connection.Id, modelId, ReviewReasoningEffort.None, ProviderDeclaredProtocolModes.Auto));
+        this.SetTenantEntries(ChatMapping("deep", connection.Id, modelId, null, ProviderDeclaredProtocolModes.Auto));
         this._connections.GetByIdAsync(connection.Id, Arg.Any<CancellationToken>()).Returns(connection);
         this._clients.GetTenantIdAsync(ClientId, Arg.Any<CancellationToken>()).Returns((Guid?)null);
 
@@ -303,7 +303,7 @@ public sealed class LogicalModelResolverTests
         this._runtimeFactory.DidNotReceiveWithAnyArgs().CreateChatRuntime(null!, null!, null!);
     }
 
-    private static LogicalModelDto ChatMapping(string name, Guid connectionId, Guid modelId, ReviewReasoningEffort effort, string protocol)
+    private static LogicalModelDto ChatMapping(string name, Guid connectionId, Guid modelId, string? effort, string protocol)
     {
         return new LogicalModelDto(Guid.NewGuid(), name, AiOperationKind.Chat, connectionId, modelId, effort, protocol);
     }
@@ -316,7 +316,7 @@ public sealed class LogicalModelResolverTests
             AiOperationKind.Embedding,
             connectionId,
             modelId,
-            ReviewReasoningEffort.None,
+            null,
             ProviderDeclaredProtocolModes.Embeddings);
     }
 

@@ -81,12 +81,20 @@ public sealed class ManifestReasoningCaptureTests
         return new RunnerReviewBehaviour(false, true, null, null, captureReasoning);
     }
 
-    private static async Task<MeisterDev.ProPR.Application.ValueObjects.ReviewSystemContext> BuildContextAsync(
+    private static Task<MeisterDev.ProPR.Application.ValueObjects.ReviewSystemContext> BuildContextAsync(
         RunnerReviewBehaviour? behaviour,
         bool hostSwitch, RunnerFindingTypeVocabulary? vocabulary = null)
     {
         var manifest = RunnerManifests.Sample() with { Behaviour = behaviour };
         manifest = manifest with { Prompts = manifest.Prompts with { FindingTypeVocabulary = vocabulary } };
+        return BuildContextFromManifestAsync(manifest, hostSwitch);
+    }
+
+    /// <summary>The review context the executor builds from a manifest, with no workspace content.</summary>
+    internal static async Task<MeisterDev.ProPR.Application.ValueObjects.ReviewSystemContext> BuildContextFromManifestAsync(
+        RunnerJobManifest manifest,
+        bool hostSwitch = false)
+    {
         var workspace = new EmptyWorkspace();
         var job = RunnerReviewSubject.BuildJob(manifest);
         var pullRequest = await RunnerReviewSubject.BuildPullRequestAsync(manifest, workspace, CancellationToken.None);

@@ -8,6 +8,7 @@ using FluentValidation;
 using FluentValidation.Results;
 using MeisterDev.ProPR.Api.Extensions;
 using MeisterDev.ProPR.Api.Features.Licensing;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
@@ -48,9 +49,9 @@ public sealed class ClientsController(
             client.IncludeLinkedItemsInContext,
             client.ReviewPassesOrEmpty
                 .Select(pass => new ReviewPassEntry(
-                    pass.Ordinal, pass.ConfiguredModelId, pass.Lens, pass.Scope, pass.Shadow, pass.ReasoningEffort, pass.LogicalModelName))
+                    pass.Ordinal, pass.ConfiguredModelId, pass.Lens, pass.Scope, pass.Shadow, pass.ReasoningLevel, pass.LogicalModelName))
                 .ToList(),
-            client.BaselineReasoningEffort,
+            client.BaselineReasoningLevel,
             client.TenantId,
             client.TenantSlug,
             client.TenantDisplayName,
@@ -101,15 +102,22 @@ public sealed class ClientsController(
             return null;
         }
 
-        HashSet<string>? validRoleNames = null;
-        foreach (var pass in reviewPasses)
+        IReadOnlyList<LogicalModelDto>? logicalModels = null;
+        for (var index = 0; index < reviewPasses.Count; index++)
         {
+            var pass = reviewPasses[index];
+            var level = ReasoningLevelSelection.Normalize(pass.ReasoningLevel);
+
             // A name-based pass must reference a logical model configured for this client (a per-client override or a
             // tenant-catalog entry). Legacy passes must reference a chat-capable configured model on the client.
+            AiConfiguredModelDto? model;
             if (!string.IsNullOrWhiteSpace(pass.LogicalModelName))
             {
-                validRoleNames ??= await this.LoadClientRoleNamesAsync(clientId, logicalModelCatalog, ct);
-                if (!validRoleNames.Contains(pass.LogicalModelName))
+                logicalModels ??= await LoadClientLogicalModelsAsync(clientId, logicalModelCatalog, ct);
+
+                // A client override comes first and shadows the tenant entry with the same name.
+                var entry = logicalModels.FirstOrDefault(candidate => string.Equals(candidate.Name, pass.LogicalModelName, StringComparison.Ordinal));
+                if (entry is null)
                 {
                     this.ModelState.AddModelError(
                         nameof(PatchClientRequest.ReviewPasses),
@@ -117,15 +125,30 @@ public sealed class ClientsController(
                     return this.ValidationProblem();
                 }
 
-                continue;
+                model = level is null
+                    ? null
+                    : (await aiConnectionRepository.GetByIdAsync(entry.ConnectionId, ct))?.ConfiguredModels
+                    .FirstOrDefault(candidate => candidate.Id == entry.ConfiguredModelId);
+            }
+            else
+            {
+                var binding = await aiConnectionRepository.GetModelBindingAsync(clientId, pass.ConfiguredModelId, ct);
+                if (binding is null)
+                {
+                    this.ModelState.AddModelError(
+                        nameof(PatchClientRequest.ReviewPasses),
+                        $"Review pass model '{pass.ConfiguredModelId}' is not a chat-capable configured model on any of this client's connections.");
+                    return this.ValidationProblem();
+                }
+
+                model = binding.Model;
             }
 
-            var binding = await aiConnectionRepository.GetModelBindingAsync(clientId, pass.ConfiguredModelId, ct);
-            if (binding is null)
+            // A level is checked where it is saved, as on a logical model and a purpose assignment.
+            var refusal = model is null ? null : ReasoningLevelSelection.Refusal(level, model.ReasoningLevels, model.RemoteModelId);
+            if (refusal is not null)
             {
-                this.ModelState.AddModelError(
-                    nameof(PatchClientRequest.ReviewPasses),
-                    $"Review pass model '{pass.ConfiguredModelId}' is not a chat-capable configured model on any of this client's connections.");
+                this.ModelState.AddModelError(nameof(PatchClientRequest.ReviewPasses), $"Review pass {index + 1}: {refusal}");
                 return this.ValidationProblem();
             }
         }
@@ -133,16 +156,14 @@ public sealed class ClientsController(
         return null;
     }
 
-    private async Task<HashSet<string>> LoadClientRoleNamesAsync(
+    private static async Task<IReadOnlyList<LogicalModelDto>> LoadClientLogicalModelsAsync(
         Guid clientId,
         ILogicalModelCatalogRepository logicalModelCatalog,
         CancellationToken ct)
     {
         var overrides = await logicalModelCatalog.GetClientOverridesAsync(clientId, ct);
         var tenantEntries = await logicalModelCatalog.GetTenantEntriesForClientAsync(clientId, ct);
-        return overrides.Select(entry => entry.Name)
-            .Concat(tenantEntries.Select(entry => entry.Name))
-            .ToHashSet(StringComparer.Ordinal);
+        return [.. overrides, .. tenantEntries];
     }
 
     /// <summary>
@@ -430,9 +451,9 @@ public sealed class ClientsController(
             request.IncludeLinkedItemsInContext,
             request.ReviewPasses?
                 .Select(pass => new ReviewPassDto(
-                    pass.Ordinal, pass.ConfiguredModelId, pass.Lens, pass.Scope, pass.Shadow, pass.ReasoningEffort, pass.LogicalModelName))
+                    pass.Ordinal, pass.ConfiguredModelId, pass.Lens, pass.Scope, pass.Shadow, pass.ReasoningLevel, pass.LogicalModelName))
                 .ToList(),
-            request.BaselineReasoningEffort,
+            request.BaselineReasoningLevel,
             request.BudgetConfig,
             request.MinimumSeverityToPost,
             request.AutoResolveSeverities,
@@ -470,7 +491,7 @@ public sealed record ClientResponse(
     bool EnableMultiPassUnion,
     bool IncludeLinkedItemsInContext,
     IReadOnlyList<ReviewPassEntry> ReviewPasses,
-    ReviewReasoningEffort BaselineReasoningEffort,
+    string? BaselineReasoningLevel,
     Guid? TenantId,
     string? TenantSlug,
     string? TenantDisplayName,
@@ -499,14 +520,13 @@ public sealed record ClientResponse(
 ///     at the job level rather than per file.
 /// </param>
 /// <param name="Shadow">Whether this pass runs in shadow mode. Additive metadata the runtime does not act on yet.</param>
-/// <param name="ReasoningEffort">
-///     Reasoning effort this pass asks the model to spend, for a legacy <paramref name="ConfiguredModelId" /> pass.
-///     <see cref="ReviewReasoningEffort.None" /> (default) sends no effort level; low/medium/high enable reasoning.
-///     Ignored for a <paramref name="LogicalModelName" /> pass — its effort comes from the logical model.
+/// <param name="ReasoningLevel">
+///     Reasoning level this pass asks the model for, by the provider's name, for example <c>high</c> or <c>max</c>.
+///     Without one, the pass takes the level of its logical model and then the default level of its configured model.
+///     The model receives only a level it accepts.
 /// </param>
 /// <param name="LogicalModelName">
-///     The named logical model this pass runs on (its connection, model, reasoning effort, and protocol come from the
-///     resolved role). When set, it takes precedence and <paramref name="ConfiguredModelId" /> is ignored. A pass
+///     The named logical model this pass runs on (its connection, model and protocol come from the resolved role). When set, it takes precedence and <paramref name="ConfiguredModelId" /> is ignored. A pass
 ///     should set exactly one of <paramref name="LogicalModelName" /> or <paramref name="ConfiguredModelId" />.
 /// </param>
 public sealed record ReviewPassEntry(
@@ -515,7 +535,7 @@ public sealed record ReviewPassEntry(
     string? Lens = null,
     string? Scope = null,
     bool Shadow = false,
-    ReviewReasoningEffort ReasoningEffort = ReviewReasoningEffort.None,
+    string? ReasoningLevel = null,
     string? LogicalModelName = null);
 
 /// <summary>Crawl configuration response.</summary>
@@ -563,7 +583,7 @@ public sealed record PatchClientRequest(
     bool? EnableMultiPassUnion = null,
     bool? IncludeLinkedItemsInContext = null,
     IReadOnlyList<ReviewPassEntry>? ReviewPasses = null,
-    ReviewReasoningEffort? BaselineReasoningEffort = null,
+    string? BaselineReasoningLevel = null,
     BudgetConfigDto? BudgetConfig = null,
     CommentSeverity? MinimumSeverityToPost = null,
     IReadOnlyList<CommentSeverity>? AutoResolveSeverities = null,

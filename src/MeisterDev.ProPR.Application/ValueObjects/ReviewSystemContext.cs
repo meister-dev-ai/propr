@@ -246,21 +246,20 @@ public sealed class ReviewSystemContext
     public IReadOnlyList<ReviewPassSpec> ReviewPasses { get; init; } = [];
 
     /// <summary>
-    ///     Reasoning effort configured at the client level for the implicit tier baseline pass. Populated once per job
-    ///     from the client baseline setting. The baseline per-file pass uses it when the logical model of the file's
-    ///     tier sets the effort None, and when the file falls back to the default client.
-    ///     Defaults to <see cref="ReviewReasoningEffort.None" />.
+    ///     Reasoning level configured at the client level for the implicit tier baseline pass, or <see langword="null" />.
+    ///     Populated once per job from the client baseline setting. The baseline per-file pass uses it when neither the
+    ///     purpose assignment nor the logical model of the file's tier sets a level.
     /// </summary>
-    public ReviewReasoningEffort BaselineReasoningEffort { get; set; } = ReviewReasoningEffort.None;
+    public string? BaselineReasoningLevel { get; set; }
+
 
     /// <summary>
-    ///     Reasoning effort active for the current pass context, applied to the outbound chat request unconditionally
-    ///     (independent of reasoning-summary capture). Set after the per-pass context is created: the baseline pass
-    ///     from the logical model of its tier, or from <see cref="BaselineReasoningEffort" /> when that logical model
-    ///     sets the effort None; an additional pass from its logical model or its <see cref="ReviewPassSpec" />.
-    ///     Not persisted — a per-pass runtime marker. Defaults to <see cref="ReviewReasoningEffort.None" />.
+    ///     Reasoning level active for the current pass context, or <see langword="null" /> when no place sets one. It is
+    ///     applied to the outbound chat request independent of reasoning-summary capture, restricted to the levels the
+    ///     model accepts. Set after the per-pass context is created, see <see cref="AI.ReasoningLevelSelection" />. Not
+    ///     persisted.
     /// </summary>
-    public ReviewReasoningEffort ActiveReasoningEffort { get; set; } = ReviewReasoningEffort.None;
+    public string? ActiveReasoningLevel { get; set; }
 
     /// <summary>
     ///     The specialist lens active for the current per-file pass context, or <see langword="null" /> for an

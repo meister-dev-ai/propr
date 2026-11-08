@@ -111,7 +111,7 @@ public sealed partial class RunnerJobManifestResolver(
             }
 
             var passBindings = await this.ResolvePassModelsAsync(job.ClientId, passes, ct);
-            var baselineEffort = await clientRegistry.GetBaselineReasoningEffortAsync(job.ClientId, ct);
+            var baselineLevel = await clientRegistry.GetBaselineReasoningLevelAsync(job.ClientId, ct);
             var outputLanguage = await clientRegistry.GetOutputLanguageAsync(job.ClientId, ct);
             var customSystemMessage = await clientRegistry.GetCustomSystemMessageAsync(job.ClientId, ct);
 
@@ -187,7 +187,7 @@ public sealed partial class RunnerJobManifestResolver(
                     outputLanguage,
                     // The baseline reasoning effort is what an unlisted pass runs at, and the custom system
                     // message is prompt configuration too: both belong to the prompt, not the model binding.
-                    baselineEffort.ToString(),
+                    baselineLevel ?? string.Empty,
                     MergeSystemMessage(overrides, customSystemMessage), new RunnerFindingTypeVocabulary(
                         findingVocabulary.Version, findingVocabulary.CustomTypes
                             .Select(tag => new RunnerFindingCustomTypeDefinition(tag.Id, tag.Slug, tag.DisplayName, tag.Definition)).ToList())),
@@ -322,13 +322,17 @@ public sealed partial class RunnerJobManifestResolver(
             }
 
             var runtime = await logicalModelResolver.ResolveChatRuntimeAsync(clientId, pass.LogicalModelName, ct: ct);
+            // The binding carries the level of the logical model, and the pass's own level travels on the pass: the
+            // executor keeps one binding per logical model, so a pass level in the binding would reach every pass on
+            // that logical model.
             resolved.Add(
                 new RunnerReviewPass(
                     index + 1,
-                    Describe(pass.LogicalModelName, runtime.Runtime, runtime.ReasoningEffort),
+                    Describe(pass.LogicalModelName, runtime.Runtime, runtime.ReasoningLevel),
                     pass.Lens,
                     pass.Scope,
-                    pass.Shadow));
+                    pass.Shadow,
+                    pass.ReasoningLevel));
         }
 
         return resolved;
@@ -352,25 +356,36 @@ public sealed partial class RunnerJobManifestResolver(
         }
 
         var runtime = await aiRuntimeResolver.ResolveChatRuntimeAsync(clientId, AiPurpose.ReviewDefault, ct);
+        // The level of the purpose assignment travels apart from the level of the logical model, because the evidence
+        // judge takes the level of the logical model and not the level of the review purpose.
         return string.IsNullOrWhiteSpace(runtime.LogicalModelName)
             ? null
-            : (Describe(runtime.LogicalModelName!, runtime, runtime.LogicalModelReasoningEffort), runtime.Connection.Id);
+            : (Describe(runtime.LogicalModelName!, runtime, runtime.LogicalModelReasoningLevel) with
+            {
+                PurposeReasoningLevel = runtime.PurposeReasoningLevel,
+            }, runtime.Connection.Id);
     }
 
     /// <summary>
     ///     Everything about a resolved model that is safe to send and that the pipeline needs before it
     ///     makes a call. The connection, its credential, and the model's pricing stay here.
     /// </summary>
+    /// <remarks>
+    ///     The binding states the level of the logical model; the executor takes the pass's own level or the review
+    ///     purpose's level before it, and the client baseline level and the model's default level after it. An empty
+    ///     level reads as no level on every runner. The flag for the level none keeps a runner that reads no level list on the behaviour it had:
+    ///     the effort none for a model whose default level is none.
+    /// </remarks>
     private static RunnerModelBinding Describe(
         string logicalModelName,
         IResolvedAiChatRuntime runtime,
-        ReviewReasoningEffort effort)
+        string? level)
     {
         return new RunnerModelBinding(
             logicalModelName,
             runtime.Model.RemoteModelId,
             runtime.Connection.ProviderKind,
-            effort.ToString(),
+            level ?? string.Empty,
             runtime.Model.TokenizerName,
             runtime.Model.MaxInputTokens,
             runtime.Model.MaxContextTokens,
@@ -378,7 +393,9 @@ public sealed partial class RunnerJobManifestResolver(
             runtime.Model.SupportsToolUse,
             runtime.Model.SupportsStructuredOutput,
             runtime.SupportsLowReasoningEffort, runtime.Connection.Id, runtime.Model.Id,
-            runtime.Model.SupportsReasoningEffortNone);
+            string.Equals(runtime.Model.DefaultReasoningLevel, "none", StringComparison.Ordinal),
+            runtime.Model.ReasoningLevels,
+            runtime.Model.DefaultReasoningLevel);
     }
 
     /// <summary>

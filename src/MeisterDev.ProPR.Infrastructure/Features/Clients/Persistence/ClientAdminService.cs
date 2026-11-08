@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
@@ -112,7 +113,7 @@ public sealed class ClientAdminService(
         bool? enableMultiPassUnion = null,
         bool? includeLinkedItemsInContext = null,
         IReadOnlyList<ReviewPassDto>? reviewPasses = null,
-        ReviewReasoningEffort? baselineReasoningEffort = null,
+        string? baselineReasoningLevel = null,
         BudgetConfigDto? budgetConfig = null,
         CommentSeverity? minimumSeverityToPost = null,
         IReadOnlyList<CommentSeverity>? autoResolveSeverities = null,
@@ -149,7 +150,7 @@ public sealed class ClientAdminService(
             scmCommentPostingEnabled,
             enableMultiPassUnion,
             includeLinkedItemsInContext,
-            baselineReasoningEffort,
+            baselineReasoningLevel,
             minimumSeverityToPost,
             codeInsightsCollectionEnabled,
             outputLanguage,
@@ -186,7 +187,7 @@ public sealed class ClientAdminService(
         bool? scmCommentPostingEnabled,
         bool? enableMultiPassUnion,
         bool? includeLinkedItemsInContext,
-        ReviewReasoningEffort? baselineReasoningEffort,
+        string? baselineReasoningLevel,
         CommentSeverity? minimumSeverityToPost,
         bool? codeInsightsCollectionEnabled,
         string? outputLanguage,
@@ -215,7 +216,8 @@ public sealed class ClientAdminService(
         ApplyIfHasValue(includeLinkedItemsInContext, value => client.IncludeLinkedItemsInContext = value);
         ApplyIfHasValue(reviewEveryIncrementEnabled, value => client.ReviewEveryIncrementEnabled = value);
         ApplyIfHasValue(withholdOutOfScopeFindings, value => client.WithholdOutOfScopeFindings = value);
-        ApplyIfHasValue(baselineReasoningEffort, value => client.BaselineReasoningEffort = value);
+        // An empty level clears the baseline level; an absent one leaves it as it was.
+        ApplyIfNotNull(baselineReasoningLevel, value => client.BaselineReasoningLevel = ReasoningLevelSelection.Normalize(value));
 
         // A blank tag reads as the default rather than as "clear it": the column is never empty, because every
         // prose prompt has to be able to name a language.
@@ -248,11 +250,9 @@ public sealed class ClientAdminService(
                     Lens = pass.Lens,
                     Scope = pass.Scope,
                     Shadow = pass.Shadow,
-                    // Per-pass effort applies only to legacy model-id passes; a name-based pass takes its effort from
-                    // the logical model. Store None as null so an unset effort keeps the column empty.
-                    ReasoningEffort = isNameBased || pass.ReasoningEffort == ReviewReasoningEffort.None
-                        ? null
-                        : pass.ReasoningEffort,
+                    // The level of the pass; without one, the pass takes the level of its logical model and then the
+                    // default level of its configured model.
+                    ReasoningLevel = ReasoningLevelSelection.Normalize(pass.ReasoningLevel),
                 });
         }
     }
@@ -471,7 +471,7 @@ public sealed class ClientAdminService(
                 pass.Lens,
                 pass.Scope,
                 pass.Shadow,
-                pass.ReasoningEffort ?? ReviewReasoningEffort.None,
+                pass.ReasoningLevel,
                 pass.LogicalModelName))
             .ToList()
             .AsReadOnly();
@@ -489,7 +489,7 @@ public sealed class ClientAdminService(
             client.EnableMultiPassUnion,
             client.IncludeLinkedItemsInContext,
             reviewPasses,
-            client.BaselineReasoningEffort,
+            client.BaselineReasoningLevel,
             tenantId,
             tenantSlug,
             tenantDisplayName,

@@ -59,8 +59,9 @@ public sealed class EvidenceJudgeReasoningCompatibilityTests
             });
     }
 
-    // Where the judge has no low effort to ask for, it runs with the effort None, and both checks always do. On a model
-    // the manifest marks as accepting the effort none, every one of these calls then names none on the relay.
+    // Where the judge has no low effort to ask for, it runs at the default level of the model, and both checks ask for
+    // the level none from a model whose levels hold it. On a model the manifest lists with the level none and with none
+    // as its default level, every one of these calls then names none on the relay.
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -68,11 +69,13 @@ public sealed class EvidenceJudgeReasoningCompatibilityTests
     {
         var manifest = RunnerManifests.Sample() with
         {
-            DefaultModel = RunnerManifests.Model("reviewer-default", "None") with
+            DefaultModel = RunnerManifests.Model("reviewer-default", "") with
             {
                 RemoteModelId = "gpt-6-luna",
                 SupportsLowReasoningEffort = supportsLow,
                 SupportsReasoningEffortNone = true,
+                ReasoningLevels = ["none", "low", "medium", "high"],
+                DefaultReasoningLevel = "none",
             },
         };
         using var handler = new JudgeRelayEndpoint(supportsLow, acceptsNone: true);

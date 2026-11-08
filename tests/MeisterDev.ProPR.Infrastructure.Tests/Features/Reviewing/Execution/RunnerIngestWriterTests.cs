@@ -238,7 +238,7 @@ public sealed class RunnerIngestWriterTests
                 new MeisterDev.ProPR.Application.DTOs.ResolvedLogicalModelChatRuntime(
                     runtime, "reviewer-medium",
                     MeisterDev.ProPR.Domain.Enums.LogicalModelLayer.TenantCatalog,
-                    MeisterDev.ProPR.Domain.Enums.ReviewReasoningEffort.None));
+                    null));
         var writer = new RunnerIngestWriter(this._jobs, this._protocols, this._reasoningCapture, logicalModels);
 
         await writer.WriteSpendAsync(JobId, [new RunnerSpendRecord("reviewer-medium", 100, 20, null)]);

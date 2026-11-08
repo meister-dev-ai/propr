@@ -49,9 +49,10 @@ public interface IClientAdminService
     ///     When non-null, replaces the client's ordered review-pass list wholesale (an empty list clears it).
     ///     Each entry binds one additional multi-pass union pass to a configured model.
     /// </param>
-    /// <param name="baselineReasoningEffort">
-    ///     When non-null, sets the client-level reasoning effort for the implicit tier baseline review pass. The
-    ///     baseline pass uses it when the logical model of the file's tier sets the effort None.
+    /// <param name="baselineReasoningLevel">
+    ///     When non-null, sets the client-level reasoning level for the implicit tier baseline review pass; an empty
+    ///     string clears it. The baseline pass uses it when neither the purpose assignment nor the logical model of the
+    ///     file's tier sets a level.
     /// </param>
     /// <param name="budgetConfig">
     ///     When non-null, replaces the client's USD budget caps wholesale; each cap within it may be null to clear
@@ -89,7 +90,7 @@ public interface IClientAdminService
         bool? enableMultiPassUnion = null,
         bool? includeLinkedItemsInContext = null,
         IReadOnlyList<ReviewPassDto>? reviewPasses = null,
-        ReviewReasoningEffort? baselineReasoningEffort = null,
+        string? baselineReasoningLevel = null,
         BudgetConfigDto? budgetConfig = null,
         CommentSeverity? minimumSeverityToPost = null,
         IReadOnlyList<CommentSeverity>? autoResolveSeverities = null,

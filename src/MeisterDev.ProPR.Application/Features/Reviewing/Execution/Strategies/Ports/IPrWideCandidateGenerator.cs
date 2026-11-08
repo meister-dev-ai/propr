@@ -39,9 +39,9 @@ public interface IPrWideCandidateGenerator
     ///     completion event with its catch count, but the caller does not publish its candidates. The returned
     ///     candidates carry the shadow marker on their provenance.
     /// </param>
-    /// <param name="reasoningEffort">
-    ///     Reasoning effort configured for this pass, applied to the outbound chat requests unconditionally.
-    ///     <see cref="ReviewReasoningEffort.None" /> leaves the request without an effort level (current behavior).
+    /// <param name="reasoningLevel">
+    ///     Reasoning level chosen for this pass, applied to the outbound chat requests independent of reasoning capture,
+    ///     or null to send no level.
     /// </param>
     /// <param name="ct">Cancellation token.</param>
     Task<IReadOnlyList<CandidateReviewFinding>> GenerateCandidatesAsync(
@@ -52,6 +52,6 @@ public interface IPrWideCandidateGenerator
         PrWideGenerationBudget budget,
         int unionPassIndex,
         bool shadow,
-        ReviewReasoningEffort reasoningEffort,
+        string? reasoningLevel,
         CancellationToken ct);
 }

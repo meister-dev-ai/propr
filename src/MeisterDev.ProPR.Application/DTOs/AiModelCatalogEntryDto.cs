@@ -25,6 +25,9 @@ namespace MeisterDev.ProPR.Application.DTOs;
 /// <param name="OpenWeights">Whether the model's weights are openly available.</param>
 /// <param name="ReleaseDate">Release date, when known.</param>
 /// <param name="PricingLayer">Which scope layer supplied the effective pricing, so the UI can show that a negotiated rate is in force.</param>
+/// <param name="ReasoningLevels">
+///     The reasoning levels the model accepts, from the lowest to the highest effort, or null when the catalog states none.
+/// </param>
 public sealed record AiModelCatalogEntryDto(
     string ProviderId,
     string ProviderName,
@@ -44,4 +47,5 @@ public sealed record AiModelCatalogEntryDto(
     decimal? CacheWriteCostPer1MUsd,
     bool OpenWeights,
     DateOnly? ReleaseDate,
-    AiModelCatalogLayer PricingLayer);
+    AiModelCatalogLayer PricingLayer,
+    IReadOnlyList<string>? ReasoningLevels = null);

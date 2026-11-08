@@ -100,7 +100,7 @@ public sealed class AiRuntimeResolverTests
         catalog.GetPurposeRoleAsync(ClientId, AiPurpose.ReviewTriage, Arg.Any<CancellationToken>()).Returns("triage-role");
         logicalResolver
             .ResolveChatRuntimeAsync(ClientId, "triage-role", Arg.Any<IProtocolRecorder?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
-            .Returns(new ResolvedLogicalModelChatRuntime(runtime, "triage-role", LogicalModelLayer.ClientOverride, ReviewReasoningEffort.Medium));
+            .Returns(new ResolvedLogicalModelChatRuntime(runtime, "triage-role", LogicalModelLayer.ClientOverride, "medium"));
 
         var result = await this.Sut(logicalResolver, catalog).ResolveChatRuntimeAsync(ClientId, AiPurpose.ReviewTriage, CancellationToken.None);
 
@@ -377,7 +377,7 @@ public sealed class AiRuntimeResolverTests
         var expected = Substitute.For<IResolvedAiChatRuntime>();
         var logicalResolver = Substitute.For<ILogicalModelResolver>();
         logicalResolver.ResolveChatRuntimeAsync(ClientId, "triage-role", Arg.Any<IProtocolRecorder?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
-            .Returns(new ResolvedLogicalModelChatRuntime(expected, "triage-role", LogicalModelLayer.ClientOverride, ReviewReasoningEffort.Medium));
+            .Returns(new ResolvedLogicalModelChatRuntime(expected, "triage-role", LogicalModelLayer.ClientOverride, "medium"));
 
         var runtime = await this.Sut(logicalResolver, catalog)
             .ResolveChatRuntimeAsync(ClientId, AiPurpose.InsightsClassification, CancellationToken.None);
@@ -398,7 +398,7 @@ public sealed class AiRuntimeResolverTests
         var expected = Substitute.For<IResolvedAiChatRuntime>();
         var logicalResolver = Substitute.For<ILogicalModelResolver>();
         logicalResolver.ResolveChatRuntimeAsync(ClientId, "insights-role", Arg.Any<IProtocolRecorder?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
-            .Returns(new ResolvedLogicalModelChatRuntime(expected, "insights-role", LogicalModelLayer.ClientOverride, ReviewReasoningEffort.Medium));
+            .Returns(new ResolvedLogicalModelChatRuntime(expected, "insights-role", LogicalModelLayer.ClientOverride, "medium"));
 
         var runtime = await this.Sut(logicalResolver, catalog)
             .ResolveChatRuntimeAsync(ClientId, AiPurpose.InsightsClassification, CancellationToken.None);

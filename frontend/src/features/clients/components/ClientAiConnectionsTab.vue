@@ -455,19 +455,31 @@
                       <input v-model="model.supportsToolUse" type="checkbox" />
                       <span>Tool Use</span>
                     </label>
-                    <label class="checkbox-field">
-                      <input
-                        v-model="model.supportsReasoningEffortNone"
-                        type="checkbox"
-                        :data-testid="`ai-model-effort-none-${index}`"
-                      />
-                      <span>Accepts Reasoning Effort None</span>
-                    </label>
                   </div>
-                  <p v-if="model.kind === 'chat'" class="muted ai-model-toggle-hint" :data-testid="`ai-model-effort-none-hint-${index}`">
-                    With "Accepts Reasoning Effort None" selected, ProPR sends the reasoning effort none to this model
-                    for a review pass with the effort None. Without it, ProPR leaves the effort out, and the model
-                    uses its own default. Turn it on when the provider documents the effort none for this model.
+                  <!-- The levels go through setReasoningLevels, which clears a default level the new levels do not hold. -->
+                  <ReasoningLevelsField
+                    v-if="model.kind === 'chat'"
+                    :levels="model.reasoningLevels"
+                    v-model:source="model.reasoningLevelsSource"
+                    v-model:detect="model.detectReasoningLevels"
+                    class="ai-model-reasoning-levels"
+                    :test-id="`ai-model-reasoning-levels-${index}`"
+                    @update:levels="setReasoningLevels(model, $event)"
+                  />
+                  <label v-if="model.kind === 'chat'" class="form-field ai-model-default-level">
+                    <span>Default Level</span>
+                    <ReasoningLevelSelect
+                      v-model="model.defaultReasoningLevel"
+                      :levels="model.reasoningLevels"
+                      :inherited-level="null"
+                      inherited-from=""
+                      :test-id="`ai-model-default-level-${index}`"
+                    />
+                  </label>
+                  <p v-if="model.kind === 'chat'" class="muted ai-model-toggle-hint" :data-testid="`ai-model-default-level-hint-${index}`">
+                    ProPR sends the default level to this model for a call that no review pass, purpose assignment,
+                    logical model or baseline level chooses a level for. With Provider default, ProPR sends no level,
+                    and the provider applies its own default.
                   </p>
                 </div>
               </div>
@@ -704,12 +716,15 @@ import ModelCatalogPicker from './ModelCatalogPicker.vue'
 import ProviderComputedFieldValue from './ProviderComputedFieldValue.vue'
 import ProviderCredentialFieldInputs from './ProviderCredentialFieldInputs.vue'
 import ProviderDeclaredFieldInput from './ProviderDeclaredFieldInput.vue'
+import ReasoningLevelSelect from './ReasoningLevelSelect.vue'
+import ReasoningLevelsField from './ReasoningLevelsField.vue'
 import { listModels as listCatalogModels, listProviders as listCatalogProviders } from '@/services/modelCatalogService'
 
 import { listEffectiveForClient, type LogicalModelResponse } from '@/services/logicalModelsService'
 import { ClientDetailVmKey, type ReviewPassEntry } from '@/features/clients/view-models/useClientDetailViewModel'
 import {
   applyCatalogEntryToModel,
+  setReasoningLevels,
   unavailableReasonText,
   unavailableRemedyText,
   verificationChipClass,
@@ -1086,6 +1101,15 @@ const storedSecretNote = (field: AiDeclaredFieldDto): string | null =>
 .ai-model-toggle-hint {
   margin: 0.5rem 0 0;
   font-size: 0.8rem;
+}
+
+.ai-model-reasoning-levels {
+  margin-top: 1rem;
+}
+
+.ai-model-default-level {
+  margin: 1rem 0 0;
+  max-width: 24rem;
 }
 
 .ai-subsection {

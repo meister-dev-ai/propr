@@ -138,6 +138,7 @@ public static class ClientsModuleServiceCollectionExtensions
             services.AddScoped<ILogicalModelCatalogRepository, LogicalModelCatalogRepository>();
             services.AddScoped<ILogicalModelResolver, LogicalModelResolver>();
             services.AddScoped<ILogicalModelMigrationBackfill, LogicalModelMigrationBackfill>();
+            services.AddScoped<IConfiguredModelReasoningLevelBackfill, ConfiguredModelReasoningLevelBackfill>();
         }
 
         return services;

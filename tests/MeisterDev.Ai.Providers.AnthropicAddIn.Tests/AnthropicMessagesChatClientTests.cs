@@ -572,6 +572,81 @@ public sealed class AnthropicMessagesChatClientTests
         }
     }
 
+    // A model with adaptive thinking takes each level as the effort of the same name, and the allowance of the level
+    // keeps room for the answer under the cap.
+    [Theory]
+    [InlineData("low", 2048)]
+    [InlineData("medium", 8192)]
+    [InlineData("high", 24576)]
+    [InlineData("xhigh", 32768)]
+    [InlineData("max", 65536)]
+    public async Task ALevel_ReachesAModelWithAdaptiveThinkingByItsName(string level, int allowance)
+    {
+        var endpoint = new FakeAnthropicEndpoint().Responds(TextResponse("ok"));
+
+        await Client(endpoint).GetResponseAsync(
+            [new ChatMessage(ChatRole.User, "hello")],
+            Reasoning(ProviderReasoningEffort.High, new ChatOptions { MaxOutputTokens = 4000 }, level: level));
+
+        var body = JsonDocument.Parse(endpoint.Bodies[0]).RootElement;
+        Assert.Equal("adaptive", body.GetProperty("thinking").GetProperty("type").GetString());
+        Assert.Equal(level, body.GetProperty("output_config").GetProperty("effort").GetString());
+        Assert.Equal(4000 + allowance, body.GetProperty("max_tokens").GetInt32());
+    }
+
+    // A model with a thinking budget has no level above high, so it thinks at xhigh and max with the budget of high.
+    [Theory]
+    [InlineData("low", 2048)]
+    [InlineData("medium", 8192)]
+    [InlineData("high", 24576)]
+    [InlineData("xhigh", 24576)]
+    [InlineData("max", 24576)]
+    public async Task ALevel_ReachesAModelWithAThinkingBudgetAsTheBudgetOfTheLevel(string level, int budget)
+    {
+        var endpoint = new FakeAnthropicEndpoint().Responds(TextResponse("ok"));
+
+        await Client(endpoint, model: BudgetModel).GetResponseAsync(
+            [new ChatMessage(ChatRole.User, "hello")],
+            Reasoning(ProviderReasoningEffort.High, new ChatOptions { MaxOutputTokens = 4000 }, level: level));
+
+        var body = JsonDocument.Parse(endpoint.Bodies[0]).RootElement;
+        Assert.Equal("enabled", body.GetProperty("thinking").GetProperty("type").GetString());
+        Assert.Equal(budget, Budget(endpoint.Bodies[0]));
+        Assert.Equal(4000 + budget, body.GetProperty("max_tokens").GetInt32());
+        Assert.False(body.TryGetProperty("output_config", out _));
+    }
+
+    [Theory]
+    [InlineData("claude-opus-5")]
+    [InlineData("claude-haiku-4-5")]
+    public async Task TheLevelNone_LeavesThinkingOffWhateverTheNeutralEffort(string modelId)
+    {
+        var endpoint = new FakeAnthropicEndpoint().Responds(TextResponse("ok"));
+
+        await Client(endpoint, model: ModelNamed(modelId)).GetResponseAsync(
+            [new ChatMessage(ChatRole.User, "hello")],
+            Reasoning(ProviderReasoningEffort.High, new ChatOptions { MaxOutputTokens = 4000 }, level: "none"));
+
+        var body = JsonDocument.Parse(endpoint.Bodies[0]).RootElement;
+        Assert.False(body.TryGetProperty("thinking", out _));
+        Assert.False(body.TryGetProperty("output_config", out _));
+        Assert.Equal(4000, body.GetProperty("max_tokens").GetInt32());
+    }
+
+    // The level decides over the neutral effort. A level this family does not send, such as minimal, is read from the
+    // neutral effort.
+    [Theory]
+    [InlineData("medium", ProviderReasoningEffort.High, "medium")]
+    [InlineData("minimal", ProviderReasoningEffort.Low, "low")]
+    public async Task ALevelThisFamilySends_DecidesOverTheNeutralEffort(string level, ProviderReasoningEffort effort, string expected)
+    {
+        var endpoint = new FakeAnthropicEndpoint().Responds(TextResponse("ok"));
+
+        await Client(endpoint).GetResponseAsync([new ChatMessage(ChatRole.User, "hello")], Reasoning(effort, level: level));
+
+        Assert.Equal(expected, JsonDocument.Parse(endpoint.Bodies[0]).RootElement.GetProperty("output_config").GetProperty("effort").GetString());
+    }
+
     // With thinking on, the provider verifies its own signature over the block and refuses an assistant turn
     // whose reasoning was dropped before its tool call.
     [Fact]
@@ -694,10 +769,14 @@ public sealed class AnthropicMessagesChatClientTests
     }
 
     /// <summary>Asks for reasoning the way a caller does: neutrally, through the per-client raw representation.</summary>
-    private static ChatOptions Reasoning(ProviderReasoningEffort effort, ChatOptions? options = null, bool captureReasoning = true)
+    private static ChatOptions Reasoning(
+        ProviderReasoningEffort effort,
+        ChatOptions? options = null,
+        bool captureReasoning = true,
+        string? level = null)
     {
         options ??= new ChatOptions();
-        options.RawRepresentationFactory = _ => new ProviderReasoningRequest(effort, captureReasoning);
+        options.RawRepresentationFactory = _ => new ProviderReasoningRequest(effort, captureReasoning) { Level = level };
         return options;
     }
 

@@ -413,7 +413,10 @@ saved bindings. See [client model selection](../ai/credentials.md#client-model-s
 | `supportedProtocolModes` | Use installed family declarations from `permitted-providers`. Omission infers compatible modes; incompatible explicit modes are rejected. |
 | `tokenizerName`, `maxInputTokens`, `embeddingDimensions` | An embedding model can omit them, and ProPR fills in each missing value as described under [values of an embedding model](../ai/models-and-catalog.md#values-of-an-embedding-model). A stated tokenizer must be `cl100k_base`, `o200k_base`, `o200k_harmony`, `r50k_base`, `p50k_base` or `p50k_edit`; another returns 400 on `configuredModels[i].tokenizerName`. A stated input limit must be positive and a stated width from 64 through 4096. |
 | `supportsStructuredOutput`, `supportsToolUse` | Both flags default to false. |
-| `supportsReasoningEffortNone` | The flag defaults to false, and discovered models carry false. With true, ProPR sends the reasoning effort `none` to the model for a call with the effort `none`. With false, ProPR leaves the effort out, and the model uses its own default. Set it to true when the provider documents the effort `none` for the model - see [reasoning effort](../ai/purposes.md#reasoning-effort). |
+| `reasoningLevels` | The levels a chat model accepts, by the provider's names, for example `none`, `low` or `max`. ProPR trims and lowercases each name and sorts the shared names from the lowest to the highest effort. A name has 1 to 32 characters, lowercase letters, digits, hyphens and underscores; another returns 400 on `configuredModels[i].reasoningLevels`. An empty list means that the model accepts no level. Omitted, the stored levels of a saved model stay, and a new model gets the levels of the catalog and the provider family - see [reasoning levels of a model](../ai/models-and-catalog.md#reasoning-levels-of-a-model). |
+| `reasoningLevelsSource` | Values are `provider`, `catalog`, `addIn` and `operator`. A stated list without a source counts as `operator`. |
+| `detectReasoningLevels` | With true, ProPR replaces the stated and stored levels with the detected ones. |
+| `defaultReasoningLevel` | The level ProPR sends to the model for a call that no other place chooses a level for, or null for the provider's default. It has to be one of the model's levels; another returns 400 on `configuredModels[i].defaultReasoningLevel` - see [reasoning level](../ai/purposes.md#reasoning-level). |
 | `maxContextTokens` | ProPR uses the context window for budgeting. |
 | `inputCostPer1MUsd`, `outputCostPer1MUsd`, `cachedInputCostPer1MUsd` | ProPR uses these prices for spend reporting. |
 | `id`, `source`, `lastSeenAt` | Round-trip discovery metadata; hand-written models can omit it. Source values are `discovered`, `manual` and `knownCatalog`. |
@@ -444,7 +447,9 @@ Unmapped purposes cannot perform their workload.
 | `defaultQueryParams` | Supply provider settings such as Bedrock `region` or Vertex AI `project`; see [provider setup notes](../ai/credentials.md#provider-specific-setup-notes). |
 | `defaultHeaders` | Supply headers required by a gateway and probe the configuration. |
 | Logical-model `capability` | Use `chat` or `embedding`. |
-| Logical-model `reasoningEffort` | Use a supported [reasoning effort](../ai/purposes.md#reasoning-effort). |
+| Logical-model `reasoningLevel` | Use one of the levels of the referenced model, or null to leave it to the model's default level - see [reasoning level](../ai/purposes.md#reasoning-level). |
+| Purpose `reasoningLevel` | `PUT .../logical-models/purposes/{purpose}` takes an optional `reasoningLevel` next to `logicalModelName`; a level the model behind the logical model does not list returns 400. |
+| Client `baselineReasoningLevel` | `PATCH /api/clients/{clientId}` sets the level of the baseline review pass; an empty string clears it. A review pass entry takes an optional `reasoningLevel`. |
 
 ## Guided discovery endpoints
 
