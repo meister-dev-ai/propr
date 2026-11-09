@@ -29,3 +29,26 @@ public interface IFindingMergeJudge
         Guid clientId,
         CancellationToken ct = default);
 }
+
+/// <summary>
+///     A merge judge that calls a model and reports what each judgment consumed. The semantic deduplicator collects
+///     the spend, and the synthesis adds it to its protocol, so the job's token totals and cost include the judge.
+/// </summary>
+public interface ISpendReportingFindingMergeJudge : IFindingMergeJudge
+{
+    /// <summary>Judges one pair as <see cref="IFindingMergeJudge.AreSameDefectClassAsync" /> does and reports the spend.</summary>
+    /// <param name="first">First candidate finding.</param>
+    /// <param name="second">Second candidate finding.</param>
+    /// <param name="clientId">Client whose model binding governs the judgment.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<FindingMergeJudgment> JudgeAsync(
+        CandidateReviewFinding first,
+        CandidateReviewFinding second,
+        Guid clientId,
+        CancellationToken ct = default);
+}
+
+/// <summary>The decision of a merge judge and what the model call behind it consumed.</summary>
+/// <param name="SameDefectClass">True when the two findings may be collapsed into one.</param>
+/// <param name="Spend">The tokens of the model call, or <see langword="null" /> when no model reported usage.</param>
+public sealed record FindingMergeJudgment(bool SameDefectClass, ModelCallSpend? Spend);

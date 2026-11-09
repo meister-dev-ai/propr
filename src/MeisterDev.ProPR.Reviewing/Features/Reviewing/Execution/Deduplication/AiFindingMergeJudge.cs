@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text.Json;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -16,14 +17,27 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Deduplica
 ///     verifier uses — and asks a skeptical bounded call whether two findings describe the same defect. It is
 ///     degraded-safe and conservative: any missing binding, parse failure, or exception returns
 ///     <see langword="false" />, so the deduplicator keeps both findings rather than risk merging distinct bugs.
-///     An embeddings-based judge is an alternative implementation of the same interface.
+///     An embeddings-based judge is an alternative implementation of the same interface. Each judgment reports the
+///     tokens of its call, so the job's totals and cost include the judge.
 /// </summary>
-public sealed class AiFindingMergeJudge(IAiRuntimeResolver? aiRuntimeResolver = null) : IFindingMergeJudge
+public sealed class AiFindingMergeJudge(IAiRuntimeResolver? aiRuntimeResolver = null) : ISpendReportingFindingMergeJudge
 {
     private const int MaxMessageChars = 1200;
 
+    private static readonly FindingMergeJudgment KeepBoth = new(false, null);
+
     /// <inheritdoc />
     public async Task<bool> AreSameDefectClassAsync(
+        CandidateReviewFinding first,
+        CandidateReviewFinding second,
+        Guid clientId,
+        CancellationToken ct = default)
+    {
+        return (await this.JudgeAsync(first, second, clientId, ct).ConfigureAwait(false)).SameDefectClass;
+    }
+
+    /// <inheritdoc />
+    public async Task<FindingMergeJudgment> JudgeAsync(
         CandidateReviewFinding first,
         CandidateReviewFinding second,
         Guid clientId,
@@ -34,7 +48,7 @@ public sealed class AiFindingMergeJudge(IAiRuntimeResolver? aiRuntimeResolver = 
 
         if (aiRuntimeResolver is null || clientId == Guid.Empty)
         {
-            return false;
+            return KeepBoth;
         }
 
         try
@@ -51,7 +65,7 @@ public sealed class AiFindingMergeJudge(IAiRuntimeResolver? aiRuntimeResolver = 
                 new ChatOptions { ModelId = runtime.Model.RemoteModelId },
                 ct).ConfigureAwait(false);
 
-            return ParseSameDefect(response.Text);
+            return new FindingMergeJudgment(ParseSameDefect(response.Text), MeasureSpend(runtime, response));
         }
         catch (OperationCanceledException)
         {
@@ -60,8 +74,28 @@ public sealed class AiFindingMergeJudge(IAiRuntimeResolver? aiRuntimeResolver = 
         catch (Exception)
         {
             // Degraded-safe: when the judgment cannot be made, keep both findings.
-            return false;
+            return KeepBoth;
         }
+    }
+
+    // A response without a usage payload extracts as all-zero. It is not reported, because a breakdown line with
+    // zero tokens would state that the call was free.
+    private static ModelCallSpend? MeasureSpend(IResolvedAiChatRuntime runtime, ChatResponse response)
+    {
+        var usage = AiTokenUsageExtractor.FromResponse(response);
+        if (usage.InputTokens <= 0 && usage.OutputTokens <= 0)
+        {
+            return null;
+        }
+
+        return new ModelCallSpend(
+            runtime.Model.RemoteModelId,
+            runtime.LogicalModelName,
+            usage.InputTokens,
+            usage.OutputTokens,
+            usage.CachedInputTokens,
+            usage.CacheWriteTokens,
+            usage.ReasoningTokens);
     }
 
     private static string BuildSystemPrompt()

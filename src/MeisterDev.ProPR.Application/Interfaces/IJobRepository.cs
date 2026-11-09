@@ -209,8 +209,10 @@ public interface IJobRepository : IReviewFileResultStore
     ///     <see cref="ProtocolEvent.PhaseTimings" /> jsonb column. The overview neither serializes nor reads phase
     ///     timings server-side, and on heavy traces that column dominates the load; excluding it keeps the polled
     ///     overview responsive. The text columns (<c>InputTextSample</c>/<c>SystemPrompt</c>/<c>OutputSummary</c>)
-    ///     remain so the reader's pass-badge resolvers keep working. Returns <see langword="null" /> if no job with
-    ///     the given id exists.
+    ///     are loaded only for the events whose bodies the reader's pass-badge resolvers parse, and the output of
+    ///     a failed event. Every other event carries no input or prompt, and an empty output when it recorded one,
+    ///     because the overview replaces those bodies with a placeholder. Returns <see langword="null" /> if no job
+    ///     with the given id exists.
     /// </summary>
     Task<ReviewJob?> GetByIdWithProtocolsForOverviewAsync(Guid id, CancellationToken ct = default);
 

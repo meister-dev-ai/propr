@@ -66,7 +66,9 @@ public sealed class ClientsController(
             client.ReviewEveryIncrementEnabled,
             client.WithholdOutOfScopeFindings,
             client.AdmissionPolicyOrEmpty,
-            client.FindingBadgeStyle);
+            client.FindingBadgeStyle,
+            client.MinimumRiskSeverityToPost,
+            client.WithheldFindingTypesOrEmpty);
     }
 
     private IActionResult? ValidateRequest(ValidationResult result)
@@ -463,7 +465,9 @@ public sealed class ClientsController(
             request.WithholdOutOfScopeFindings,
             request.AdmissionPolicy,
             ct,
-            request.FindingBadgeStyle);
+            request.FindingBadgeStyle,
+            request.MinimumRiskSeverityToPost,
+            request.WithheldFindingTypes);
         return client is null ? this.NotFound() : this.Ok(ToClientResponse(client));
     }
 }
@@ -506,7 +510,9 @@ public sealed record ClientResponse(
     bool ReviewEveryIncrementEnabled = false,
     bool WithholdOutOfScopeFindings = false,
     ReviewAdmissionPolicyDto? AdmissionPolicy = null,
-    FindingBadgeStyle FindingBadgeStyle = FindingBadgeStyle.ShieldsIo);
+    FindingBadgeStyle FindingBadgeStyle = FindingBadgeStyle.ShieldsIo,
+    FindingRiskSeverity MinimumRiskSeverityToPost = FindingRiskSeverity.Low,
+    IReadOnlyList<string>? WithheldFindingTypes = null);
 
 /// <summary>One entry in a client's ordered review-pass list: an additional multi-pass union pass bound to a model.</summary>
 /// <param name="Ordinal">Zero-based position of this pass after the implicit tier baseline pass.</param>
@@ -570,6 +576,9 @@ public sealed record CreateClientRequest(string DisplayName, [property: JsonRequ
 ///     Request body for patching a client. All fields are optional; omitted fields are left unchanged.
 ///     Set <see cref="CustomSystemMessage" /> to <c>""</c> (empty string) to clear an existing value.
 ///     Set <see cref="AutoResolveSeverities" /> to an empty array to clear the auto-resolve set.
+///     <see cref="MinimumRiskSeverityToPost" /> is low, medium, high or critical; low posts every finding.
+///     <see cref="WithheldFindingTypes" /> lists the core finding types that are not posted; an empty array posts
+///     every type.
 ///     <see cref="OutputLanguage" /> is an IETF BCP 47 language tag; a blank value resets it to the default.
 ///     <see cref="EnableEvidenceBackedVerification" /> and <see cref="EnableLanguageRobustScreening" /> are removed settings:
 ///     a request that sets either of them is refused with 400 Bad Request, which states why the setting was removed.
@@ -594,4 +603,6 @@ public sealed record PatchClientRequest(
     ReviewAdmissionPolicyDto? AdmissionPolicy = null,
     bool? EnableEvidenceBackedVerification = null,
     bool? EnableLanguageRobustScreening = null,
-    FindingBadgeStyle? FindingBadgeStyle = null);
+    FindingBadgeStyle? FindingBadgeStyle = null,
+    FindingRiskSeverity? MinimumRiskSeverityToPost = null,
+    IReadOnlyList<string>? WithheldFindingTypes = null);

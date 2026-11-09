@@ -128,6 +128,22 @@ public sealed class ClientRecord
     public bool WithholdOutOfScopeFindings { get; set; } = false;
 
     /// <summary>
+    ///     Lowest assessed risk a review finding must have for its comment to be published to the SCM provider.
+    ///     Findings below it stay in the persisted review result but are not posted. A finding without a complete
+    ///     risk assessment is published. Defaults to <see cref="FindingRiskSeverity.Low" />, which publishes every
+    ///     finding.
+    /// </summary>
+    public FindingRiskSeverity MinimumRiskSeverityToPost { get; set; } = FindingRiskSeverity.Low;
+
+    /// <summary>
+    ///     Core finding types whose findings are not published to the SCM provider. A finding is held back when every
+    ///     core type it carries is in this list, and a finding without a core type is published. Empty by default, so
+    ///     every type is published, including a type the taxonomy adds later. The findings stay in the persisted
+    ///     review result either way.
+    /// </summary>
+    public IReadOnlyList<string> WithheldFindingTypes { get; set; } = [];
+
+    /// <summary>
     ///     Tags a runner must declare before this client's reviews may be offered to it, comma-separated.
     ///     Empty by default, which every runner satisfies.
     ///     <para>

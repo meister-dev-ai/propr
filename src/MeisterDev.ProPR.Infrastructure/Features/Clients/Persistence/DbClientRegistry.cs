@@ -231,6 +231,26 @@ public sealed class DbClientRegistry(
     }
 
     /// <inheritdoc />
+    public async Task<FindingRiskSeverity> GetMinimumRiskSeverityToPostAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return await dbContext.Clients
+                   .Where(c => c.Id == clientId)
+                   .Select(c => (FindingRiskSeverity?)c.MinimumRiskSeverityToPost)
+                   .FirstOrDefaultAsync(ct)
+               ?? FindingRiskSeverity.Low;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<string>> GetWithheldFindingTypesAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return await dbContext.Clients
+                   .Where(c => c.Id == clientId)
+                   .Select(c => c.WithheldFindingTypes)
+                   .FirstOrDefaultAsync(ct)
+               ?? [];
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<ReviewPassSpec>> GetReviewPassesAsync(Guid clientId, CancellationToken ct = default)
     {
         return await dbContext.ClientReviewPasses

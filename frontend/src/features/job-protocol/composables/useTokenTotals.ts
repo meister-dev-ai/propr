@@ -6,9 +6,8 @@ import type { Ref } from 'vue'
 import type { JobDetail, ReviewProtocolPass, TokenBreakdownEntry } from '../types'
 
 /**
- * Derives the aggregate token totals and the per-connection/model breakdown
- * shown on the Tokens tab from the loaded protocol passes and job detail.
- * Pure computeds over the two input refs — no internal state.
+ * Derives the aggregate token totals from the loaded protocol passes and the per-tier breakdown shown on the
+ * Tokens tab from the job detail. Pure computeds over the two input refs, without internal state.
  */
 export function useTokenTotals(
     protocols: Ref<ReviewProtocolPass[]>,
@@ -27,9 +26,28 @@ export function useTokenTotals(
         Math.max(0, totalInputTokens.value - totalCachedInputTokens.value),
     )
 
-    const protocolTokenBreakdown = computed<TokenBreakdownEntry[]>(() => {
-        const grouped = new Map<string, TokenBreakdownEntry>()
+    const tokenBreakdown = computed<TokenBreakdownEntry[]>(() => {
+        // The job records every model call under the tier, logical model and model that answered it, with the cost
+        // of that row. A protocol pass also carries calls of other tiers, for example triage and verification, so
+        // grouping passes by their own tier puts those tokens under the wrong row.
+        const persisted = (jobDetail.value?.tokenBreakdown ?? [])
+            .filter(entry => (entry.totalInputTokens ?? 0) > 0 || (entry.totalOutputTokens ?? 0) > 0)
+            .map<TokenBreakdownEntry>(entry => ({
+                connectionCategory: entry.connectionCategory ?? null,
+                modelId: entry.modelId ?? null,
+                logicalModelName: entry.logicalModelName ?? null,
+                totalInputTokens: entry.totalInputTokens ?? 0,
+                totalOutputTokens: entry.totalOutputTokens ?? 0,
+                totalCachedInputTokens: entry.totalCachedInputTokens ?? 0,
+                estimatedCostUsd: entry.estimatedCostUsd ?? null,
+                costIsApproximate: Boolean(entry.costIsApproximate),
+            }))
+        if (persisted.length > 0) {
+            return sortByTokens(persisted)
+        }
 
+        // Jobs from before the job recorded a breakdown fall back to the protocol passes, which carry no cost.
+        const grouped = new Map<string, TokenBreakdownEntry>()
         protocols.value.forEach(protocol => {
             const input = protocol.totalInputTokens ?? 0
             const output = protocol.totalOutputTokens ?? 0
@@ -58,44 +76,20 @@ export function useTokenTotals(
             })
         })
 
-        // The protocol passes carry no cost; enrich the recomputed per-tier rows with the
-        // USD cost persisted on ReviewJob.TokenBreakdown (computed once at review time).
-        const persistedCost = new Map<string, { cost: number | null; approximate: boolean }>()
-        for (const entry of jobDetail.value?.tokenBreakdown ?? []) {
-            const category = entry.connectionCategory ?? null
-            const model = entry.modelId ?? null
-            const key = `${String(category ?? 'unknown')}|${model ?? '(default)'}`
-            persistedCost.set(key, {
-                cost: entry.estimatedCostUsd ?? null,
-                approximate: Boolean(entry.costIsApproximate),
-            })
-        }
-        grouped.forEach((entry, key) => {
-            const match = persistedCost.get(key)
-            if (match) {
-                entry.estimatedCostUsd = match.cost
-                entry.costIsApproximate = match.approximate
-            }
-        })
-
-        return Array.from(grouped.values()).sort((left, right) => {
-            const leftTotal = left.totalInputTokens + left.totalOutputTokens
-            const rightTotal = right.totalInputTokens + right.totalOutputTokens
-            if (leftTotal !== rightTotal) {
-                return rightTotal - leftTotal
-            }
-
-            return `${left.connectionCategory ?? ''}|${left.modelId ?? ''}`.localeCompare(`${right.connectionCategory ?? ''}|${right.modelId ?? ''}`)
-        })
+        return sortByTokens(Array.from(grouped.values()))
     })
 
-    const protocolBreakdownConsistent = computed(() => {
-        if (protocolTokenBreakdown.value.length === 0) {
+    const breakdownConsistent = computed(() => {
+        if ((jobDetail.value?.tokenBreakdown ?? []).length > 0) {
             return jobDetail.value?.breakdownConsistent ?? null
         }
 
-        const breakdownInput = protocolTokenBreakdown.value.reduce((sum, entry) => sum + entry.totalInputTokens, 0)
-        const breakdownOutput = protocolTokenBreakdown.value.reduce((sum, entry) => sum + entry.totalOutputTokens, 0)
+        if (tokenBreakdown.value.length === 0) {
+            return null
+        }
+
+        const breakdownInput = tokenBreakdown.value.reduce((sum, entry) => sum + entry.totalInputTokens, 0)
+        const breakdownOutput = tokenBreakdown.value.reduce((sum, entry) => sum + entry.totalOutputTokens, 0)
         return breakdownInput === totalInputTokens.value && breakdownOutput === totalOutputTokens.value
     })
 
@@ -104,7 +98,21 @@ export function useTokenTotals(
         totalOutputTokens,
         totalCachedInputTokens,
         totalEffectiveInputTokens,
-        protocolTokenBreakdown,
-        protocolBreakdownConsistent,
+        tokenBreakdown,
+        breakdownConsistent,
     }
+}
+
+function sortByTokens(entries: TokenBreakdownEntry[]): TokenBreakdownEntry[] {
+    return entries.sort((left, right) => {
+        const leftTotal = left.totalInputTokens + left.totalOutputTokens
+        const rightTotal = right.totalInputTokens + right.totalOutputTokens
+        if (leftTotal !== rightTotal) {
+            return rightTotal - leftTotal
+        }
+
+        const leftKey = `${left.connectionCategory ?? ''}|${left.logicalModelName ?? ''}|${left.modelId ?? ''}`
+        const rightKey = `${right.connectionCategory ?? ''}|${right.logicalModelName ?? ''}|${right.modelId ?? ''}`
+        return leftKey.localeCompare(rightKey)
+    })
 }

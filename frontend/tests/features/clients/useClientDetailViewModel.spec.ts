@@ -438,8 +438,35 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
         minimumSeverityToPost: 'info',
         autoResolveSeverities: [],
         withholdOutOfScopeFindings: true,
+        minimumRiskSeverityToPost: 'low',
+        withheldFindingTypes: [],
       },
     })
+  })
+
+  it('saves the minimum risk and the withheld finding types', async () => {
+    mockPatch.mockResolvedValue({
+      data: { ...sampleClient, minimumRiskSeverityToPost: 'high', withheldFindingTypes: ['naming-clarity'] },
+      response: { ok: true },
+    })
+    const vm = useClientDetailViewModel({ autoLoad: false })
+    await vm.loadClient()
+
+    // A client saved before these settings existed carries neither field, and that reads as posting everything.
+    expect(vm.editedMinimumRiskSeverityToPost.value).toBe('low')
+    expect(vm.editedWithheldFindingTypes.value).toEqual([])
+    expect(vm.isPostConfigButtonEnabled()).toBe(false)
+
+    vm.editedMinimumRiskSeverityToPost.value = 'high'
+    vm.editedWithheldFindingTypes.value = ['naming-clarity']
+    expect(vm.isPostConfigButtonEnabled()).toBe(true)
+
+    await vm.savePostConfiguration()
+
+    expect(mockPatch).toHaveBeenCalledWith('/clients/{clientId}', expect.objectContaining({
+      body: expect.objectContaining({ minimumRiskSeverityToPost: 'high', withheldFindingTypes: ['naming-clarity'] }),
+    }))
+    expect(vm.isPostConfigButtonEnabled()).toBe(false)
   })
 
   it('activates the post-configuration Save when only out-of-scope withholding changed', async () => {

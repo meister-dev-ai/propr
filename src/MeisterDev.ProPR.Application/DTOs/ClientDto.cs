@@ -35,8 +35,13 @@ public sealed record ClientDto(
     bool ReviewEveryIncrementEnabled = false,
     bool WithholdOutOfScopeFindings = false,
     ReviewAdmissionPolicyDto? AdmissionPolicy = null,
-    FindingBadgeStyle FindingBadgeStyle = FindingBadgeStyle.ShieldsIo)
+    FindingBadgeStyle FindingBadgeStyle = FindingBadgeStyle.ShieldsIo,
+    FindingRiskSeverity MinimumRiskSeverityToPost = FindingRiskSeverity.Low,
+    IReadOnlyList<string>? WithheldFindingTypes = null)
 {
+    /// <summary>The core finding types that are not posted, or an empty list when every type is posted.</summary>
+    public IReadOnlyList<string> WithheldFindingTypesOrEmpty => this.WithheldFindingTypes ?? [];
+
     /// <summary>The ordered review-pass list, or an empty list when none are configured.</summary>
     public IReadOnlyList<ReviewPassDto> ReviewPassesOrEmpty => this.ReviewPasses ?? [];
 

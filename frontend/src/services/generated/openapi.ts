@@ -24988,6 +24988,8 @@ export interface components {
             withholdOutOfScopeFindings?: boolean;
             admissionPolicy?: components["schemas"]["ReviewAdmissionPolicyDto"];
             findingBadgeStyle?: components["schemas"]["FindingBadgeStyle"];
+            minimumRiskSeverityToPost?: components["schemas"]["FindingRiskSeverity"];
+            withheldFindingTypes?: string[] | null;
         };
         /** @description Client-scoped review profile response. */
         ClientReviewProfileResponse: {
@@ -27470,6 +27472,9 @@ export interface components {
          * @description Request body for patching a client. All fields are optional; omitted fields are left unchanged.
          *     Set MeisterDev.ProPR.Api.Controllers.PatchClientRequest.CustomSystemMessage to `""` (empty string) to clear an existing value.
          *     Set MeisterDev.ProPR.Api.Controllers.PatchClientRequest.AutoResolveSeverities to an empty array to clear the auto-resolve set.
+         *     MeisterDev.ProPR.Api.Controllers.PatchClientRequest.MinimumRiskSeverityToPost is low, medium, high or critical; low posts every finding.
+         *     MeisterDev.ProPR.Api.Controllers.PatchClientRequest.WithheldFindingTypes lists the core finding types that are not posted; an empty array posts
+         *     every type.
          *     MeisterDev.ProPR.Api.Controllers.PatchClientRequest.OutputLanguage is an IETF BCP 47 language tag; a blank value resets it to the default.
          *     MeisterDev.ProPR.Api.Controllers.PatchClientRequest.EnableEvidenceBackedVerification and MeisterDev.ProPR.Api.Controllers.PatchClientRequest.EnableLanguageRobustScreening are removed settings:
          *     a request that sets either of them is refused with 400 Bad Request, which states why the setting was removed.
@@ -27495,6 +27500,8 @@ export interface components {
             enableEvidenceBackedVerification?: boolean | null;
             enableLanguageRobustScreening?: boolean | null;
             findingBadgeStyle?: components["schemas"]["FindingBadgeStyle"];
+            minimumRiskSeverityToPost?: components["schemas"]["FindingRiskSeverity"];
+            withheldFindingTypes?: string[] | null;
         };
         /** @description Patch payload for the installation's premium capability overrides. */
         PatchLicensingOverridesRequest: {

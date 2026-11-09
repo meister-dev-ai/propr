@@ -5,7 +5,11 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import ClientPostConfigSection from '../ClientPostConfigSection.vue'
-import { ClientDetailVmKey, type CommentSeverity } from '@/features/clients/view-models/useClientDetailViewModel'
+import {
+  ClientDetailVmKey,
+  type CommentSeverity,
+  type FindingRiskSeverity,
+} from '@/features/clients/view-models/useClientDetailViewModel'
 
 function mountSection(options: { enabled?: boolean } = {}) {
   const savePostConfiguration = vi.fn()
@@ -13,6 +17,8 @@ function mountSection(options: { enabled?: boolean } = {}) {
   const editedMinimumSeverityToPost = ref<CommentSeverity>('info')
   const editedAutoResolveSeverities = ref<CommentSeverity[]>([])
   const editedWithholdOutOfScopeFindings = ref(false)
+  const editedMinimumRiskSeverityToPost = ref<FindingRiskSeverity>('low')
+  const editedWithheldFindingTypes = ref<string[]>([])
   const vm = {
     client: ref({ id: 'c1' }),
     saveError: ref(''),
@@ -20,6 +26,8 @@ function mountSection(options: { enabled?: boolean } = {}) {
     editedMinimumSeverityToPost,
     editedAutoResolveSeverities,
     editedWithholdOutOfScopeFindings,
+    editedMinimumRiskSeverityToPost,
+    editedWithheldFindingTypes,
     savePostConfiguration,
     isPostConfigButtonEnabled: () => options.enabled ?? true,
   }
@@ -72,6 +80,27 @@ describe('ClientPostConfigSection', () => {
     const { wrapper } = mountSection()
     const checkbox = wrapper.find('#withholdOutOfScopeFindings').element as HTMLInputElement
     expect(checkbox.checked).toBe(false)
+  })
+
+  it('binds the minimum-risk select to the view-model', async () => {
+    const { wrapper, vm } = mountSection()
+    expect(wrapper.findAll('#minimumRiskSeverityToPost option').map(option => option.attributes('value')))
+      .toEqual(['low', 'medium', 'high', 'critical'])
+    await wrapper.find('#minimumRiskSeverityToPost').setValue('high')
+    expect(vm.editedMinimumRiskSeverityToPost.value).toBe('high')
+  })
+
+  it('posts every finding type until a type is cleared', async () => {
+    const { wrapper, vm } = mountSection()
+    const checkboxes = wrapper.findAll('input[name="postFindingTypes"]')
+    expect(checkboxes).toHaveLength(11)
+    expect(checkboxes.every(checkbox => (checkbox.element as HTMLInputElement).checked)).toBe(true)
+
+    await wrapper.find('#postFindingType-naming-clarity').setValue(false)
+    expect(vm.editedWithheldFindingTypes.value).toEqual(['naming-clarity'])
+
+    await wrapper.find('#postFindingType-naming-clarity').setValue(true)
+    expect(vm.editedWithheldFindingTypes.value).toEqual([])
   })
 
   it('saves through the view-model when Save is clicked', async () => {

@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Domain.ValueObjects;
 
 namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
@@ -39,6 +40,12 @@ public sealed record FindingDeduplicationResult(IReadOnlyList<ReviewComment> Com
 
     /// <summary>Merge reason of comments that the token-similarity rules collapsed or consolidated across files.</summary>
     public const string TokenSimilarityReason = "token_similarity";
+
+    /// <summary>
+    ///     What the model calls of this deduplication consumed, one entry per call. Empty when no model was asked.
+    ///     The synthesis adds these tokens to its protocol.
+    /// </summary>
+    public IReadOnlyList<ModelCallSpend> Spend { get; init; } = [];
 
     /// <summary>
     ///     Builds the result of a deduplication step whose groups are not known, from its input and output. Every input

@@ -2,6 +2,8 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text.Json;
+using MeisterDev.ProPR.Application.AI;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Application.ValueObjects;
@@ -185,12 +187,17 @@ internal sealed class QualityFilterExecutor(
         };
     }
 
+    /// <summary>
+    ///     Filters <paramref name="comments" /> with one model call. When <paramref name="spend" /> is given, the tokens
+    ///     of that call are appended to it, so the caller can add them to the protocol of the step that ran the filter.
+    /// </summary>
     public async Task<List<ReviewComment>> ApplyAsync(
         Guid jobId,
         List<ReviewComment> comments,
         ReviewSystemContext reviewContext,
         IChatClient effectiveClient,
-        CancellationToken ct)
+        CancellationToken ct,
+        List<ModelCallSpend>? spend = null)
     {
         try
         {
@@ -199,13 +206,28 @@ internal sealed class QualityFilterExecutor(
             var systemPrompt = ReviewPrompts.BuildQualityFilterSystemPrompt(reviewContext);
             var userMessage = ReviewPrompts.BuildQualityFilterUserMessage(comments);
 
+            var modelId = reviewContext.ModelId ?? options.ModelId;
             var response = await effectiveClient.GetResponseAsync(
                 [
                     new ChatMessage(ChatRole.System, systemPrompt),
                     new ChatMessage(ChatRole.User, userMessage),
                 ],
-                new ChatOptions { ModelId = reviewContext.ModelId ?? options.ModelId, Temperature = reviewContext.Temperature },
+                new ChatOptions { ModelId = modelId, Temperature = reviewContext.Temperature },
                 ct);
+
+            var usage = AiTokenUsageExtractor.FromResponse(response);
+            if (spend is not null && (usage.InputTokens > 0 || usage.OutputTokens > 0))
+            {
+                spend.Add(
+                    new ModelCallSpend(
+                        modelId ?? string.Empty,
+                        null,
+                        usage.InputTokens,
+                        usage.OutputTokens,
+                        usage.CachedInputTokens,
+                        usage.CacheWriteTokens,
+                        usage.ReasoningTokens));
+            }
 
             var parsed = ParseResponse(response.Text ?? string.Empty, comments, reviewContext.FindingTypeVocabulary);
             var kept = parsed.Count > 0

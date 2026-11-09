@@ -36,6 +36,7 @@ export type CommentResolutionBehavior = components['schemas']['CommentResolution
 export type BudgetConfig = components['schemas']['BudgetConfigDto']
 export type ReviewAdmissionPolicy = components['schemas']['ReviewAdmissionPolicyDto']
 export type CommentSeverity = components['schemas']['CommentSeverity']
+export type FindingRiskSeverity = components['schemas']['FindingRiskSeverity']
 export type FindingBadgeStyle = components['schemas']['FindingBadgeStyle']
 
 export interface ClientDetailDto {
@@ -60,6 +61,10 @@ export interface ClientDetailDto {
   minimumSeverityToPost?: CommentSeverity | null
   autoResolveSeverities?: CommentSeverity[] | null
   withholdOutOfScopeFindings?: boolean | null
+  /** The lowest assessed risk a finding needs to be posted. Findings without a risk assessment are posted. */
+  minimumRiskSeverityToPost?: FindingRiskSeverity | null
+  /** Core finding types that are not posted. A finding is held back when every type it carries is listed. */
+  withheldFindingTypes?: string[] | null
   codeInsightsCollectionEnabled?: boolean | null
   /** The tenant of the client; a platform administrator reads its content only during an elevation. */
   tenantId?: string | null
@@ -108,6 +113,8 @@ export interface ClientDetailViewModel {
   editedMinimumSeverityToPost: Ref<CommentSeverity>
   editedAutoResolveSeverities: Ref<CommentSeverity[]>
   editedWithholdOutOfScopeFindings: Ref<boolean>
+  editedMinimumRiskSeverityToPost: Ref<FindingRiskSeverity>
+  editedWithheldFindingTypes: Ref<string[]>
   editedCodeInsightsCollectionEnabled: Ref<boolean>
   editedMonthlyBudgetSoftCapUsd: Ref<string>
   editedMonthlyBudgetHardCapUsd: Ref<string>
@@ -399,13 +406,18 @@ export function baselineReasoningLevelPatch(edited: string | null, stored: strin
 
 /** Two severity sets are equal when they contain the same severities regardless of order (and ignoring duplicates). */
 export function severitySetsEqual(left: CommentSeverity[], right: CommentSeverity[]): boolean {
+  return stringSetsEqual(left, right)
+}
+
+/** Two sets are equal when they contain the same values regardless of order (and ignoring duplicates). */
+export function stringSetsEqual(left: readonly string[], right: readonly string[]): boolean {
   const leftSet = new Set(left)
   const rightSet = new Set(right)
   if (leftSet.size !== rightSet.size) {
     return false
   }
-  for (const severity of leftSet) {
-    if (!rightSet.has(severity)) {
+  for (const value of leftSet) {
+    if (!rightSet.has(value)) {
       return false
     }
   }
@@ -458,6 +470,8 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const editedMinimumSeverityToPost = ref<CommentSeverity>('info')
   const editedAutoResolveSeverities = ref<CommentSeverity[]>([])
   const editedWithholdOutOfScopeFindings = ref(false)
+  const editedMinimumRiskSeverityToPost = ref<FindingRiskSeverity>('low')
+  const editedWithheldFindingTypes = ref<string[]>([])
   const editedCodeInsightsCollectionEnabled = ref(false)
   const editedMonthlyBudgetSoftCapUsd = ref('')
   const editedMonthlyBudgetHardCapUsd = ref('')
@@ -536,6 +550,8 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedMinimumSeverityToPost.value = nextClient.minimumSeverityToPost ?? 'info'
     editedAutoResolveSeverities.value = [...(nextClient.autoResolveSeverities ?? [])]
     editedWithholdOutOfScopeFindings.value = Boolean(nextClient.withholdOutOfScopeFindings)
+    editedMinimumRiskSeverityToPost.value = nextClient.minimumRiskSeverityToPost ?? 'low'
+    editedWithheldFindingTypes.value = [...(nextClient.withheldFindingTypes ?? [])]
     editedCodeInsightsCollectionEnabled.value = Boolean(nextClient.codeInsightsCollectionEnabled)
     editedMonthlyBudgetSoftCapUsd.value = capToInput(nextClient.budgetConfig?.monthlySoftCapUsd)
     editedMonthlyBudgetHardCapUsd.value = capToInput(nextClient.budgetConfig?.monthlyHardCapUsd)
@@ -862,6 +878,8 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
         minimumSeverityToPost: editedMinimumSeverityToPost.value,
         autoResolveSeverities: editedAutoResolveSeverities.value,
         withholdOutOfScopeFindings: editedWithholdOutOfScopeFindings.value,
+        minimumRiskSeverityToPost: editedMinimumRiskSeverityToPost.value,
+        withheldFindingTypes: editedWithheldFindingTypes.value,
       })
       if (isFailedPatch(result)) {
         saveError.value = extractValidationMessage(result.error, 'Failed to save post configuration.')
@@ -971,7 +989,9 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
         editedFindingBadgeStyle.value !== (client.value.findingBadgeStyle ?? 'shieldsIo') ||
         editedMinimumSeverityToPost.value !== (client.value.minimumSeverityToPost ?? 'info') ||
         !severitySetsEqual(editedAutoResolveSeverities.value, client.value.autoResolveSeverities ?? []) ||
-        editedWithholdOutOfScopeFindings.value !== Boolean(client.value.withholdOutOfScopeFindings)
+        editedWithholdOutOfScopeFindings.value !== Boolean(client.value.withholdOutOfScopeFindings) ||
+        editedMinimumRiskSeverityToPost.value !== (client.value.minimumRiskSeverityToPost ?? 'low') ||
+        !stringSetsEqual(editedWithheldFindingTypes.value, client.value.withheldFindingTypes ?? [])
       )
     )
   }
@@ -1037,6 +1057,8 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedMinimumSeverityToPost,
     editedAutoResolveSeverities,
     editedWithholdOutOfScopeFindings,
+    editedMinimumRiskSeverityToPost,
+    editedWithheldFindingTypes,
     editedCodeInsightsCollectionEnabled,
     editedMonthlyBudgetSoftCapUsd,
     editedMonthlyBudgetHardCapUsd,

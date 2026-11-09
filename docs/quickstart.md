@@ -145,7 +145,7 @@ with nothing posted is a normal outcome, not a failure: findings are filtered be
 | The row fails immediately | Open **Protocol ↗**; the row's summary column also shows the error. An unresolvable **Review default** purpose names that purpose in the message - go back to **AI Providers → Purposes**. |
 | The row stays pending | Another review is still running and the installation is Community edition, which runs one at a time - see [editions](reference/editions.md). Otherwise check `GET /healthz`: the `worker` check must be healthy - see [what the health checks mean](operate/observability.md#what-the-health-checks-mean). |
 | The review completes but the pull request has no comments | Check **System → Post review comments to SCM** on the client, then read the protocol - see [why a finding did not get posted](concepts/reviews.md#why-a-finding-did-not-get-posted). |
-| Fewer inline comments than the summary suggests | The gate and the per-client minimum severity to post both hold findings back - see [why a finding did not get posted](concepts/reviews.md#why-a-finding-did-not-get-posted). |
+| Fewer inline comments than the summary suggests | The gate and the post configuration of the client (minimum classification, minimum risk, finding types, changed lines) hold findings back - see [why a finding did not get posted](concepts/reviews.md#why-a-finding-did-not-get-posted). |
 
 For a symptom that is not in this table, [troubleshooting](operate/troubleshooting.md) routes by symptom
 across the whole documentation.

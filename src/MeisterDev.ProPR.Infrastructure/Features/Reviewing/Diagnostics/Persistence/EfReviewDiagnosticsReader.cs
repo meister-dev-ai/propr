@@ -33,6 +33,32 @@ public sealed class EfReviewDiagnosticsReader(
     // Bounds ONLY the DTO — the reader's Resolve*/TryGet* helpers parse the full entity values.
     private const int MaxEventBodyChars = 4000;
 
+    /// <summary>
+    ///     The events whose bodies the overview parses for the workspace, follow-up, repeated-judgment, ProRV and
+    ///     agent-session details of a pass. The overview load reads the bodies of these events only, because the
+    ///     overview sends a placeholder for every other body. A large review records about a gigabyte of prompts and
+    ///     outputs, and reading all of it made the overview take about 20 seconds. A resolver that starts to parse
+    ///     the body of another event needs that event's name in this list.
+    /// </summary>
+    internal static readonly string[] OverviewParsedEventNames =
+    [
+        "local_workspace_prepared",
+        "local_workspace_failed",
+        ReviewProtocolEventNames.AgenticFilePlanCreated,
+        ReviewProtocolEventNames.AgenticFileInvestigationResult,
+        ReviewProtocolEventNames.AgenticFileFollowUpDependencyRecorded,
+        ReviewProtocolEventNames.RepeatedJudgmentDecision,
+        ReviewProtocolEventNames.ProRVPrefilterAiCall,
+        ReviewProtocolEventNames.ProRVFocusedGuidanceApplied,
+        ReviewProtocolEventNames.ProRVPrefilterStarted,
+        ReviewProtocolEventNames.ProRVPrefilterSkipped,
+        ReviewProtocolEventNames.ProRVPrefilterCompleted,
+        ReviewProtocolEventNames.ProRVPrefilterFailed,
+        ReviewProtocolEventNames.ReviewAgentSessionBinding,
+        ReviewProtocolEventNames.ReviewAgentSessionTurn,
+        ReviewProtocolEventNames.ReviewAgentSessionFallback,
+    ];
+
     public async Task<GetReviewJobProtocolResult?> GetJobProtocolAsync(
         Guid jobId,
         bool includeEvents = true,

@@ -79,6 +79,13 @@ public interface IClientAdminService
     ///     off the pull request. They remain in the persisted review result either way.
     /// </param>
     /// <param name="ct">Cancellation token.</param>
+    /// <param name="minimumRiskSeverityToPost">
+    ///     When non-null, sets the lowest assessed risk a finding needs to be posted to the pull request.
+    /// </param>
+    /// <param name="withheldFindingTypes">
+    ///     When non-null, replaces the core finding types that are not posted to the pull request. An empty list posts
+    ///     every type.
+    /// </param>
     Task<ClientDto?> PatchAsync(
         Guid clientId,
         bool? isActive,
@@ -100,7 +107,9 @@ public interface IClientAdminService
         bool? withholdOutOfScopeFindings = null,
         ReviewAdmissionPolicyDto? admissionPolicy = null,
         CancellationToken ct = default,
-        FindingBadgeStyle? findingBadgeStyle = null);
+        FindingBadgeStyle? findingBadgeStyle = null,
+        FindingRiskSeverity? minimumRiskSeverityToPost = null,
+        IReadOnlyList<string>? withheldFindingTypes = null);
 
     /// <summary>Returns <c>true</c> when a client with <paramref name="clientId" /> exists.</summary>
     /// <param name="clientId">Client identifier.</param>

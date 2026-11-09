@@ -3,6 +3,7 @@
 
 using System.Text;
 using System.Text.Json;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.AI;
@@ -92,6 +93,7 @@ public sealed class AcceptanceForecastExecutor(IProtocolRecorder protocolRecorde
                         ],
                         new ChatOptions { ModelId = runtime.Model.RemoteModelId },
                         ct).ConfigureAwait(false);
+                    await this.AddCallTokensAsync(protocolId.Value, runtime, response, ct).ConfigureAwait(false);
 
                     var forecast = ParseForecast(response.Text, finding.FindingId);
                     if (forecast is null)
@@ -140,6 +142,29 @@ public sealed class AcceptanceForecastExecutor(IProtocolRecorder protocolRecorde
                 $"{ex.GetType().Name}: {Truncate(ex.Message, 220)}",
                 ct).ConfigureAwait(false);
         }
+    }
+
+    // Adds the tokens of one forecast call to the synthesis protocol, so the job's totals and cost include it. A
+    // response without a usage payload adds nothing.
+    private async Task AddCallTokensAsync(Guid protocolId, IResolvedAiChatRuntime runtime, ChatResponse response, CancellationToken ct)
+    {
+        var usage = AiTokenUsageExtractor.FromResponse(response);
+        if (usage.InputTokens <= 0 && usage.OutputTokens <= 0)
+        {
+            return;
+        }
+
+        await protocolRecorder.AddTokensAsync(
+            protocolId,
+            usage.InputTokens,
+            usage.OutputTokens,
+            AiConnectionModelCategory.Default,
+            runtime.Model.RemoteModelId,
+            ct,
+            usage.CachedInputTokens,
+            usage.CacheWriteTokens,
+            usage.ReasoningTokens,
+            runtime.LogicalModelName).ConfigureAwait(false);
     }
 
     private static AcceptanceForecast? ParseForecast(string? text, string findingId)

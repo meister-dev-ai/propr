@@ -135,11 +135,4 @@ describe('ModelCatalogSnapshotSection', () => {
     // The file itself is held by the component, so clearing the input does not unstage the snapshot.
     expect(wrapper.get('[data-testid="snapshot-file-name"]').text()).toBe('models.dev.json')
   })
-
-  it('explains that nothing is fetched automatically and overrides survive', () => {
-    const text = mount(ModelCatalogSnapshotSection).text()
-
-    expect(text).toContain('no outbound request')
-    expect(text).toContain('overrides are left')
-  })
 })

@@ -64,7 +64,8 @@ public sealed class SemanticFindingDeduplicator : IFindingDeduplicator
             commentsByFindingId[finding.FindingId] = comments[index];
         }
 
-        var groups = await this.GroupAsync(findings, clientId, ct).ConfigureAwait(false);
+        var spend = new List<ModelCallSpend>();
+        var groups = await this.GroupAsync(findings, clientId, spend, ct).ConfigureAwait(false);
 
         var survivorComments = groups
             .Select(group =>
@@ -102,7 +103,7 @@ public sealed class SemanticFindingDeduplicator : IFindingDeduplicator
         // Cross-file root-cause consolidation is orthogonal to same-file semantic merging; keep applying it so
         // findings that recur across files still collapse into one PR-level comment.
         var consolidated = FindingDeduplicator.Deduplicate(survivorComments, merges);
-        return new FindingDeduplicationResult(consolidated, merges);
+        return new FindingDeduplicationResult(consolidated, merges) { Spend = spend };
     }
 
     /// <summary>
@@ -124,7 +125,7 @@ public sealed class SemanticFindingDeduplicator : IFindingDeduplicator
             return findings;
         }
 
-        var groups = await this.GroupAsync(findings, clientId, ct).ConfigureAwait(false);
+        var groups = await this.GroupAsync(findings, clientId, [], ct).ConfigureAwait(false);
         var result = new List<CandidateReviewFinding>(groups.Count);
         foreach (var group in groups)
         {
@@ -135,9 +136,11 @@ public sealed class SemanticFindingDeduplicator : IFindingDeduplicator
     }
 
     // Assigns every finding to the first earlier group whose representative it may merge with, or to a new group.
+    // The judge spend of every pair is appended to spend.
     private async Task<List<MergeGroup>> GroupAsync(
         IReadOnlyList<CandidateReviewFinding> findings,
         Guid clientId,
+        List<ModelCallSpend> spend,
         CancellationToken ct)
     {
         var groups = new List<MergeGroup>();
@@ -148,7 +151,7 @@ public sealed class SemanticFindingDeduplicator : IFindingDeduplicator
             MergeGroup? target = null;
             foreach (var group in groups)
             {
-                if (await this.CanMergeAsync(group.Representative, finding, clientId, ct).ConfigureAwait(false))
+                if (await this.CanMergeAsync(group.Representative, finding, clientId, spend, ct).ConfigureAwait(false))
                 {
                     target = group;
                     break;
@@ -177,6 +180,7 @@ public sealed class SemanticFindingDeduplicator : IFindingDeduplicator
         CandidateReviewFinding first,
         CandidateReviewFinding second,
         Guid clientId,
+        List<ModelCallSpend> spend,
         CancellationToken ct)
     {
         if (!IsSameFile(first, second) || !this.IsOverlappingAnchor(first, second))
@@ -184,7 +188,18 @@ public sealed class SemanticFindingDeduplicator : IFindingDeduplicator
             return false;
         }
 
-        return await this._mergeJudge.AreSameDefectClassAsync(first, second, clientId, ct).ConfigureAwait(false);
+        if (this._mergeJudge is not ISpendReportingFindingMergeJudge reportingJudge)
+        {
+            return await this._mergeJudge.AreSameDefectClassAsync(first, second, clientId, ct).ConfigureAwait(false);
+        }
+
+        var judgment = await reportingJudge.JudgeAsync(first, second, clientId, ct).ConfigureAwait(false);
+        if (judgment.Spend is { } callSpend)
+        {
+            spend.Add(callSpend);
+        }
+
+        return judgment.SameDefectClass;
     }
 
     private static bool IsSameFile(CandidateReviewFinding first, CandidateReviewFinding second)

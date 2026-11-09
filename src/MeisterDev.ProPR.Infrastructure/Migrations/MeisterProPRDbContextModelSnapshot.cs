@@ -5091,6 +5091,12 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
 
+                    b.Property<int>("MinimumRiskSeverityToPost")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("minimum_risk_severity_to_post");
+
                     b.Property<int>("MinimumSeverityToPost")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -5147,6 +5153,13 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
+
+                    b.Property<string>("WithheldFindingTypes")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasColumnName("withheld_finding_types")
+                        .HasDefaultValueSql("''");
 
                     b.Property<bool>("WithholdOutOfScopeFindings")
                         .ValueGeneratedOnAdd()

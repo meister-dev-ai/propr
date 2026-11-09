@@ -87,6 +87,16 @@ public sealed class NoOpClientRegistry : IClientRegistry
         return Task.FromResult(false);
     }
 
+    public Task<FindingRiskSeverity> GetMinimumRiskSeverityToPostAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return Task.FromResult(FindingRiskSeverity.Low);
+    }
+
+    public Task<IReadOnlyList<string>> GetWithheldFindingTypesAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return Task.FromResult<IReadOnlyList<string>>([]);
+    }
+
     public Task<IReadOnlyList<ReviewPassSpec>> GetReviewPassesAsync(Guid clientId, CancellationToken ct = default)
     {
         return Task.FromResult<IReadOnlyList<ReviewPassSpec>>([]);

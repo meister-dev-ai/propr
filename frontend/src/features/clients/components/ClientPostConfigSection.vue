@@ -32,8 +32,47 @@
                     </select>
                     <p class="muted review-publication-copy">
                         Findings below this classification are not posted to the pull request. They stay visible
-                        in the ProPR review. Classification order: Error, Warning, Suggestion, Info.
-                        Risk severity, impact, likelihood and confidence do not change this publication setting.
+                        in the ProPR review. Classification order: Error, Warning, Suggestion, Info. The risk of a
+                        finding has its own setting below.
+                    </p>
+                </div>
+            </div>
+
+            <div class="inline-field-row review-publication-row">
+                <div class="form-field flex-1 review-publication-field">
+                    <label for="minimumRiskSeverityToPost">Minimum risk to post</label>
+                    <select id="minimumRiskSeverityToPost" v-model="editedMinimumRiskSeverityToPost"
+                        name="minimumRiskSeverityToPost">
+                        <option v-for="option in MIN_RISK_OPTIONS" :key="option.value" :value="option.value">
+                            {{ option.label }}
+                        </option>
+                    </select>
+                    <p class="muted review-publication-copy">
+                        Findings with an assessed risk below this level are not posted to the pull request. They
+                        stay visible in the ProPR review. Risk order: Critical, High, Medium, Low. The risk follows
+                        from the impact and the likelihood of a finding. A finding without a complete risk
+                        assessment is posted.
+                    </p>
+                </div>
+            </div>
+
+            <div class="inline-field-row review-publication-row">
+                <div class="form-field flex-1 review-publication-field">
+                    <span class="post-config-group-label">Finding types to post</span>
+                    <div class="finding-type-options">
+                        <label v-for="option in FINDING_TYPE_OPTIONS" :key="option.slug"
+                            class="checkbox-field" :for="`postFindingType-${option.slug}`">
+                            <input :id="`postFindingType-${option.slug}`"
+                                :checked="!editedWithheldFindingTypes.includes(option.slug)"
+                                :value="option.slug" name="postFindingTypes" type="checkbox"
+                                @change="toggleFindingType(option.slug, ($event.target as HTMLInputElement).checked)" />
+                            <strong>{{ option.label }}</strong>
+                        </label>
+                    </div>
+                    <p class="muted review-publication-copy">
+                        Findings of the cleared types are not posted to the pull request. They stay visible in the
+                        ProPR review. A finding with several types is posted when at least one of its types is
+                        selected. A finding without a type is posted.
                     </p>
                 </div>
             </div>
@@ -82,6 +121,7 @@ import { inject } from "vue";
 import {
     ClientDetailVmKey,
     type CommentSeverity,
+    type FindingRiskSeverity,
 } from "@/features/clients/view-models/useClientDetailViewModel";
 
 const vm = inject(ClientDetailVmKey)!;
@@ -92,6 +132,8 @@ const {
     editedMinimumSeverityToPost,
     editedAutoResolveSeverities,
     editedWithholdOutOfScopeFindings,
+    editedMinimumRiskSeverityToPost,
+    editedWithheldFindingTypes,
     savePostConfiguration,
     isPostConfigButtonEnabled,
 } = vm;
@@ -103,6 +145,36 @@ const MIN_SEVERITY_OPTIONS: { value: CommentSeverity; label: string }[] = [
     { value: "warning", label: "Warning and above" },
     { value: "error", label: "Error only" },
 ];
+
+// Minimum-risk options, least to most restrictive. 'low' posts every finding.
+const MIN_RISK_OPTIONS: { value: FindingRiskSeverity; label: string }[] = [
+    { value: "low", label: "Low — post everything (default)" },
+    { value: "medium", label: "Medium and above" },
+    { value: "high", label: "High and above" },
+    { value: "critical", label: "Critical only" },
+];
+
+// The core finding types of the review taxonomy, in the order the taxonomy lists them. The server accepts these
+// slugs only.
+const FINDING_TYPE_OPTIONS: { slug: string; label: string }[] = [
+    { slug: "logic-error", label: "Logic error" },
+    { slug: "data-validation", label: "Data validation" },
+    { slug: "resource-handling", label: "Resource handling" },
+    { slug: "concurrency", label: "Concurrency" },
+    { slug: "api-contract", label: "API contract" },
+    { slug: "security", label: "Security" },
+    { slug: "performance", label: "Performance" },
+    { slug: "error-handling-observability", label: "Error handling and observability" },
+    { slug: "design-structure", label: "Design and structure" },
+    { slug: "naming-clarity", label: "Naming and clarity" },
+    { slug: "documentation-tests", label: "Documentation and tests" },
+];
+
+// The setting stores the types that are not posted, so a type added to the taxonomy later is posted by default.
+function toggleFindingType(slug: string, posted: boolean): void {
+    const withheld = editedWithheldFindingTypes.value.filter((value) => value !== slug);
+    editedWithheldFindingTypes.value = posted ? withheld : [...withheld, slug];
+}
 
 // Severities offered for auto-resolution, highest to lowest.
 const SEVERITY_OPTIONS: { value: CommentSeverity; label: string }[] = [
@@ -148,6 +220,12 @@ const SEVERITY_OPTIONS: { value: CommentSeverity; label: string }[] = [
 
 .auto-resolve-option {
     margin-top: 0.25rem;
+}
+
+.finding-type-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+    gap: 0.35rem 1rem;
 }
 
 .muted {

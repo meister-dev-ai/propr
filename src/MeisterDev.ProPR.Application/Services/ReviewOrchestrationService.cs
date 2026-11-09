@@ -892,12 +892,14 @@ public sealed partial class ReviewOrchestrationService(
             // every finding, so a withheld one is still visible in the review record ("no comment posted" is
             // not "no review"). The published summary carries the count, so what was held back is legible on
             // the pull request itself rather than only to someone who opens ProPR.
-            var minimumSeverityToPost = await clientRegistry.GetMinimumSeverityToPostAsync(job.ClientId, ct);
-            var withholdOutOfScopeFindings = await clientRegistry.GetWithholdOutOfScopeFindingsAsync(job.ClientId, ct);
+            var publicationSettings = new ReviewPublicationSettings(
+                await clientRegistry.GetMinimumSeverityToPostAsync(job.ClientId, ct),
+                await clientRegistry.GetWithholdOutOfScopeFindingsAsync(job.ClientId, ct),
+                await clientRegistry.GetMinimumRiskSeverityToPostAsync(job.ClientId, ct),
+                await clientRegistry.GetWithheldFindingTypesAsync(job.ClientId, ct) ?? []);
             var publicationPolicy = ReviewPublicationPolicy.Apply(
                 publicationResult,
-                minimumSeverityToPost,
-                withholdOutOfScopeFindings,
+                publicationSettings,
                 this.TryBuildReviewRecordLink(job.Id));
             var publishResult = publicationPolicy.PublishResult;
 
@@ -1804,6 +1806,8 @@ public sealed partial class ReviewOrchestrationService(
             {
                 withheldCount = policy.WithheldTotal,
                 belowMinimumSeverity = policy.WithheldBelowMinimumSeverity,
+                belowMinimumRisk = policy.WithheldBelowMinimumRisk,
+                findingType = policy.WithheldFindingType,
                 outsideChangedLines = policy.WithheldOutsideChangedLines,
                 publishedWithoutScopeClassification = policy.PublishedWithoutScopeClassification,
             });

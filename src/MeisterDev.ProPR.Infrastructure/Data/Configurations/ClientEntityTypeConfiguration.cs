@@ -27,6 +27,17 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
             severities => SeverityKey(severities).GetHashCode(StringComparison.Ordinal),
             severities => severities.ToList());
 
+    // The withheld finding types are stored like the auto-resolve severities: a canonical comma-separated list of
+    // core type slugs, sorted and without duplicates, and an empty string when every type is published.
+    private static readonly ValueConverter<IReadOnlyList<string>, string> FindingTypesConverter =
+        new(types => SerializeFindingTypes(types), value => DeserializeFindingTypes(value));
+
+    private static readonly ValueComparer<IReadOnlyList<string>> FindingTypesComparer =
+        new(
+            (left, right) => SerializeFindingTypes(left) == SerializeFindingTypes(right),
+            types => SerializeFindingTypes(types).GetHashCode(StringComparison.Ordinal),
+            types => types.ToList());
+
     public void Configure(EntityTypeBuilder<ClientRecord> builder)
     {
         builder.ToTable("clients");
@@ -132,6 +143,18 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
             .HasColumnName("withhold_out_of_scope_findings")
             .HasDefaultValue(false);
 
+        builder.Property(c => c.MinimumRiskSeverityToPost)
+            .HasColumnName("minimum_risk_severity_to_post")
+            .HasConversion<int>()
+            .HasDefaultValue(FindingRiskSeverity.Low)
+            .HasSentinel(FindingRiskSeverity.Low);
+
+        builder.Property(c => c.WithheldFindingTypes)
+            .HasColumnName("withheld_finding_types")
+            .HasConversion(FindingTypesConverter, FindingTypesComparer)
+            .HasColumnType("text")
+            .HasDefaultValueSql("''");
+
         builder.Property(c => c.RequiredRunnerTags)
             .HasColumnName("required_runner_tags")
             .HasColumnType("text")
@@ -232,5 +255,22 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
     private static string SeverityKey(IReadOnlyList<CommentSeverity> severities)
     {
         return SerializeSeverities(severities);
+    }
+
+    private static string SerializeFindingTypes(IReadOnlyList<string> types)
+    {
+        return string.Join(',', NormalizeFindingTypes(types));
+    }
+
+    private static IReadOnlyList<string> DeserializeFindingTypes(string value)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? []
+            : NormalizeFindingTypes(value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+    }
+
+    private static IReadOnlyList<string> NormalizeFindingTypes(IEnumerable<string> types)
+    {
+        return types.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
     }
 }

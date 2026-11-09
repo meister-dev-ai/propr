@@ -12,9 +12,9 @@
                     Breakdown of token consumption across administrative, memory, and review tiers.
                 </p>
                 <TokenBreakdownTable
-                    v-if="vm.protocolTokenBreakdown.length > 0 || vm.jobDetail"
-                    :breakdown="vm.protocolTokenBreakdown"
-                    :breakdown-consistent="vm.protocolBreakdownConsistent"
+                    v-if="vm.tokenBreakdown.length > 0 || vm.jobDetail"
+                    :breakdown="vm.tokenBreakdown"
+                    :breakdown-consistent="vm.breakdownConsistent"
                 />
                 <p v-else class="empty-state">No detailed token breakdown available for this job.</p>
             </div>

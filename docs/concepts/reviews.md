@@ -154,8 +154,9 @@ confidence cannot change it into an improvement. Verification promotes a finding
 confirms a defect; confirmation of an actionable improvement preserves its improvement classification.
 
 Error, Warning, Suggestion and Info remain the finding classification. Minimum classification to post
-uses that classification. Risk assessment does not change verification, publication thresholds or
-thread resolution policy, and Low risk does not discard a finding.
+uses that classification. Risk assessment does not change verification or thread resolution policy, and Low
+risk does not discard a finding. A client can set a minimum risk to post, which keeps findings with a lower
+assessed risk out of the pull request.
 
 ## What happens during a review
 
@@ -264,10 +265,11 @@ lists it when the pass that produced the finding wrote a summary line for it.
 | Summary-only | Anything whose verification was degraded or inconclusive |
 | Published | Everything else |
 
-Three per-client filters run after the gate, all of them in [what you can tune](#what-you-can-tune): the
-**minimum classification to post**, whether findings outside the changed lines are posted, and whether outbound
-SCM commenting is enabled at all. A finding the first two hold back stays in the ProPR review, and the
-published summary reports how many were held back and why. The summary links to the review once
+Five per-client filters run after the gate, all of them in [what you can tune](#what-you-can-tune): the
+**minimum classification to post**, the **minimum risk to post**, the **finding types to post**, whether
+findings outside the changed lines are posted, and whether outbound SCM commenting is enabled at all. A finding
+the first four hold back stays in the ProPR review, and the published summary reports how many were held back
+and why. ProPR counts a finding that several filters hold back once, under the first of them in this order. The summary links to the review once
 `MEISTER_PUBLIC_BASE_URL` gives the installation its address - see
 [public URL and browser origins](../operate/configuration.md#public-url-and-browser-origins).
 
@@ -304,6 +306,8 @@ Everything below is set in the management UI. Unless noted, the scope is one cli
 | Concurrent reviews | Per tenant | How many reviews of the tenant run at the same time. A platform administrator sets it - see [tenant review limits](#tenant-review-limits) |
 | Maximum review duration | Per tenant | How long one review of the tenant runs before it ends with the files it has reviewed. A platform administrator sets it - see [tenant review limits](#tenant-review-limits) |
 | Minimum classification to post | Per client | Findings below it stay out of the pull request but remain visible in the ProPR review, and the published summary reports how many were held back. Order, high to low: error, warning, suggestion, info |
+| Minimum risk to post | Per client | Findings whose assessed risk is below it stay out of the pull request but remain visible in the ProPR review. Order, high to low: critical, high, medium, low. A finding without a complete risk assessment is posted. Low by default, which posts every finding |
+| Finding types to post | Per client | Findings whose types are all cleared stay out of the pull request but remain visible in the ProPR review. A finding with several types is posted when one of its types is selected, and a finding without a type is posted. Every type is selected by default |
 | Auto-resolve severities | Per client | Comments of the chosen severities are posted and then immediately resolved with a note. Azure DevOps, GitHub and GitLab; on Forgejo the setting is a no-op |
 | Do not post findings outside the changed lines | Per client | Keeps findings in pre-existing code away from the diff out of the pull request. They stay visible in the ProPR review. Off by default - see [findings outside your changes](#findings-outside-your-changes) |
 | Resolving comment threads | Per client | What ProPR does with its own threads once a finding is acted on: resolve quietly (default), resolve with an explanation, or leave them alone. On the first two a question you ask is answered; leaving them alone switches the pass off, so nothing is answered - see [how a review gets triggered](how-it-works.md#how-a-review-gets-triggered) |

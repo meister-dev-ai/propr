@@ -56,67 +56,90 @@ async function submit(): Promise<void> {
 
 <template>
   <section class="section-card" data-testid="model-catalog-snapshot">
-    <header>
-      <h3>Model catalog</h3>
-      <p class="muted">
-        The catalog ships with the application and is refreshed by uploading a newer snapshot. Nothing is fetched
-        automatically, so this installation makes no outbound request to a catalog host.
-      </p>
-      <p class="muted">
-        Importing updates the shared entries every tenant reads. A tenant's own pricing overrides are left
-        untouched, and a model that has disappeared from a newer snapshot is kept rather than removed from under a
-        configuration that still uses it.
-      </p>
-    </header>
-
-    <div class="snapshot-form">
-      <div class="snapshot-field">
-        <label for="snapshot-file">Snapshot file</label>
-        <!-- Picking is closed while an import runs. A new choice clears the messages, and the ones on screen
-             belong to the request still in flight. The error is pointed at only while it is on screen, so the
-             input never names an element that is not rendered. -->
-        <FilePicker
-          input-id="snapshot-file"
-          accept="application/json,.json"
-          :file-name="fileName"
-          :described-by="errorMessage ? 'snapshot-error' : undefined"
-          :disabled="importing"
-          test-id="snapshot-file"
-          @change="chooseFile"
-        />
+    <div class="section-card-header">
+      <div>
+        <h3>Model catalog</h3>
+        <p class="section-subtitle">
+          The catalog ships with the application and is refreshed by uploading a newer snapshot. Nothing is fetched
+          automatically, so this installation makes no outbound request to a catalog host.
+        </p>
       </div>
-
-      <button
-        class="btn-primary btn-sm"
-        type="button"
-        :disabled="importing || !file"
-        data-testid="snapshot-import"
-        @click="submit"
-      >
-        {{ importing ? 'Importing…' : 'Import snapshot' }}
-      </button>
     </div>
 
-    <p v-if="errorMessage" id="snapshot-error" class="form-error" data-testid="snapshot-error">{{ errorMessage }}</p>
-    <p v-else-if="entriesWritten !== null" class="form-success" data-testid="snapshot-result">
-      Imported {{ entriesWritten.toLocaleString() }} catalog entries.
-    </p>
+    <div class="section-card-body snapshot-body">
+      <p class="snapshot-note">
+        Importing updates the shared entries every tenant reads. A tenant's own pricing overrides stay unchanged. A
+        model that is missing from a newer snapshot stays in the catalog, so a configuration that still uses it keeps
+        working.
+      </p>
+
+      <div class="snapshot-form">
+        <div class="snapshot-field">
+          <label for="snapshot-file">Snapshot file</label>
+          <!-- Picking is closed while an import runs. A new choice clears the messages, and the ones on screen
+               belong to the request still in flight. The error is pointed at only while it is on screen, so the
+               input never names an element that is not rendered. -->
+          <FilePicker
+            input-id="snapshot-file"
+            accept="application/json,.json"
+            :file-name="fileName"
+            :described-by="errorMessage ? 'snapshot-error' : undefined"
+            :disabled="importing"
+            test-id="snapshot-file"
+            @change="chooseFile"
+          />
+        </div>
+
+        <button
+          class="btn-primary btn-sm"
+          type="button"
+          :disabled="importing || !file"
+          data-testid="snapshot-import"
+          @click="submit"
+        >
+          {{ importing ? 'Importing…' : 'Import snapshot' }}
+        </button>
+      </div>
+
+      <p v-if="errorMessage" id="snapshot-error" class="form-error" data-testid="snapshot-error">{{ errorMessage }}</p>
+      <p v-else-if="entriesWritten !== null" class="form-success" data-testid="snapshot-result">
+        Imported {{ entriesWritten.toLocaleString() }} catalog entries.
+      </p>
+    </div>
   </section>
 </template>
 
 <style scoped>
+/* Header and body padding come from the shared section-card primitives, so this card lines up with the provider
+ * cards above it. */
+.snapshot-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.snapshot-note {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
 .snapshot-form {
   display: flex;
   gap: 0.75rem;
   align-items: flex-end;
   flex-wrap: wrap;
-  margin-block-start: 0.75rem;
 }
 
-/* The label sits above its control, so the import button beside it lines up with the control rather than
- * with the label. */
+/* The label sits above its control, so the import button beside it lines up with the control and not with the
+ * label. */
 .snapshot-field {
   display: flex;
   flex-direction: column;
+  gap: 0.35rem;
+}
+
+.snapshot-body .form-error,
+.snapshot-body .form-success {
+  margin: 0;
 }
 </style>

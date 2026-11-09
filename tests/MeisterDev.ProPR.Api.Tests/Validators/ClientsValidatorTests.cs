@@ -526,6 +526,36 @@ public sealed class ClientsValidatorTests
         Assert.True(result.IsValid);
     }
 
+    [Theory]
+    [InlineData(FindingRiskSeverity.Low)]
+    [InlineData(FindingRiskSeverity.Critical)]
+    public void PatchClient_MinimumRiskSeverityToPost_AcceptsAScoredLevel(FindingRiskSeverity value)
+    {
+        Assert.True(PatchClientValidator.Validate(new PatchClientRequest(MinimumRiskSeverityToPost: value)).IsValid);
+    }
+
+    // Unknown is the risk of an unscored finding, so as a threshold it does not name a level.
+    [Theory]
+    [InlineData(FindingRiskSeverity.Unknown)]
+    [InlineData((FindingRiskSeverity)9)]
+    public void PatchClient_MinimumRiskSeverityToPost_RejectsUnknownAndUndefinedValues(FindingRiskSeverity value)
+    {
+        Assert.False(PatchClientValidator.Validate(new PatchClientRequest(MinimumRiskSeverityToPost: value)).IsValid);
+    }
+
+    [Fact]
+    public void PatchClient_WithheldFindingTypes_AcceptsCoreTypesAndAnEmptyList()
+    {
+        Assert.True(PatchClientValidator.Validate(new PatchClientRequest(WithheldFindingTypes: ["naming-clarity", "documentation-tests"])).IsValid);
+        Assert.True(PatchClientValidator.Validate(new PatchClientRequest(WithheldFindingTypes: [])).IsValid);
+    }
+
+    [Fact]
+    public void PatchClient_WithheldFindingTypes_RejectsATypeOutsideTheCoreTaxonomy()
+    {
+        Assert.False(PatchClientValidator.Validate(new PatchClientRequest(WithheldFindingTypes: ["style"])).IsValid);
+    }
+
     // An empty value clears the baseline level; any other value is a level name, also one the shared order lacks.
     [Theory]
     [InlineData("none")]

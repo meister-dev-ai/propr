@@ -12,6 +12,7 @@ using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterDev.ProPR.Infrastructure.Features.UsageReporting.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 
 namespace MeisterDev.ProPR.Infrastructure.Repositories;
@@ -361,7 +362,8 @@ public sealed class EfProtocolRecorder(
         ProtocolTotals totals,
         CancellationToken ct)
     {
-        var job = await db.ReviewJobs.FindAsync([reviewJobId], ct);
+        await using var transaction = await BeginJobTokenTransactionAsync(db, ct);
+        var job = await LoadJobForTokenUpdateAsync(db, reviewJobId, ct);
         if (job is null)
         {
             return;
@@ -398,6 +400,12 @@ public sealed class EfProtocolRecorder(
             ct,
             logicalModelName,
             modelInferred);
+
+        // The daily usage sample is an atomic upsert of its own, so the job row is released before it runs.
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(ct);
+        }
 
         // Upsert daily token usage aggregate for the client owning this job.
         if (totals.AnyTokens)
@@ -584,6 +592,42 @@ public sealed class EfProtocolRecorder(
         }
     }
 
+    /// <summary>
+    ///     Opens the transaction that holds the job row lock for one token update. The in-memory store used by unit
+    ///     tests has no transactions, so it returns <see langword="null" /> there.
+    /// </summary>
+    /// <remarks>
+    ///     File passes of one job run in parallel, and each one adds its tokens to the job's totals and to its
+    ///     per-tier breakdown by reading the job, adding, and writing it back. Without a lock, two passes that read the
+    ///     job at the same time each wrote back their own sum, and the tokens of one pass were missing from the totals,
+    ///     the breakdown and the estimated cost, while its protocol still showed them.
+    /// </remarks>
+    private static async Task<IDbContextTransaction?> BeginJobTokenTransactionAsync(
+        MeisterProPRDbContext db,
+        CancellationToken ct)
+    {
+        return db.Database.IsRelational()
+            ? await db.Database.BeginTransactionAsync(ct)
+            : null;
+    }
+
+    /// <summary>
+    ///     Loads the job for a token update. On a relational store it first locks the job row, so concurrent token
+    ///     updates of the same job run one after another until the surrounding transaction ends.
+    /// </summary>
+    private static async Task<ReviewJob?> LoadJobForTokenUpdateAsync(
+        MeisterProPRDbContext db,
+        Guid jobId,
+        CancellationToken ct)
+    {
+        if (db.Database.IsRelational())
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM review_jobs WHERE id = {jobId} FOR UPDATE", ct);
+        }
+
+        return await db.ReviewJobs.FindAsync([jobId], ct);
+    }
+
     /// <summary>The token counts one closed protocol contributes to whichever unit of work owns it.</summary>
     private sealed record ProtocolTotals(
         long InputTokens,
@@ -640,9 +684,13 @@ public sealed class EfProtocolRecorder(
 
             await db.SaveChangesAsync(ct);
 
-            var job = protocol.JobId is { } reviewJobId
-                ? await db.ReviewJobs.FindAsync([reviewJobId], ct)
-                : null;
+            if (protocol.JobId is not { } reviewJobId)
+            {
+                return;
+            }
+
+            await using var transaction = await BeginJobTokenTransactionAsync(db, ct);
+            var job = await LoadJobForTokenUpdateAsync(db, reviewJobId, ct);
             if (job is not null)
             {
                 // Always accumulate into breakdown, using provided category or Default if none
@@ -679,6 +727,11 @@ public sealed class EfProtocolRecorder(
                     ct,
                     effectiveLogicalModelName,
                     modelInferred);
+            }
+
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(ct);
             }
         }
         catch (Exception ex)

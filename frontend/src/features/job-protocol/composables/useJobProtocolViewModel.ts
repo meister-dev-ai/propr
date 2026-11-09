@@ -247,8 +247,8 @@ export function useJobProtocolViewModel() {
         totalOutputTokens,
         totalCachedInputTokens,
         totalEffectiveInputTokens,
-        protocolTokenBreakdown,
-        protocolBreakdownConsistent,
+        tokenBreakdown,
+        breakdownConsistent,
     } = useTokenTotals(protocols, jobDetail)
 
     const totalEstimatedCostUsd = computed(() => jobDetail.value?.totalEstimatedCostUsd ?? null)
@@ -2537,8 +2537,8 @@ export function useJobProtocolViewModel() {
         reviewTemperatureDisplay,
         inheritedProtocolCount,
         activePassInheritance,
-        protocolTokenBreakdown,
-        protocolBreakdownConsistent,
+        tokenBreakdown,
+        breakdownConsistent,
         parsedInputResult,
         selectedTriageDecision,
         parsedOutputResult,

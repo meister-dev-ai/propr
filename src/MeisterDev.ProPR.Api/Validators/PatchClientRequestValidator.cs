@@ -73,6 +73,17 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
             .WithMessage("MinimumSeverityToPost must be one of info, warning, error, suggestion.")
             .When(r => r.MinimumSeverityToPost.HasValue);
 
+        // Unknown is what an unscored finding carries, and a threshold of Unknown would read as "post nothing".
+        this.RuleFor(r => r.MinimumRiskSeverityToPost)
+            .Must(severity => Enum.IsDefined(severity!.Value) && severity.Value != FindingRiskSeverity.Unknown)
+            .WithMessage("MinimumRiskSeverityToPost must be one of low, medium, high, critical.")
+            .When(r => r.MinimumRiskSeverityToPost.HasValue);
+
+        this.RuleFor(r => r.WithheldFindingTypes)
+            .Must(types => types!.All(FindingTypeTaxonomy.IsCoreSlug))
+            .WithMessage("WithheldFindingTypes must contain only core finding types: " + string.Join(", ", FindingTypeTaxonomy.AllSlugs) + ".")
+            .When(r => r.WithheldFindingTypes is not null);
+
         this.RuleFor(r => r.AutoResolveSeverities)
             .Must(severities => severities!.All(severity => Enum.IsDefined(severity)))
             .WithMessage("AutoResolveSeverities must contain only info, warning, error, or suggestion values.")

@@ -1184,6 +1184,64 @@ public sealed class EfReviewDiagnosticsReaderTests
         Assert.All(pass.Events, evt => Assert.Null(evt.PhaseTimings));
     }
 
+    // A large review records about a gigabyte of prompts and outputs. The overview sends a placeholder for those
+    // bodies, so the load leaves them in the database and records only whether an output exists.
+    [Fact]
+    public async Task GetByIdWithProtocolsForOverviewAsync_LoadsTheBodiesOfParsedEventsOnly()
+    {
+        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseInMemoryDatabase($"EfReviewDiagnosticsReaderTests-{Guid.NewGuid():N}")
+            .Options;
+
+        var jobId = Guid.NewGuid();
+        var protocolId = Guid.NewGuid();
+        await using (var seedDb = new MeisterProPRDbContext(options))
+        {
+            seedDb.ReviewJobs.Add(new ReviewJob(jobId, Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 92, 1));
+            seedDb.ReviewJobProtocols.Add(
+                new ReviewJobProtocol { Id = protocolId, JobId = jobId, AttemptNumber = 1, Label = "src/Foo.cs", StartedAt = DateTimeOffset.UtcNow });
+            seedDb.ProtocolEvents.AddRange(
+                new ProtocolEvent
+                {
+                    Id = Guid.NewGuid(), ProtocolId = protocolId, Kind = ProtocolEventKind.Operational, Name = "local_workspace_prepared",
+                    OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-3), OutputSummary = "{\"workspaceKey\":\"ws-1\"}",
+                },
+                new ProtocolEvent
+                {
+                    Id = Guid.NewGuid(), ProtocolId = protocolId, Kind = ProtocolEventKind.AiCall, Name = "ai_call_iter_1",
+                    OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-2), InputTextSample = "user prompt", SystemPrompt = "system prompt",
+                    OutputSummary = "model output",
+                },
+                new ProtocolEvent
+                {
+                    Id = Guid.NewGuid(), ProtocolId = protocolId, Kind = ProtocolEventKind.AiCall, Name = "ai_call_iter_2",
+                    OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-1), InputTextSample = "user prompt", OutputSummary = "partial output",
+                    Error = "provider timeout",
+                });
+            await seedDb.SaveChangesAsync();
+        }
+
+        await using var readDb = new MeisterProPRDbContext(options);
+        var repository = new JobRepository(readDb, new TestDbContextFactory(options), NullLogger<JobRepository>.Instance);
+
+        var job = await repository.GetByIdWithProtocolsForOverviewAsync(jobId, CancellationToken.None);
+        var events = Assert.Single(job!.Protocols).Events.ToDictionary(evt => evt.Name);
+
+        Assert.Equal("{\"workspaceKey\":\"ws-1\"}", events["local_workspace_prepared"].OutputSummary);
+        Assert.Null(events["ai_call_iter_1"].InputTextSample);
+        Assert.Null(events["ai_call_iter_1"].SystemPrompt);
+        Assert.Equal(string.Empty, events["ai_call_iter_1"].OutputSummary);
+        Assert.Equal("partial output", events["ai_call_iter_2"].OutputSummary);
+
+        var overview = await new EfReviewDiagnosticsReader(repository, new TestDbContextFactory(options))
+            .GetJobProtocolAsync(jobId, false, CancellationToken.None);
+        var pass = Assert.Single(overview!.Protocols);
+        Assert.Equal("ws-1", pass.Workspace!.WorkspaceKey);
+        var dtos = pass.Events.ToDictionary(evt => evt.Name);
+        Assert.Contains("omitted from the overview", dtos["ai_call_iter_1"].OutputSummary, StringComparison.Ordinal);
+        Assert.Equal("partial output", dtos["ai_call_iter_2"].OutputSummary);
+    }
+
     private static ReviewJob BuildPhaseTimingJob(out Guid jobId, bool withPhaseTimings)
     {
         jobId = Guid.NewGuid();

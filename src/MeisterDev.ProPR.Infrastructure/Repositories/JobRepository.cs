@@ -16,6 +16,7 @@ using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
+using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.Extensions.Logging;
@@ -1037,9 +1038,13 @@ public sealed partial class JobRepository(
             return null;
         }
 
-        // Query 2: load every event column EXCEPT phase_timings. The text columns (InputTextSample,
-        // SystemPrompt, OutputSummary) are kept because the overview's Resolve* pass-badge helpers parse them.
+        // Query 2: load every event column EXCEPT phase_timings, and the text columns (InputTextSample,
+        // SystemPrompt, OutputSummary) only for the events whose bodies the overview parses. Every other body is
+        // replaced by a placeholder on the overview, so for those events the load only records whether an output
+        // exists, as an empty string. The output of a failed event is loaded, because the overview shows it next
+        // to the error.
         var protocolIds = job.Protocols.Select(p => p.Id).ToList();
+        var parsedEventNames = EfReviewDiagnosticsReader.OverviewParsedEventNames;
         var events = await dbContext.ProtocolEvents
             .AsNoTracking()
             .Where(e => protocolIds.Contains(e.ProtocolId))
@@ -1067,7 +1072,7 @@ public sealed partial class JobRepository(
                 FinalizationAttemptKind = e.FinalizationAttemptKind,
                 FinalizationReason = e.FinalizationReason,
                 FinalizationOutcome = e.FinalizationOutcome,
-                InputTextSample = e.InputTextSample,
+                InputTextSample = parsedEventNames.Contains(e.Name) ? e.InputTextSample : null,
                 StartedAt = e.StartedAt,
                 CompletedAt = e.CompletedAt,
                 DurationMs = e.DurationMs,
@@ -1075,8 +1080,12 @@ public sealed partial class JobRepository(
                 ActiveDurationMs = e.ActiveDurationMs,
                 TimingAvailability = e.TimingAvailability,
                 ToolOutcome = e.ToolOutcome,
-                SystemPrompt = e.SystemPrompt,
-                OutputSummary = e.OutputSummary,
+                SystemPrompt = parsedEventNames.Contains(e.Name) ? e.SystemPrompt : null,
+                OutputSummary = parsedEventNames.Contains(e.Name) || e.Error != null
+                    ? e.OutputSummary
+                    : e.OutputSummary != null
+                        ? string.Empty
+                        : null,
                 EventCategory = e.EventCategory,
                 Error = e.Error,
 

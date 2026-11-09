@@ -133,6 +133,25 @@ public interface IClientRegistry
     Task<bool> GetWithholdOutOfScopeFindingsAsync(Guid clientId, CancellationToken ct = default);
 
     /// <summary>
+    ///     Returns the lowest assessed risk a finding must have for its comment to be published to the SCM provider.
+    ///     Findings below it are retained in the persisted review result but not posted, and a finding without a
+    ///     complete risk assessment is posted. Defaults to <see cref="FindingRiskSeverity.Low" /> (publish
+    ///     everything) if the client does not exist.
+    /// </summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<FindingRiskSeverity> GetMinimumRiskSeverityToPostAsync(Guid clientId, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns the core finding types whose findings are not published to the SCM provider. A finding is held back
+    ///     when every core type it carries is in the list. Defaults to an empty list (publish every type) if the
+    ///     client does not exist.
+    /// </summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IReadOnlyList<string>> GetWithheldFindingTypesAsync(Guid clientId, CancellationToken ct = default);
+
+    /// <summary>
     ///     Returns the ordered per-client review-pass list — each configured model (in ordinal order) with its optional
     ///     specialist lens — that runs one additional multi-pass union pass after the implicit tier baseline. Empty
     ///     when the client has configured no additional passes (multi-pass union then degrades to a single baseline pass).

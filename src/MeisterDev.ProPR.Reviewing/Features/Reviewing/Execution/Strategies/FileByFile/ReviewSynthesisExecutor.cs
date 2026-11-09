@@ -842,6 +842,7 @@ internal sealed class ReviewSynthesisExecutor(
         var deduplicator = semantic ? findingDeduplicator! : DefaultFindingDeduplicator;
 
         var deduplication = await deduplicator.DeduplicateAsync(allComments, job.ClientId, ct);
+        await this.AddOutOfLoopSpendAsync(protocolId, deduplication.Spend, ct);
         await this.RecordCommentRemovalAsync(
             protocolId,
             ReviewProtocolEventNames.FindingDeduplication,
@@ -890,7 +891,9 @@ internal sealed class ReviewSynthesisExecutor(
             return comments;
         }
 
-        var filtered = await qualityFilterExecutor.ApplyAsync(job.Id, comments, baseContext, effectiveClient, ct);
+        var spend = new List<ModelCallSpend>();
+        var filtered = await qualityFilterExecutor.ApplyAsync(job.Id, comments, baseContext, effectiveClient, ct, spend);
+        await this.AddOutOfLoopSpendAsync(protocolId, spend, ct);
         await this.RecordCommentRemovalAsync(
             protocolId,
             ReviewProtocolEventNames.QualityFilterApplied,
@@ -900,6 +903,43 @@ internal sealed class ReviewSynthesisExecutor(
             FindingDeduplicationResult.FromDifference(comments, filtered, "quality_filter", CommentContentComparer.Instance),
             ct);
         return filtered;
+    }
+
+    // Adds the tokens of model calls that ran outside a review pass, such as the merge judge and the quality filter,
+    // to the synthesis protocol. They are filed under the default tier with the model that answered, and calls of one
+    // model are added together. A recording failure leaves the review result unchanged.
+    private async Task AddOutOfLoopSpendAsync(Guid? protocolId, IReadOnlyList<ModelCallSpend> spend, CancellationToken ct)
+    {
+        if (!protocolId.HasValue || spend.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var group in spend.GroupBy(call => (call.ModelId, call.LogicalModelName)))
+        {
+            try
+            {
+                await protocolRecorder.AddTokensAsync(
+                    protocolId.Value,
+                    group.Sum(call => call.InputTokens),
+                    group.Sum(call => call.OutputTokens),
+                    AiConnectionModelCategory.Default,
+                    string.IsNullOrEmpty(group.Key.ModelId) ? null : group.Key.ModelId,
+                    ct,
+                    group.Sum(call => call.CachedInputTokens),
+                    group.Sum(call => call.CacheWriteTokens),
+                    group.Sum(call => call.ReasoningTokens),
+                    group.Key.LogicalModelName);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Recording out-of-loop model spend failed for protocol {ProtocolId}", protocolId.Value);
+            }
+        }
     }
 
     private async Task RecordCommentRemovalAsync(

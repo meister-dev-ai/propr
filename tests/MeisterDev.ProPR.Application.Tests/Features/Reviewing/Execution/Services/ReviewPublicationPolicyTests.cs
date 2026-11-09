@@ -267,6 +267,117 @@ public class ReviewPublicationPolicyTests
         Assert.Equal("Reviewed the change.", result.Summary);
     }
 
+    [Fact]
+    public void Apply_WithAMinimumRisk_HoldsBackScoredFindingsBelowIt()
+    {
+        var high = Comment("a.cs", 10, CommentSeverity.Warning, null) with { RiskAssessment = Risk(FindingImpact.High, FindingLikelihood.Likely) };
+        var medium = Comment("b.cs", 20, CommentSeverity.Warning, null) with { RiskAssessment = Risk(FindingImpact.Moderate, FindingLikelihood.Likely) };
+        var low = Comment("c.cs", 30, CommentSeverity.Error, null) with { RiskAssessment = Risk(FindingImpact.Low, FindingLikelihood.Likely) };
+        var result = BuildResult(high, medium, low);
+
+        var applied = ReviewPublicationPolicy.Apply(result, new ReviewPublicationSettings(MinimumRiskSeverity: FindingRiskSeverity.High), ReviewLink);
+
+        Assert.Equal([high], applied.PublishResult.Comments);
+        Assert.Equal(2, applied.WithheldBelowMinimumRisk);
+        Assert.Contains("2 below the minimum risk to post", applied.PublishResult.Summary, StringComparison.Ordinal);
+    }
+
+    // An unscored finding is not evidence of a low risk, so a risk threshold never holds it back.
+    [Fact]
+    public void Apply_WithAMinimumRisk_PostsFindingsWithoutARiskAssessment()
+    {
+        var unscored = Comment("a.cs", 10, CommentSeverity.Warning, null);
+        var incomplete = Comment("b.cs", 20, CommentSeverity.Warning, null) with
+        {
+            RiskAssessment = new FindingRiskAssessment(
+                FindingImpact.Low, FindingLikelihood.Likely, null, null, "review_model", FindingRiskAssessment.CurrentRubricVersion),
+        };
+
+        var applied = ReviewPublicationPolicy.Apply(
+            BuildResult(unscored, incomplete), new ReviewPublicationSettings(MinimumRiskSeverity: FindingRiskSeverity.Critical), ReviewLink);
+
+        Assert.Equal([unscored, incomplete], applied.PublishResult.Comments);
+        Assert.False(applied.AnythingWithheld);
+    }
+
+    [Fact]
+    public void Apply_WithWithheldTypes_HoldsBackFindingsWhoseTypesAreAllWithheld()
+    {
+        var naming = Comment("a.cs", 10, CommentSeverity.Suggestion, null) with { FindingClassification = Types(FindingTypeTaxonomy.NamingClarity) };
+        var namingAndLogic = Comment("b.cs", 20, CommentSeverity.Warning, null) with
+        {
+            FindingClassification = Types(FindingTypeTaxonomy.NamingClarity, FindingTypeTaxonomy.LogicError),
+        };
+        var untyped = Comment("c.cs", 30, CommentSeverity.Warning, null);
+        var result = BuildResult(naming, namingAndLogic, untyped);
+
+        var applied = ReviewPublicationPolicy.Apply(
+            result, new ReviewPublicationSettings(WithheldFindingTypes: [FindingTypeTaxonomy.NamingClarity]), ReviewLink);
+
+        Assert.Equal([namingAndLogic, untyped], applied.PublishResult.Comments);
+        Assert.Equal(1, applied.WithheldFindingType);
+        Assert.Contains("1 of finding types that are not posted", applied.PublishResult.Summary, StringComparison.Ordinal);
+    }
+
+    // A finding several rules would hold back is counted once, under the first rule in the order severity, risk,
+    // type, scope.
+    [Fact]
+    public void Apply_CountsAFindingUnderTheFirstRuleThatHoldsItBack()
+    {
+        var finding = Comment("a.cs", 10, CommentSeverity.Info, ReviewCommentScopeRelation.OutsideChange) with
+        {
+            RiskAssessment = Risk(FindingImpact.Low, FindingLikelihood.Likely),
+            FindingClassification = Types(FindingTypeTaxonomy.NamingClarity),
+        };
+        var riskAndType = Comment("b.cs", 20, CommentSeverity.Error, null) with
+        {
+            RiskAssessment = Risk(FindingImpact.Low, FindingLikelihood.Likely),
+            FindingClassification = Types(FindingTypeTaxonomy.NamingClarity),
+        };
+
+        var applied = ReviewPublicationPolicy.Apply(
+            BuildResult(finding, riskAndType),
+            new ReviewPublicationSettings(
+                CommentSeverity.Warning,
+                true,
+                FindingRiskSeverity.Medium,
+                [FindingTypeTaxonomy.NamingClarity]),
+            ReviewLink);
+
+        Assert.Empty(applied.PublishResult.Comments);
+        Assert.Equal(1, applied.WithheldBelowMinimumSeverity);
+        Assert.Equal(1, applied.WithheldBelowMinimumRisk);
+        Assert.Equal(0, applied.WithheldFindingType);
+        Assert.Equal(0, applied.WithheldOutsideChangedLines);
+        Assert.Equal(2, applied.WithheldTotal);
+    }
+
+    [Fact]
+    public void Apply_WithDefaultSettings_ReturnsTheSameResultInstance()
+    {
+        var result = BuildResult(
+            Comment("a.cs", 10, CommentSeverity.Info, ReviewCommentScopeRelation.OutsideChange) with
+            {
+                RiskAssessment = Risk(FindingImpact.Low, FindingLikelihood.Unlikely),
+                FindingClassification = Types(FindingTypeTaxonomy.NamingClarity),
+            });
+
+        var applied = ReviewPublicationPolicy.Apply(result, new ReviewPublicationSettings(), ReviewLink);
+
+        Assert.Same(result, applied.PublishResult);
+    }
+
+    private static FindingRiskAssessment Risk(FindingImpact impact, FindingLikelihood likelihood)
+    {
+        return new FindingRiskAssessment(
+            impact, likelihood, "Impact evidence.", "Likelihood evidence.", "review_model", FindingRiskAssessment.CurrentRubricVersion);
+    }
+
+    private static FindingTypeClassification Types(params string[] coreSlugs)
+    {
+        return new FindingTypeClassification(coreSlugs, [], null, null, null, FindingTypeTaxonomy.Version, FindingTypeClassification.ReviewSource);
+    }
+
     private static ReviewResult BuildResult(params ReviewComment[] comments)
     {
         return new ReviewResult("Reviewed the change.", comments);
