@@ -9,7 +9,7 @@
 # same minimal-git slice the application image builds is staged in here as well.
 
 # Build stage
-FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:0d99ebf1ccad15037b5c98c9fe8979d6b8dbac23812feae2277a0b277b5c5ffa AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:212fe4cb74627d5adf9817a4088906ae3edff1bd853bb27565d4b46731efe61e AS build
 WORKDIR /source
 
 # The repository-root build properties, so the image restores the same package versions a local build
@@ -27,7 +27,7 @@ RUN dotnet publish src/MeisterDev.ProPR.Runner/MeisterDev.ProPR.Runner.csproj \
 # Minimal git runtime slice. Same approach and same pinned Ubuntu digest as the application image: the
 # chiseled runtime ships no package manager, so git, its helpers, and their shared-library closure are
 # staged here and copied in. Noble matches the chiseled base's glibc.
-FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac AS gittools
+FROM ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c AS gittools
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends git ca-certificates; \
@@ -60,7 +60,7 @@ RUN set -eux; \
     done
 
 # Runtime stage
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra@sha256:3ed6558056b54d5c9dfefb7ff473728e022ff2bf1d976cbf8ee07b05ec594374 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra@sha256:a9298ccc39c6258ae71228479e2f3f8d2ceb6639a9927262a4b0ff7d319a0e7e AS runtime
 WORKDIR /app
 
 COPY --from=gittools /git-root/ /
