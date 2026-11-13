@@ -71,7 +71,7 @@ standing brief is identical on every file of every pull request.
 | `meisterdev/anthropic` | Yes. Anthropic caches only what the caller marks, and the native client marks it - the system prompt, and the end of the conversation prefix, once each is large enough to be worth caching |
 | `meisterdev/googleVertex` | Yes. Gemini and Vertex cache a repeated prefix themselves and report what they served from it, so there is nothing for a caller to mark |
 | `meisterdev/azureOpenAi` | Yes. The service caches a repeated prefix itself, so ProPR counts it as a caching provider without marking anything |
-| `meisterdev/openAi` | Not claimed. ProPR places no breakpoint here and records the cache outcome as unsupported, though cached-token counts are still read from the usage payload when the endpoint reports them |
+| `meisterdev/openAi` | Not claimed. ProPR places no breakpoint here and records the cache outcome as unsupported, though cache-read and cache-write counts are still read from the usage payload when the endpoint reports them |
 | `meisterdev/liteLlm`, `meisterdev/openAiCompatible` | No. A gateway request carries no cache breakpoint, so a Claude model reached this way pays full input price on every call |
 | `meisterdev/awsBedrock` | No. A Bedrock cache breakpoint is a content block, and the AWS interface ProPR calls through offers no way to place one - so Bedrock does not cache here, native or fronted |
 

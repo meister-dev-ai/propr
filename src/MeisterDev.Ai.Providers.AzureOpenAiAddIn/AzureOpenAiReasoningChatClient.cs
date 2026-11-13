@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Runtime.CompilerServices;
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Enums;
 using Microsoft.Extensions.AI;
@@ -43,21 +44,44 @@ internal sealed class AzureOpenAiReasoningChatClient(IChatClient inner, bool use
         usesResponsesApi ? AzureOpenAiProviderDriver.ResponsesProtocol : AzureOpenAiProviderDriver.ChatCompletionsProtocol;
 
     /// <inheritdoc />
-    public override Task<ChatResponse> GetResponseAsync(
+    /// <remarks>
+    ///     A response of the Responses API also passes on the count of input tokens written to the prompt cache,
+    ///     which the adapter leaves out of the usage.
+    /// </remarks>
+    public override async Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages,
         ChatOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        return base.GetResponseAsync(messages, this.Translate(options), cancellationToken);
+        var response = await base.GetResponseAsync(messages, this.Translate(options), cancellationToken).ConfigureAwait(false);
+        if (usesResponsesApi && response.RawRepresentation is ResponseResult result)
+        {
+            AzureOpenAiUsageCounters.AddCacheWrite(response.Usage, result.Usage);
+        }
+
+        return response;
     }
 
     /// <inheritdoc />
-    public override IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+    /// <remarks>
+    ///     The final update of a stream on the Responses API also passes on the count of input tokens written to the
+    ///     prompt cache, which the adapter leaves out of the usage.
+    /// </remarks>
+    public override async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IEnumerable<ChatMessage> messages,
         ChatOptions? options = null,
-        CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        return base.GetStreamingResponseAsync(messages, this.Translate(options), cancellationToken);
+        await foreach (var update in base.GetStreamingResponseAsync(messages, this.Translate(options), cancellationToken)
+                           .ConfigureAwait(false))
+        {
+            if (usesResponsesApi)
+            {
+                AzureOpenAiUsageCounters.AddCacheWrite(update);
+            }
+
+            yield return update;
+        }
     }
 
     /// <summary>

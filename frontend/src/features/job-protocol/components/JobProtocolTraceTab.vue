@@ -366,7 +366,7 @@
                                         <span v-if="row.merged.callDetails.toolEvidence" class="status-badge status-pending">Evidence {{ row.merged.callDetails.toolEvidence.action }}</span>
 
                                         <span v-if="vm.hasEventTokens(row.merged.callDetails)" class="event-line-tokens">
-                                            <strong>{{ vm.formatTokens(row.merged.callDetails.inputTokens) }}</strong> in <span class="tokens-sep">·</span> <strong>{{ vm.formatTokens(row.merged.callDetails.outputTokens) }}</strong> out<small v-if="row.merged.callDetails.kind === 'aiCall'" class="cache-token-detail"> · Cached {{ vm.formatTokens(row.merged.callDetails.cachedInputTokens) }} · {{ vm.formatCacheStatus(row.merged.callDetails.cacheStatus) }}</small>
+                                            <strong>{{ vm.formatTokens(row.merged.callDetails.inputTokens) }}</strong> in <span class="tokens-sep">·</span> <strong>{{ vm.formatTokens(row.merged.callDetails.outputTokens) }}</strong> out<small v-if="row.merged.callDetails.kind === 'aiCall'" class="cache-token-detail"> · Cached {{ vm.formatTokens(row.merged.callDetails.cachedInputTokens) }}<template v-if="(row.merged.callDetails.cacheWriteTokens ?? 0) > 0"> · Cache write {{ vm.formatTokens(row.merged.callDetails.cacheWriteTokens) }}</template> · {{ vm.formatCacheStatus(row.merged.callDetails.cacheStatus) }}</small>
                                         </span>
 
                                         <!-- Model + flags + timestamp cluster to the right and wrap together when the line is full. -->

@@ -65,6 +65,12 @@
             <i class="fi fi-rr-database summary-icon"></i>
           </div>
 
+          <div class="summary-card usage-cache-write">
+            <span class="summary-label">Cache Write Tokens</span>
+            <span class="summary-value">{{ formatNumber(totalCacheWriteTokens) }}</span>
+            <i class="fi fi-rr-database summary-icon"></i>
+          </div>
+
           <div class="summary-card usage-reasoning">
             <span class="summary-label">Reasoning Tokens</span>
             <span class="summary-value">{{ formatNumber(totalReasoningTokens) }}</span>
@@ -323,6 +329,7 @@ const {
   totalInputTokens,
   totalOutputTokens,
   totalCachedInputTokens,
+  totalCacheWriteTokens,
   totalReasoningTokens,
   totalEstimatedCostUsd,
   hasReviewSamples,

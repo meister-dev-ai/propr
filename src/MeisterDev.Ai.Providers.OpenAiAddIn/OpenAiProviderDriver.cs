@@ -9,6 +9,7 @@ using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.Ai.Providers.Hosting;
 using MeisterDev.Ai.Providers.Resilience;
+using MeisterDev.Ai.Providers.Usage;
 using Microsoft.Extensions.AI;
 using OpenAI;
 using OpenAI.Chat;
@@ -342,6 +343,21 @@ public sealed class OpenAiProviderDriver : IAiProviderDriver
     public ProviderFailureVerdict ClassifyRuntimeFailure(Exception exception)
     {
         return OpenAiFailures.Classify(exception);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    ///     The input total already includes the cache reads and the cache writes, so the counters are taken
+    ///     unchanged. The cache-write count arrives under the vendor's field name, because the client of this family
+    ///     reads it from the response where the OpenAI library leaves it out.
+    /// </remarks>
+    public ProviderTokenUsage ReadUsage(UsageDetails? usage)
+    {
+        var read = ProviderTokenUsage.FromUsageDetails(usage);
+
+        return usage?.AdditionalCounts?.TryGetValue(OpenAiUsageCounters.CacheWrite, out var written) == true
+            ? read with { CacheWriteTokens = written }
+            : read;
     }
 
     /// <summary>Whether a host belongs to Azure's AI resources.</summary>

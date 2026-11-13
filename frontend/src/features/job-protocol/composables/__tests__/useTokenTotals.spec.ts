@@ -85,4 +85,21 @@ describe('useTokenTotals', () => {
         ])
         expect(breakdownConsistent.value).toBe(true)
     })
+
+    // From GPT-5.6 on, OpenAI bills the input a call writes to the prompt cache at its own rate. The input billed at
+    // the input rate is what remains after the cache reads and the cache writes.
+    it('counts cache writes apart from the uncached input', () => {
+        const protocols = ref<ReviewProtocolPass[]>([
+            pass({ totalInputTokens: 12000, totalCachedInputTokens: 4000, totalCacheWriteTokens: 7000, totalOutputTokens: 300 }),
+            pass({ totalInputTokens: 500, totalCachedInputTokens: 0, totalOutputTokens: 20 }),
+        ])
+        const detail = ref<JobDetail | null>(jobDetail([
+            { connectionCategory: 'highEffort', modelId: 'gpt-6.1-terra', totalInputTokens: 12500, totalCachedInputTokens: 4000, totalCacheWriteTokens: 7000, totalOutputTokens: 320 },
+        ]))
+        const { totalCacheWriteTokens, totalUncachedInputTokens, tokenBreakdown } = useTokenTotals(protocols, detail)
+
+        expect(totalCacheWriteTokens.value).toBe(7000)
+        expect(totalUncachedInputTokens.value).toBe(1500)
+        expect(tokenBreakdown.value[0].totalCacheWriteTokens).toBe(7000)
+    })
 })

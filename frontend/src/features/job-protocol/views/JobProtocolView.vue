@@ -114,7 +114,8 @@
                 <div class="stat-pill"><span class="stat-label">Inherited</span><span class="stat-value">{{ vm.inheritedProtocolCount }}</span></div>
                 <div class="stat-pill"><span class="stat-label">Total Tokens</span><span class="stat-value fat-tokens">{{ vm.formatTokens(vm.totalInputTokens + vm.totalOutputTokens) }}</span></div>
                 <div class="stat-pill"><span class="stat-label">Cached Input</span><span class="stat-value fat-tokens">{{ vm.formatTokens(vm.totalCachedInputTokens) }}</span></div>
-                <div class="stat-pill"><span class="stat-label">Effective Input</span><span class="stat-value fat-tokens">{{ vm.formatTokens(vm.totalEffectiveInputTokens) }}</span></div>
+                <div class="stat-pill"><span class="stat-label">Cache Write</span><span class="stat-value fat-tokens">{{ vm.formatTokens(vm.totalCacheWriteTokens) }}</span></div>
+                <div class="stat-pill"><span class="stat-label">Uncached Input</span><span class="stat-value fat-tokens">{{ vm.formatTokens(vm.totalUncachedInputTokens) }}</span></div>
                 <div class="stat-pill"><span class="stat-label">Est. Cost</span><span class="stat-value fat-tokens">{{ vm.costIsApproximate && vm.totalEstimatedCostUsd != null ? '≈ ' : '' }}{{ formatUsd(vm.totalEstimatedCostUsd) }}</span></div>
             </div>
 

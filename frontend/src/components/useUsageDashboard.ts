@@ -57,6 +57,7 @@ export function useUsageDashboard(props: { clientId: string }) {
   const totalInputTokens = computed(() => reviewUsage.value?.totalInputTokens ?? 0)
   const totalOutputTokens = computed(() => reviewUsage.value?.totalOutputTokens ?? 0)
   const totalCachedInputTokens = computed(() => reviewUsage.value?.totalCachedInputTokens ?? 0)
+  const totalCacheWriteTokens = computed(() => reviewUsage.value?.totalCacheWriteTokens ?? 0)
   const totalReasoningTokens = computed(() => reviewUsage.value?.totalReasoningTokens ?? 0)
   const totalEstimatedCostUsd = computed(() => reviewUsage.value?.totalEstimatedCostUsd ?? null)
   const hasReviewSamples = computed(() => (reviewUsage.value?.samples.length ?? 0) > 0)
@@ -230,6 +231,7 @@ export function useUsageDashboard(props: { clientId: string }) {
     totalInputTokens,
     totalOutputTokens,
     totalCachedInputTokens,
+    totalCacheWriteTokens,
     totalReasoningTokens,
     totalEstimatedCostUsd,
     hasReviewSamples,

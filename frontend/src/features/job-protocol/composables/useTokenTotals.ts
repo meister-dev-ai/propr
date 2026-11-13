@@ -22,8 +22,12 @@ export function useTokenTotals(
     const totalCachedInputTokens = computed(() =>
         protocols.value.reduce((sum, protocol) => sum + (protocol.totalCachedInputTokens ?? 0), 0),
     )
-    const totalEffectiveInputTokens = computed(() =>
-        Math.max(0, totalInputTokens.value - totalCachedInputTokens.value),
+    const totalCacheWriteTokens = computed(() =>
+        protocols.value.reduce((sum, protocol) => sum + (protocol.totalCacheWriteTokens ?? 0), 0),
+    )
+    // The input billed at the full input rate: the input less what was read from and written to the prompt cache.
+    const totalUncachedInputTokens = computed(() =>
+        Math.max(0, totalInputTokens.value - totalCachedInputTokens.value - totalCacheWriteTokens.value),
     )
 
     const tokenBreakdown = computed<TokenBreakdownEntry[]>(() => {
@@ -39,6 +43,7 @@ export function useTokenTotals(
                 totalInputTokens: entry.totalInputTokens ?? 0,
                 totalOutputTokens: entry.totalOutputTokens ?? 0,
                 totalCachedInputTokens: entry.totalCachedInputTokens ?? 0,
+                totalCacheWriteTokens: entry.totalCacheWriteTokens ?? 0,
                 estimatedCostUsd: entry.estimatedCostUsd ?? null,
                 costIsApproximate: Boolean(entry.costIsApproximate),
             }))
@@ -52,6 +57,7 @@ export function useTokenTotals(
             const input = protocol.totalInputTokens ?? 0
             const output = protocol.totalOutputTokens ?? 0
             const cached = protocol.totalCachedInputTokens ?? 0
+            const cacheWrite = protocol.totalCacheWriteTokens ?? 0
             if (input === 0 && output === 0) {
                 return
             }
@@ -64,6 +70,7 @@ export function useTokenTotals(
                 existing.totalInputTokens += input
                 existing.totalOutputTokens += output
                 existing.totalCachedInputTokens = (existing.totalCachedInputTokens ?? 0) + cached
+                existing.totalCacheWriteTokens = (existing.totalCacheWriteTokens ?? 0) + cacheWrite
                 return
             }
 
@@ -73,6 +80,7 @@ export function useTokenTotals(
                 totalInputTokens: input,
                 totalOutputTokens: output,
                 totalCachedInputTokens: cached,
+                totalCacheWriteTokens: cacheWrite,
             })
         })
 
@@ -97,7 +105,8 @@ export function useTokenTotals(
         totalInputTokens,
         totalOutputTokens,
         totalCachedInputTokens,
-        totalEffectiveInputTokens,
+        totalCacheWriteTokens,
+        totalUncachedInputTokens,
         tokenBreakdown,
         breakdownConsistent,
     }

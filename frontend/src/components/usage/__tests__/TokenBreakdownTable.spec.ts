@@ -71,4 +71,28 @@ describe('TokenBreakdownTable estimated cost column', () => {
     // The unpriced tier shows an em dash for its cost.
     expect(text).toContain('—')
   })
+
+  // From GPT-5.6 on, OpenAI bills the input a call writes to the prompt cache at its own rate. The uncached input is
+  // what remains after the cache reads and the cache writes.
+  it('shows cache writes in their own column and leaves them out of the uncached input', () => {
+    const wrapper = mount(TokenBreakdownTable, {
+      props: {
+        breakdown: [
+          {
+            connectionCategory: 2,
+            modelId: 'gpt-6.1-terra',
+            totalInputTokens: 12_000,
+            totalOutputTokens: 300,
+            totalCachedInputTokens: 4_000,
+            totalCacheWriteTokens: 7_000,
+          },
+        ],
+      },
+    })
+
+    const headers = wrapper.findAll('thead th').map(cell => cell.text())
+    const cells = wrapper.findAll('tbody tr')[0].findAll('td').map(cell => cell.text())
+    expect(cells[headers.indexOf('Cache Write')]).toBe((7_000).toLocaleString())
+    expect(cells[headers.indexOf('Uncached Input')]).toBe((1_000).toLocaleString())
+  })
 })

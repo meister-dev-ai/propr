@@ -301,13 +301,14 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     expect(wrapper.text()).toContain('0.35')
   })
 
-  it('renders cached and effective input totals plus per-call cache evidence', async () => {
+  it('renders cached, cache-write and uncached input totals plus per-call cache evidence', async () => {
     mockGet.mockImplementation(createProtocolMock([
       {
         ...sampleProtocols[0],
         totalInputTokens: 2000,
         totalOutputTokens: 300,
         totalCachedInputTokens: 1200,
+        totalCacheWriteTokens: 650,
         cacheObservability: 'observable',
         events: [
           makeProtocolEvent({
@@ -316,6 +317,7 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
             name: 'ai_call_iter_1',
             inputTokens: 2000,
             cachedInputTokens: 1200,
+            cacheWriteTokens: 650,
             cacheStatus: 'hit',
             outputTokens: 300,
             inputTextSample: null,
@@ -333,9 +335,12 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
 
     expect(wrapper.text()).toContain('Cached Input')
     expect(wrapper.text()).toContain('1,200')
-    expect(wrapper.text()).toContain('Effective Input')
-    expect(wrapper.text()).toContain('800')
-    expect(wrapper.text()).toContain('Cached 1,200 · hit')
+    expect(wrapper.text()).toContain('Cache Write')
+    expect(wrapper.text()).toContain('650')
+    // The uncached input is the input less the cache reads and the cache writes.
+    expect(wrapper.text()).toContain('Uncached Input')
+    expect(wrapper.text()).toContain('150')
+    expect(wrapper.text()).toContain('Cached 1,200 · Cache write 650 · hit')
   })
 
   it('renders legacy cache rows as not captured and surfaces tool/finalization evidence', async () => {

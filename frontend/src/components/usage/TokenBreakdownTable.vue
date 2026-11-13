@@ -4,7 +4,7 @@
 <template>
   <div v-if="normalizedBreakdown.length > 0" class="token-breakdown">
     <h4 class="breakdown-title">Token Breakdown by Tier, Logical Model and Model</h4>
-    <p class="breakdown-caption">Each row shows the routing tier, the logical model, and the exact direct model used for that portion of the job.</p>
+    <p class="breakdown-caption">Each row shows the routing tier, the logical model, and the exact direct model used for that portion of the job. Cache write is the input the provider wrote to its prompt cache and bills at its own rate. Uncached input is the input less cache reads and cache writes.</p>
     <table class="breakdown-table">
       <thead>
         <tr>
@@ -13,7 +13,8 @@
           <th>Model</th>
           <th class="num-col">Input Tokens</th>
           <th class="num-col">Cached Input</th>
-          <th class="num-col">Effective Input</th>
+          <th class="num-col">Cache Write</th>
+          <th class="num-col">Uncached Input</th>
           <th class="num-col">Output Tokens</th>
           <th class="num-col">Est. Cost</th>
           <th class="num-col">% of Total</th>
@@ -26,7 +27,8 @@
           <td class="monospace-value">{{ entry.modelLabel }}</td>
           <td class="num-col">{{ formatTokens(entry.inputTokens) }}</td>
           <td class="num-col">{{ formatTokens(entry.cachedInputTokens) }}</td>
-          <td class="num-col">{{ formatTokens(entry.effectiveInputTokens) }}</td>
+          <td class="num-col">{{ formatTokens(entry.cacheWriteTokens) }}</td>
+          <td class="num-col">{{ formatTokens(entry.uncachedInputTokens) }}</td>
           <td class="num-col">{{ formatTokens(entry.outputTokens) }}</td>
           <td class="num-col">{{ formatCost(entry.estimatedCostUsd, entry.costIsApproximate) }}</td>
           <td class="num-col">{{ pct(entry) }}</td>
@@ -37,7 +39,8 @@
           <td colspan="3">Total</td>
           <td class="num-col">{{ formatTokens(sumInput) }}</td>
           <td class="num-col">{{ formatTokens(sumCachedInput) }}</td>
-          <td class="num-col">{{ formatTokens(sumEffectiveInput) }}</td>
+          <td class="num-col">{{ formatTokens(sumCacheWrite) }}</td>
+          <td class="num-col">{{ formatTokens(sumUncachedInput) }}</td>
           <td class="num-col">{{ formatTokens(sumOutput) }}</td>
           <td class="num-col">{{ formatCost(sumCost, anyApproximate) }}</td>
           <td class="num-col">100%</td>
@@ -65,9 +68,11 @@ interface TokenBreakdownEntry {
   totalInputTokens?: number | null
   totalOutputTokens?: number | null
   totalCachedInputTokens?: number | null
+  totalCacheWriteTokens?: number | null
   inputTokens?: number | null
   outputTokens?: number | null
   cachedInputTokens?: number | null
+  cacheWriteTokens?: number | null
   estimatedCostUsd?: number | null
   costIsApproximate?: boolean | null
 }
@@ -79,7 +84,8 @@ interface NormalizedBreakdownEntry {
   modelLabel: string
   inputTokens: number
   cachedInputTokens: number
-  effectiveInputTokens: number
+  cacheWriteTokens: number
+  uncachedInputTokens: number
   outputTokens: number
   estimatedCostUsd: number | null
   costIsApproximate: boolean
@@ -162,6 +168,7 @@ const normalizedBreakdown = computed<NormalizedBreakdownEntry[]>(() =>
   props.breakdown.map((entry) => {
     const inputTokens = entry.totalInputTokens ?? entry.inputTokens ?? 0
     const cachedInputTokens = entry.totalCachedInputTokens ?? entry.cachedInputTokens ?? 0
+    const cacheWriteTokens = entry.totalCacheWriteTokens ?? entry.cacheWriteTokens ?? 0
     return {
       tierLabel: tierLabel(entry),
       tierClass: tierClass(entry),
@@ -169,7 +176,8 @@ const normalizedBreakdown = computed<NormalizedBreakdownEntry[]>(() =>
       modelLabel: formatModel(entry),
       inputTokens,
       cachedInputTokens,
-      effectiveInputTokens: Math.max(0, inputTokens - cachedInputTokens),
+      cacheWriteTokens,
+      uncachedInputTokens: Math.max(0, inputTokens - cachedInputTokens - cacheWriteTokens),
       outputTokens: entry.totalOutputTokens ?? entry.outputTokens ?? 0,
       estimatedCostUsd: entry.estimatedCostUsd ?? null,
       costIsApproximate: entry.costIsApproximate ?? false,
@@ -179,7 +187,8 @@ const normalizedBreakdown = computed<NormalizedBreakdownEntry[]>(() =>
 
 const sumInput = computed(() => normalizedBreakdown.value.reduce((s, e) => s + e.inputTokens, 0))
 const sumCachedInput = computed(() => normalizedBreakdown.value.reduce((s, e) => s + e.cachedInputTokens, 0))
-const sumEffectiveInput = computed(() => normalizedBreakdown.value.reduce((s, e) => s + e.effectiveInputTokens, 0))
+const sumCacheWrite = computed(() => normalizedBreakdown.value.reduce((s, e) => s + e.cacheWriteTokens, 0))
+const sumUncachedInput = computed(() => normalizedBreakdown.value.reduce((s, e) => s + e.uncachedInputTokens, 0))
 const sumOutput = computed(() => normalizedBreakdown.value.reduce((s, e) => s + e.outputTokens, 0))
 const grandTotal = computed(() => sumInput.value + sumOutput.value)
 

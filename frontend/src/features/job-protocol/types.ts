@@ -65,6 +65,7 @@ export interface TokenBreakdownEntry {
     totalInputTokens: number
     totalOutputTokens: number
     totalCachedInputTokens?: number | null
+    totalCacheWriteTokens?: number | null
     estimatedCostUsd?: number | null
     costIsApproximate?: boolean | null
 }
@@ -386,6 +387,7 @@ export type ReviewProtocolPass = ReviewJobProtocolDto & {
     totalInputTokens?: number | null
     totalOutputTokens?: number | null
     totalCachedInputTokens?: number | null
+    totalCacheWriteTokens?: number | null
     iterationCount?: number | null
     toolCallCount?: number | null
     finalSummary?: string | null
