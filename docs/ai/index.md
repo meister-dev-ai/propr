@@ -81,8 +81,9 @@ verification lookup and the synthesis pass. ProPR derives the key from the conve
 first user message, so every turn of the conversation reaches the cache that holds the turns before it. None of the
 families in the table accepts a routing hint yet; an add-in family can declare that it does.
 
-Where a provider reports cache reads in its usage payload, ProPR records them whatever the family: cached input
-tokens and cache-write tokens are stored per model call alongside the ordinary input and output counts.
+Where a provider reports cache reads or cache writes in its usage payload, ProPR records them whatever the family:
+cached input tokens and cache-write tokens are stored per model call alongside the ordinary input and output counts.
+ProPR prices each at the model's cache-read or cache-write price, and at the input price when the model has none.
 
 To see whether caching is actually happening, read the review protocol. Each model call carries a cache outcome
 and, when the call was not served from cache, why not: the provider does not support it, the cacheable prefix

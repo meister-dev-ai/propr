@@ -50,6 +50,27 @@ public sealed class PrReviewViewControllerSummaryTests
         Assert.Null(dto.ThreadPassTotalEstimatedCostUsd);
     }
 
+    // The cache and reasoning buckets are part of what a merged row reports, so they are added up across jobs as the
+    // input and output totals are.
+    [Fact]
+    public async Task GetPrView_AddsUpTheCacheAndReasoningTokensOfMergedRows()
+    {
+        var first = CreateJob(
+            100, 10,
+            new TokenBreakdownEntry(AiConnectionModelCategory.HighEffort, "model", 100, 10, 40, 30, 4));
+        var second = CreateJob(
+            50, 5,
+            new TokenBreakdownEntry(AiConnectionModelCategory.HighEffort, "model", 50, 5, 20, 10, 2));
+        var (controller, _, _) = CreateController(new PrReviewViewData([first, second], [], [], null));
+
+        var dto = await GetViewAsync(controller);
+
+        var breakdown = Assert.Single(dto.AggregatedTokenBreakdown);
+        Assert.Equal(60, breakdown.TotalCachedInputTokens);
+        Assert.Equal(40, breakdown.TotalCacheWriteTokens);
+        Assert.Equal(6, breakdown.TotalReasoningTokens);
+    }
+
     [Fact]
     public async Task GetPrView_ResolvesDeduplicatedContributionIdsAndPreservesMemoryExcerpts()
     {

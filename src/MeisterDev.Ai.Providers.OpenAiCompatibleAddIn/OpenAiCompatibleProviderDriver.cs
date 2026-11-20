@@ -9,6 +9,7 @@ using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.Ai.Providers.Hosting;
 using MeisterDev.Ai.Providers.Resilience;
+using MeisterDev.Ai.Providers.Usage;
 using Microsoft.Extensions.AI;
 using OpenAI;
 using OpenAI.Chat;
@@ -215,6 +216,21 @@ public sealed class OpenAiCompatibleProviderDriver : IAiProviderDriver
         // The adapter is wrapped so that the host hands the client its reasoning request in neutral terms. OpenAI
         // options that the host builds are a foreign type for the copy of the OpenAI library this add-in loads.
         return new OpenAiCompatibleReasoningChatClient(client.AsIChatClient());
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    ///     The input total already includes the cache reads and the cache writes, so the counters are taken
+    ///     unchanged. The cache-write count arrives under the vendor's field name, because the client of this family
+    ///     reads it from the response where the OpenAI library leaves it out.
+    /// </remarks>
+    public ProviderTokenUsage ReadUsage(UsageDetails? usage)
+    {
+        var read = ProviderTokenUsage.FromUsageDetails(usage);
+
+        return usage?.AdditionalCounts?.TryGetValue(OpenAiCompatibleUsageCounters.CacheWrite, out var written) == true
+            ? read with { CacheWriteTokens = written }
+            : read;
     }
 
     /// <inheritdoc />

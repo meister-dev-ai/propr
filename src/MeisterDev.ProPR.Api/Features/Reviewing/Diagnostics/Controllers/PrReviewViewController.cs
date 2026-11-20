@@ -200,6 +200,9 @@ public sealed class PrReviewViewController(
                         {
                             TotalInputTokens = existing.TotalInputTokens + entry.TotalInputTokens,
                             TotalOutputTokens = existing.TotalOutputTokens + entry.TotalOutputTokens,
+                            TotalCachedInputTokens = existing.TotalCachedInputTokens + entry.TotalCachedInputTokens,
+                            TotalCacheWriteTokens = existing.TotalCacheWriteTokens + entry.TotalCacheWriteTokens,
+                            TotalReasoningTokens = existing.TotalReasoningTokens + entry.TotalReasoningTokens,
                             EstimatedCostUsd = SumNullableCost(existing.EstimatedCostUsd, entry.EstimatedCostUsd),
                             CostIsApproximate = existing.CostIsApproximate || entry.CostIsApproximate
                                                                            || existing.EstimatedCostUsd.HasValue != entry.EstimatedCostUsd.HasValue,

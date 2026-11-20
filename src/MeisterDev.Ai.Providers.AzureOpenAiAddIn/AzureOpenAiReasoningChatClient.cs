@@ -45,8 +45,8 @@ internal sealed class AzureOpenAiReasoningChatClient(IChatClient inner, bool use
 
     /// <inheritdoc />
     /// <remarks>
-    ///     A response of the Responses API also passes on the count of input tokens written to the prompt cache,
-    ///     which the adapter leaves out of the usage.
+    ///     The response also passes on the count of input tokens written to the prompt cache, which the adapter leaves
+    ///     out of the usage.
     /// </remarks>
     public override async Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages,
@@ -54,9 +54,14 @@ internal sealed class AzureOpenAiReasoningChatClient(IChatClient inner, bool use
         CancellationToken cancellationToken = default)
     {
         var response = await base.GetResponseAsync(messages, this.Translate(options), cancellationToken).ConfigureAwait(false);
-        if (usesResponsesApi && response.RawRepresentation is ResponseResult result)
+        switch (response.RawRepresentation)
         {
-            AzureOpenAiUsageCounters.AddCacheWrite(response.Usage, result.Usage);
+            case ResponseResult result:
+                AzureOpenAiUsageCounters.AddCacheWrite(response.Usage, result.Usage);
+                break;
+            case ChatCompletion completion:
+                AzureOpenAiUsageCounters.AddCacheWrite(response.Usage, completion.Usage);
+                break;
         }
 
         return response;
@@ -64,8 +69,8 @@ internal sealed class AzureOpenAiReasoningChatClient(IChatClient inner, bool use
 
     /// <inheritdoc />
     /// <remarks>
-    ///     The final update of a stream on the Responses API also passes on the count of input tokens written to the
-    ///     prompt cache, which the adapter leaves out of the usage.
+    ///     The final update of a stream also passes on the count of input tokens written to the prompt cache, which the
+    ///     adapter leaves out of the usage.
     /// </remarks>
     public override async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IEnumerable<ChatMessage> messages,
@@ -75,10 +80,7 @@ internal sealed class AzureOpenAiReasoningChatClient(IChatClient inner, bool use
         await foreach (var update in base.GetStreamingResponseAsync(messages, this.Translate(options), cancellationToken)
                            .ConfigureAwait(false))
         {
-            if (usesResponsesApi)
-            {
-                AzureOpenAiUsageCounters.AddCacheWrite(update);
-            }
+            AzureOpenAiUsageCounters.AddCacheWrite(update);
 
             yield return update;
         }
