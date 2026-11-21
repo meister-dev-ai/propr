@@ -15,9 +15,15 @@ updates:
     # The kerberos and gittools stages copy shared libraries into the noble-based chiseled
     # runtime image, so their Ubuntu release must match the runtime's release. Dependabot
     # refreshes the 24.04 digest and leaves the release change to the runtime image move.
+    # ProPR stays on the .NET LTS release. Dependabot refreshes the 10.0 digests of the SDK
+    # and runtime images and proposes no newer major version.
     ignore:
       - dependency-name: "ubuntu"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "dotnet/sdk"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "dotnet/aspnet"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: docker
     directory: "/frontend"    # frontend/Dockerfile
