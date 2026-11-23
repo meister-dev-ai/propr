@@ -30074,9 +30074,9 @@ export interface components {
              *     finished files that appear to have found nothing.
              */
             comments?: components["schemas"]["ReviewComment"][] | null;
-            /** @description Whether the file matched an exclusion and was never reviewed. */
+            /** @description Whether the file was never reviewed, because it matched an exclusion or the pull request only moved it. */
             isExcluded?: boolean;
-            /** @description The matching rule, when it was excluded. */
+            /** @description The matching rule or the note on the move, when it was excluded. */
             exclusionReason?: string | null;
             /** @description Generated findings excluded from publication and retained with the checkpoint. */
             withheldFindings?: components["schemas"]["WithheldReviewFinding"][] | null;

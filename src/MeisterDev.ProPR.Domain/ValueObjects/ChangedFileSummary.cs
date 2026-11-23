@@ -10,4 +10,8 @@ namespace MeisterDev.ProPR.Domain.ValueObjects;
 /// </summary>
 /// <param name="Path">Repository-relative path of the changed file.</param>
 /// <param name="ChangeType">The type of change applied to the file.</param>
-public sealed record ChangedFileSummary(string Path, ChangeType ChangeType);
+/// <param name="OriginalPath">
+///     The path of the file at the base commit when <paramref name="ChangeType" /> is <see cref="ChangeType.Rename" />
+///     and the listing contains it; otherwise <see langword="null" />.
+/// </param>
+public sealed record ChangedFileSummary(string Path, ChangeType ChangeType, string? OriginalPath = null);

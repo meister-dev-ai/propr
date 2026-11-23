@@ -76,7 +76,7 @@ internal sealed class LocalGitReviewContextTools(
 
     internal Task<string?> GetUnifiedDiffAsync(string path, CancellationToken ct)
     {
-        return workspace.GetUnifiedDiffAsync(this.NormalizePath(path), ct);
+        return workspace.GetUnifiedDiffAsync(this.NormalizePath(path), null, ct);
     }
 
     private string ResolveBranchSide(string normalizedBranch)

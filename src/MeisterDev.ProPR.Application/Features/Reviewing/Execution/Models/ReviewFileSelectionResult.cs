@@ -8,6 +8,12 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 /// <summary>
 ///     Result of selecting the per-file execution set after completion and exclusion rules are applied.
 /// </summary>
+/// <param name="FilesToReview">The files that still need a review.</param>
+/// <param name="ExcludedFiles">The files an exclusion pattern of the repository matches.</param>
+/// <param name="UnchangedMoveFiles">
+///     The files the pull request only moves or renames, without a changed line. They have nothing to review.
+/// </param>
 public sealed record ReviewFileSelectionResult(
     IReadOnlyList<ChangedFile> FilesToReview,
-    IReadOnlyList<ChangedFile> ExcludedFiles);
+    IReadOnlyList<ChangedFile> ExcludedFiles,
+    IReadOnlyList<ChangedFile> UnchangedMoveFiles);

@@ -10,7 +10,7 @@ describe('formatTimeLimitMessage', () => {
     const message = formatTimeLimitMessage('completed', 'timeLimitReached')
 
     expect(message).toContain('maximum review duration of its tenant')
-    expect(message).toContain('files it did not review')
+    expect(message).toContain('number of files it did not review')
   })
 
   it.each([

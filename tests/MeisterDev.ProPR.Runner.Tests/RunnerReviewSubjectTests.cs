@@ -3,6 +3,7 @@
 
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Runner.Contracts;
@@ -85,6 +86,60 @@ public sealed class RunnerReviewSubjectTests
         var file = Assert.Single(pr.ChangedFiles);
         Assert.Equal("class A;", file.FullContent);
         Assert.Equal("@@ -1 +1 @@", file.UnifiedDiff);
+    }
+
+    // A diff that git limits to the new path lists every line of a renamed file as added. When the workspace
+    // answers that the original path at the merge base and the new path at the head are the same blob, the file
+    // gets an empty diff, so the runner, like the control plane, does not review a file that the pull request only
+    // moves. Equal text read from the two sides is not enough: the checkout converts line endings and LFS content,
+    // and the target side is read at the tip of the target branch.
+    [Fact]
+    public async Task ARenamedFileWithTheSameBlob_IsAnUnchangedMove_AndOtherRenamesKeepTheirDiff()
+    {
+        var manifest = RunnerManifests.Sample(["src/services/Moved.cs", "src/services/Changed.cs", "src/services/SameText.cs"]);
+        var workspace = new FakeWorkspace
+        {
+            Changed =
+            [
+                new ChangedFileSummary("src/services/Moved.cs", ChangeType.Rename, "src/Moved.cs"),
+                new ChangedFileSummary("src/services/Changed.cs", ChangeType.Rename, "src/Changed.cs"),
+                new ChangedFileSummary("src/services/SameText.cs", ChangeType.Rename, "src/SameText.cs"),
+            ],
+            Contents =
+            {
+                ["src/services/Moved.cs"] = "class Moved;",
+                ["src/services/Changed.cs"] = "class Changed { int after; }",
+                ["src/services/SameText.cs"] = "class SameText;",
+                ["src/SameText.cs"] = "class SameText;",
+            },
+            Diffs =
+            {
+                ["src/services/Moved.cs"] = "@@ -0,0 +1 @@\n+class Moved;",
+                ["src/services/Changed.cs"] = "@@ -0,0 +1 @@\n+class Changed { int after; }",
+                ["src/services/SameText.cs"] = "@@ -0,0 +1 @@\n+class SameText;",
+            },
+            UnchangedMoves = { ("src/Moved.cs", "src/services/Moved.cs") },
+        };
+
+        var pr = await RunnerReviewSubject.BuildPullRequestAsync(manifest, workspace, CancellationToken.None);
+
+        var moved = Assert.Single(pr.ChangedFiles, file => file.Path == "src/services/Moved.cs");
+        Assert.Equal("src/Moved.cs", moved.OriginalPath);
+        Assert.True(moved.ContentUnchanged);
+        Assert.Equal(string.Empty, moved.UnifiedDiff);
+        Assert.True(ReviewFileSelectionService.IsUnchangedMove(moved));
+
+        var changed = Assert.Single(pr.ChangedFiles, file => file.Path == "src/services/Changed.cs");
+        Assert.Equal(ChangeType.Rename, changed.ChangeType);
+        Assert.Equal("src/Changed.cs", changed.OriginalPath);
+        Assert.Equal("@@ -0,0 +1 @@\n+class Changed { int after; }", changed.UnifiedDiff);
+        Assert.False(ReviewFileSelectionService.IsUnchangedMove(changed));
+        Assert.Contains(("src/services/Changed.cs", "src/Changed.cs"), workspace.DiffRequests);
+        Assert.DoesNotContain(workspace.DiffRequests, request => request.Path == "src/services/Moved.cs");
+
+        var sameText = Assert.Single(pr.ChangedFiles, file => file.Path == "src/services/SameText.cs");
+        Assert.Equal("@@ -0,0 +1 @@\n+class SameText;", sameText.UnifiedDiff);
+        Assert.False(ReviewFileSelectionService.IsUnchangedMove(sameText));
     }
 
     // A deleted file has no head content. Reading it anyway puts an empty string where the reviewer expects
@@ -331,18 +386,30 @@ public sealed class RunnerReviewSubjectTests
 
         public long DiffBytes { get; set; }
 
-        public Task<int> CountChangedLinesAsync(IReadOnlyCollection<string> paths, CancellationToken ct) =>
+        public Task<int> CountChangedLinesAsync(IReadOnlyCollection<string> paths, IReadOnlyCollection<string> originalPaths, CancellationToken ct) =>
             Task.FromResult(this.ChangedLines);
 
-        public Task<long> CountDiffBytesAsync(IReadOnlyCollection<string> paths, CancellationToken ct) =>
+        public Task<long> CountDiffBytesAsync(IReadOnlyCollection<string> paths, IReadOnlyCollection<string> originalPaths, CancellationToken ct) =>
             Task.FromResult(this.DiffBytes);
 
         public Task<IReadOnlySet<string>?> GetPathsChangedSinceAsync(string revision, CancellationToken ct) =>
             Task.FromResult<IReadOnlySet<string>?>(null);
 
 
-        public Task<string?> GetUnifiedDiffAsync(string path, CancellationToken ct) =>
-            Task.FromResult(this.Diffs.GetValueOrDefault(path));
+        /// <summary>The path and original path of every diff the subject requested, in order.</summary>
+        public List<(string Path, string? OriginalPath)> DiffRequests { get; } = [];
+
+        public Task<string?> GetUnifiedDiffAsync(string path, string? originalPath, CancellationToken ct)
+        {
+            this.DiffRequests.Add((path, originalPath));
+            return Task.FromResult(this.Diffs.GetValueOrDefault(path));
+        }
+
+        /// <summary>The pairs of original and new path that the workspace answers as the same blob.</summary>
+        public HashSet<(string OriginalPath, string Path)> UnchangedMoves { get; } = [];
+
+        public Task<bool> IsUnchangedMoveAsync(string originalPath, string path, CancellationToken ct) =>
+            Task.FromResult(this.UnchangedMoves.Contains((originalPath, path)));
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

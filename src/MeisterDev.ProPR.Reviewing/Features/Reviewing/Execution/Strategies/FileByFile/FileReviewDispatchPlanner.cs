@@ -102,17 +102,47 @@ internal sealed class FileReviewDispatchPlanner(
 
         foreach (var excludedFile in selection.ExcludedFiles)
         {
+            var exclusionReason = executionContext.ExclusionRules.GetMatchingPattern(excludedFile.Path) ?? "excluded";
+            logger.LogInformation(
+                "Excluded file {FilePath} due to rule {Pattern} in job {JobId}",
+                excludedFile.Path,
+                exclusionReason,
+                job.Id);
             var existingExcluded = existingResults.GetValueOrDefault(excludedFile.Path);
-            await this.MarkFileExcludedAsync(job, excludedFile, executionContext, existingExcluded, ct);
+            await this.MarkFileExcludedAsync(job, excludedFile, executionContext, existingExcluded, exclusionReason, ct);
         }
 
-        // Fix the "files reviewed" progress denominator: deduped in-scope changed files after exclusions
-        // for this iteration. Derived from the frozen changed set and the exclusion rules — NOT from
-        // selection.ExcludedFiles, which drops already-complete excluded rows on a retry and would inflate
+        // A file that the pull request only moves or renames has no changed line, so ProPR does not review it.
+        // The file is recorded like an excluded file, with the move as the reason, and appears in the job protocol
+        // beside the reviewed files.
+        foreach (var movedFile in selection.UnchangedMoveFiles)
+        {
+            logger.LogInformation(
+                "Skipped file {FilePath} in job {JobId}: moved from {OriginalPath} without content changes",
+                movedFile.Path,
+                job.Id,
+                movedFile.OriginalPath);
+            var existingMoved = existingResults.GetValueOrDefault(movedFile.Path);
+            await this.MarkFileExcludedAsync(
+                job,
+                movedFile,
+                executionContext,
+                existingMoved,
+                ReviewFileSelectionService.DescribeUnchangedMove(movedFile),
+                ct);
+        }
+
+        // Fix the "files reviewed" progress denominator: deduped in-scope changed files after exclusions and
+        // unchanged moves for this iteration. Derived from the frozen changed set and the exclusion rules — NOT
+        // from selection.ExcludedFiles, which drops already-complete excluded rows on a retry and would inflate
         // the denominator. Computing it from the rules keeps it stable across re-dispatch. Persisted before
-        // the zero-files early return below so the denominator exists even when nothing needs review.
+        // the zero-files early return below so the denominator exists even when nothing needs review. The
+        // number of unchanged moves is derived the same way, because ProPR writes it into the summary on every
+        // attempt.
         var exclusionRules = executionContext.ExclusionRules;
-        var inScopeChangedFileCount = allChangedFiles.Count(f => !exclusionRules.Matches(f.Path));
+        var notExcludedFiles = allChangedFiles.Where(f => !exclusionRules.Matches(f.Path)).ToList();
+        var unchangedMoveFileCount = notExcludedFiles.Count(ReviewFileSelectionService.IsUnchangedMove);
+        var inScopeChangedFileCount = notExcludedFiles.Count - unchangedMoveFileCount;
         await jobRepository.UpdateInScopeChangedFileCountAsync(job.Id, inScopeChangedFileCount, ct);
 
         filesToReview =
@@ -128,7 +158,7 @@ internal sealed class FileReviewDispatchPlanner(
         var budgetSoftCapSkippedFiles = new List<string>();
         if (filesToReview.Count == 0)
         {
-            return new FileReviewDispatchResult(existingResults, exceptions, failedReviewFilePaths, BudgetSoftCapSummary.None);
+            return new FileReviewDispatchResult(existingResults, exceptions, failedReviewFilePaths, BudgetSoftCapSummary.None, unchangedMoveFileCount);
         }
 
         var semaphore = new SemaphoreSlim(await this.ResolveFileReviewConcurrencyAsync(ct));
@@ -244,7 +274,12 @@ internal sealed class FileReviewDispatchPlanner(
         try
         {
             await Task.WhenAll(tasks);
-            return new FileReviewDispatchResult(existingResults, exceptions, failedReviewFilePaths, BuildBudgetSoftCapSummary(budgetSoftCapSkippedFiles));
+            return new FileReviewDispatchResult(
+                existingResults,
+                exceptions,
+                failedReviewFilePaths,
+                BuildBudgetSoftCapSummary(budgetSoftCapSkippedFiles),
+                unchangedMoveFileCount);
         }
         finally
         {
@@ -273,22 +308,20 @@ internal sealed class FileReviewDispatchPlanner(
         return BudgetSoftCapSummary.None;
     }
 
+    // Records a file that ProPR does not review as excluded, with the reason that appears in the job protocol.
     private async Task MarkFileExcludedAsync(
         ReviewJob job,
         ChangedFile file,
         ReviewSystemContext context,
         ReviewFileResult? existingResult,
+        string exclusionReason,
         CancellationToken ct)
     {
-        var exclusionReason = context.ExclusionRules.GetMatchingPattern(file.Path) ?? "excluded";
-        logger.LogInformation(
-            "Excluded file {FilePath} due to rule {Pattern} in job {JobId}",
-            file.Path,
-            exclusionReason,
-            job.Id);
-
+        // The job holds one result per file. A result that already exists is reused, also a completed one: a file
+        // reviewed under an earlier pass configuration is selected again and can now be excluded or count as an
+        // unchanged move, and a second row for the same path would break the next dispatch.
         ReviewFileResult fileResult;
-        if (existingResult is { IsComplete: false })
+        if (existingResult is not null)
         {
             existingResult.ResetForRetry();
             existingResult.RecordModelEvidence(ModelReviewCapture.Scope(job, file, context));
@@ -366,11 +399,16 @@ internal sealed class FileReviewDispatchPlanner(
     /// <param name="Exceptions">The exceptions of the file reviews that failed.</param>
     /// <param name="FailedReviewFilePaths">The paths of the files whose review failed, in the order of <paramref name="Exceptions" />.</param>
     /// <param name="BudgetSoftCap">Whether the per-increment budget soft cap stopped the dispatch, and the files it left out.</param>
+    /// <param name="UnchangedMoveFileCount">
+    ///     How many files of the pull request were only moved or renamed and therefore not reviewed, counted over
+    ///     the whole change set so that every attempt of the job reports the same number.
+    /// </param>
     internal sealed record FileReviewDispatchResult(
         IReadOnlyDictionary<string, ReviewFileResult> ExistingResults,
         IReadOnlyList<Exception> Exceptions,
         IReadOnlyList<string> FailedReviewFilePaths,
-        BudgetSoftCapSummary BudgetSoftCap);
+        BudgetSoftCapSummary BudgetSoftCap,
+        int UnchangedMoveFileCount);
 
     /// <summary>
     ///     Summary of a per-increment budget soft-cap stop within a review run: whether it tripped, the USD

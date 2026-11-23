@@ -181,8 +181,19 @@ internal static class RunnerReviewSubject
             ? string.Empty
             : await workspace.ReadFileAsync(summary.Path, "source", ct) ?? string.Empty;
 
-        var diff = await workspace.GetUnifiedDiffAsync(summary.Path, ct) ?? string.Empty;
-        return new ChangedFile(summary.Path, summary.ChangeType, content, diff);
+        var originalPath = summary.ChangeType == ChangeType.Rename ? summary.OriginalPath : null;
+
+        // The workspace compares the blob of the original path in the merge-base revision with the blob of the new
+        // path in the head revision. When they are the same blob, the rename changed no line, and the diff is empty.
+        // Otherwise the workspace receives the original path with the new one, so the diff of a renamed file
+        // contains the lines the pull request changed and not the whole file as added.
+        if (originalPath is not null && await workspace.IsUnchangedMoveAsync(originalPath, summary.Path, ct))
+        {
+            return new ChangedFile(summary.Path, summary.ChangeType, content, string.Empty, originalPath: originalPath, contentUnchanged: true);
+        }
+
+        var diff = await workspace.GetUnifiedDiffAsync(summary.Path, originalPath, ct) ?? string.Empty;
+        return new ChangedFile(summary.Path, summary.ChangeType, content, diff, originalPath: originalPath);
     }
 
     private static PrCommentThread ToThread(RunnerReviewThread thread)

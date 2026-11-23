@@ -49,7 +49,10 @@ public class ReviewFileResult
     /// <summary>True when the file review failed and captured an error message.</summary>
     public bool IsFailed { get; private set; }
 
-    /// <summary>True when the file was excluded from AI review by repository rules.</summary>
+    /// <summary>
+    ///     True when ProPR did not review the file, because an exclusion rule of the repository matches it or the
+    ///     pull request only moves or renames it without changing its content.
+    /// </summary>
     public bool IsExcluded { get; private set; }
 
     /// <summary>
@@ -68,7 +71,10 @@ public class ReviewFileResult
     /// </summary>
     public Guid? ResumedFromFileResultId { get; private set; }
 
-    /// <summary>The exclusion rule that matched this file, when <see cref="IsExcluded" /> is true.</summary>
+    /// <summary>
+    ///     Why the file was not reviewed, when <see cref="IsExcluded" /> is true: the exclusion rule that matched it,
+    ///     or the note that the pull request only moved it.
+    /// </summary>
     public string? ExclusionReason { get; private set; }
 
     /// <summary>The terminal error captured when <see cref="IsFailed" /> is true.</summary>
@@ -218,11 +224,14 @@ public class ReviewFileResult
     ///     Sets <see cref="IsComplete" /> to <see langword="true" /> so the file is treated as
     ///     a terminal state and is not retried.
     /// </summary>
-    /// <param name="exclusionReason">The glob pattern that matched this file, for display purposes.</param>
+    /// <param name="exclusionReason">
+    ///     The glob pattern that matched this file, or the note that the pull request only moved it, for display
+    ///     purposes.
+    /// </param>
     /// <exception cref="InvalidOperationException">
     ///     Thrown when the result is already in a terminal state (<see cref="IsFailed" /> or
     ///     <see cref="IsComplete" />). Call <see cref="ResetForRetry" /> first if the row was
-    ///     previously failed and needs to be re-classified as excluded.
+    ///     previously failed or completed and needs to be re-classified as excluded.
     /// </exception>
     public void MarkExcluded(string exclusionReason)
     {
@@ -239,6 +248,10 @@ public class ReviewFileResult
         this.IsExcluded = true;
         this.IsComplete = true;
         this.ExclusionReason = exclusionReason;
+
+        // No configured pass reviewed an excluded file. A result without pass keys is taken at face value, so a
+        // later attempt under another pass configuration does not select the file again.
+        this._reviewedPassKeys = [];
     }
 
     /// <summary>

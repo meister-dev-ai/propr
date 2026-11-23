@@ -10,8 +10,14 @@ namespace MeisterDev.ProPR.Application.DTOs;
 /// <param name="FilePath">Path of the file reviewed.</param>
 /// <param name="IsComplete">True if the pass completed successfully or was excluded.</param>
 /// <param name="IsFailed">True if the pass failed permanently.</param>
-/// <param name="IsExcluded">True if the file was excluded from AI review by a matching exclusion pattern.</param>
-/// <param name="ExclusionReason">The glob pattern that matched this file, when <paramref name="IsExcluded" /> is true.</param>
+/// <param name="IsExcluded">
+///     True if the file was not reviewed, because an exclusion pattern matches it or the pull request only moves or
+///     renames it without changing its content.
+/// </param>
+/// <param name="ExclusionReason">
+///     The glob pattern that matched this file, or the note that the pull request only moved it, when
+///     <paramref name="IsExcluded" /> is true.
+/// </param>
 /// <param name="PerFileSummary">AI-generated summary for this file pass.</param>
 /// <param name="CommentCount">Number of comments produced for this file.</param>
 public sealed record ReviewFileResultDto(

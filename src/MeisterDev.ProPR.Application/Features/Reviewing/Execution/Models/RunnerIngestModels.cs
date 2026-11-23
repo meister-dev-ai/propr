@@ -50,8 +50,10 @@ public sealed record RunnerTraceEvent(DateTimeOffset OccurredAt, string Name, st
 ///     over what the rows carry, and rows persisted without their comments hand the next attempt forty
 ///     finished files that appear to have found nothing.
 /// </param>
-/// <param name="IsExcluded">Whether the file matched an exclusion and was never reviewed.</param>
-/// <param name="ExclusionReason">The matching rule, when it was excluded.</param>
+/// <param name="IsExcluded">
+///     Whether the file was never reviewed, because it matched an exclusion or the pull request only moved it.
+/// </param>
+/// <param name="ExclusionReason">The matching rule or the note on the move, when it was excluded.</param>
 /// <param name="WithheldFindings">Generated findings excluded from publication and retained with the checkpoint.</param>
 public sealed record RunnerFileOutcome(
     string FilePath,

@@ -646,23 +646,24 @@ internal sealed class GitHubPullRequestFetcher(
         var originalPath = changeType == ChangeType.Rename ? NormalizePath(file.PreviousFileName) : null;
         var isBinary = BinaryFileDetector.IsBinary(path);
 
-        var headContent = string.Empty;
-        var baseContent = string.Empty;
+        string? headRead = null;
+        string? baseRead = null;
         if (!isBinary)
         {
             if (changeType != ChangeType.Delete)
             {
-                headContent = await this.TryReadFileAsync(context, host, repositoryPath, path, headSha, ct) ??
-                              string.Empty;
+                headRead = await this.TryReadFileAsync(context, host, repositoryPath, path, headSha, ct);
             }
 
             if (changeType != ChangeType.Add)
             {
                 var basePath = originalPath ?? path;
-                baseContent = await this.TryReadFileAsync(context, host, repositoryPath, basePath, baseSha, ct) ??
-                              string.Empty;
+                baseRead = await this.TryReadFileAsync(context, host, repositoryPath, basePath, baseSha, ct);
             }
         }
+
+        var headContent = headRead ?? string.Empty;
+        var baseContent = baseRead ?? string.Empty;
 
         string diff;
         if (isBinary)
@@ -678,7 +679,18 @@ internal sealed class GitHubPullRequestFetcher(
             diff = file.Patch!;
         }
 
-        return new ChangedFile(path, changeType, headContent, diff, isBinary, originalPath);
+        // GitHub counts the added and deleted lines of each file against the merge base. A rename counts as
+        // unchanged content when GitHub reports no added and no deleted line and both contents were read and are
+        // equal. A read that found nothing never counts.
+        var contentUnchanged = changeType == ChangeType.Rename
+                               && originalPath is not null
+                               && file.Additions == 0
+                               && file.Deletions == 0
+                               && headRead is not null
+                               && baseRead is not null
+                               && string.Equals(headRead, baseRead, StringComparison.Ordinal);
+
+        return new ChangedFile(path, changeType, headContent, diff, isBinary, originalPath, contentUnchanged);
     }
 
     private async Task<string?> TryReadFileAsync(
@@ -950,7 +962,11 @@ internal sealed class GitHubPullRequestFetcher(
         [property: JsonPropertyName("status")] string? Status,
         [property: JsonPropertyName("previous_filename")]
         string? PreviousFileName,
-        [property: JsonPropertyName("patch")] string? Patch);
+        [property: JsonPropertyName("patch")] string? Patch,
+        [property: JsonPropertyName("additions")]
+        int? Additions = null,
+        [property: JsonPropertyName("deletions")]
+        int? Deletions = null);
 
     private sealed record GitHubCompareResponse([property: JsonPropertyName("files")] IReadOnlyList<GitHubPullRequestFileResponse>? Files);
 

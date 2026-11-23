@@ -3,6 +3,7 @@
 
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
@@ -503,7 +504,7 @@ public sealed class GitReviewRepositoryWorkspaceManagerTests : IAsyncLifetime
                 [("added.txt", ChangeType.Add), ("changed.txt", ChangeType.Edit)],
                 changed.Select(file => (file.Path, file.ChangeType)).OrderBy(file => file.Path).ToArray());
 
-            var diff = await workspace.GetUnifiedDiffAsync("changed.txt", CancellationToken.None);
+            var diff = await workspace.GetUnifiedDiffAsync("changed.txt", null, CancellationToken.None);
             Assert.Contains("-before", diff);
             Assert.Contains("+after", diff);
         }
@@ -511,6 +512,250 @@ public sealed class GitReviewRepositoryWorkspaceManagerTests : IAsyncLifetime
         {
             await workspace.DisposeAsync();
         }
+    }
+
+    // A rename is listed with the path the file had at the base commit, so a review can compare the two sides and
+    // tell a file the pull request only moves from one it also changes.
+    [Fact]
+    public async Task Workspace_ListsARenameWithItsOriginalPath()
+    {
+        await File.WriteAllTextAsync(Path.Combine(this._originPath, "old-name.txt"), "moved content\n");
+        await GitAsync(this._originPath, "add", "-A");
+        await GitAsync(this._originPath, "commit", "-m", "rename base");
+        this._baseSha = await GitOutputAsync(this._originPath, "rev-parse", "HEAD");
+        await GitAsync(this._originPath, "mv", "old-name.txt", "new-name.txt");
+        await GitAsync(this._originPath, "commit", "-m", "rename head");
+        this._headSha = await GitOutputAsync(this._originPath, "rev-parse", "HEAD");
+
+        var result = await this.CreateManager().PrepareAsync(this.CreateRequest(Guid.NewGuid()), CancellationToken.None);
+        Assert.Null(result.Failure);
+        var workspace = result.Workspace!;
+
+        try
+        {
+            var changed = await workspace.GetChangedFilesAsync(CancellationToken.None);
+            var renamed = Assert.Single(changed);
+            Assert.Equal(new ChangedFileSummary("new-name.txt", ChangeType.Rename, "old-name.txt"), renamed);
+            Assert.True(await workspace.IsUnchangedMoveAsync("old-name.txt", "new-name.txt", CancellationToken.None));
+            Assert.False(await workspace.IsUnchangedMoveAsync("kept.txt", "new-name.txt", CancellationToken.None));
+            Assert.False(await workspace.IsUnchangedMoveAsync("missing.txt", "new-name.txt", CancellationToken.None));
+        }
+        finally
+        {
+            await workspace.DisposeAsync();
+        }
+    }
+
+    // The comparison uses the merge-base revision, which the diff and the rename listing compare against, and not
+    // the tip of the target branch. A change that the target branch made to the original file after the branches
+    // diverged therefore does not hide an unchanged move.
+    [Fact]
+    public async Task Workspace_DetectsAnUnchangedMove_WhenTheTargetBranchChangedTheOriginalFileLater()
+    {
+        await this.CommitDivergedRenameAsync(
+            headContent: "moved content\n",
+            targetContent: "changed on the target branch\n");
+
+        var result = await this.CreateManager().PrepareAsync(this.CreateRequest(Guid.NewGuid()), CancellationToken.None);
+        Assert.Null(result.Failure);
+        var workspace = result.Workspace!;
+
+        try
+        {
+            Assert.True(await workspace.IsUnchangedMoveAsync("old-name.txt", "new-name.txt", CancellationToken.None));
+        }
+        finally
+        {
+            await workspace.DisposeAsync();
+        }
+    }
+
+    // When both branches make the same edit, the content at the tip of the target branch equals the head content,
+    // but the rename still changed the file against the merge base and is reviewed.
+    [Fact]
+    public async Task Workspace_DoesNotTreatAChangedMoveAsUnchanged_WhenTheTargetBranchMadeTheSameEdit()
+    {
+        await this.CommitDivergedRenameAsync(
+            headContent: "edited content\n",
+            targetContent: "edited content\n");
+
+        var result = await this.CreateManager().PrepareAsync(this.CreateRequest(Guid.NewGuid()), CancellationToken.None);
+        Assert.Null(result.Failure);
+        var workspace = result.Workspace!;
+
+        try
+        {
+            Assert.False(await workspace.IsUnchangedMoveAsync("old-name.txt", "new-name.txt", CancellationToken.None));
+        }
+        finally
+        {
+            await workspace.DisposeAsync();
+        }
+    }
+
+    // With the original path, git pairs the renamed file with it, so the diff contains the one edited line. With the
+    // new path alone, git lists every line of the file as added.
+    [Fact]
+    public async Task Workspace_DiffOfARenamedAndEditedFile_ContainsOnlyTheEditedLines()
+    {
+        var lines = Enumerable.Range(1, 10).Select(n => $"line {n}").ToArray();
+        await this.CommitRenameAsync(
+            string.Join('\n', lines) + "\n",
+            string.Join('\n', lines.Select(line => line == "line 5" ? "line five" : line)) + "\n");
+
+        var result = await this.CreateManager().PrepareAsync(this.CreateRequest(Guid.NewGuid()), CancellationToken.None);
+        Assert.Null(result.Failure);
+        var workspace = result.Workspace!;
+
+        try
+        {
+            var diff = await workspace.GetUnifiedDiffAsync("new-name.txt", "old-name.txt", CancellationToken.None);
+            Assert.Contains("rename from old-name.txt", diff, StringComparison.Ordinal);
+            Assert.Contains("-line 5", diff, StringComparison.Ordinal);
+            Assert.Contains("+line five", diff, StringComparison.Ordinal);
+            Assert.Equal(2, ReviewDiffProcessor.CountChangedLines(diff));
+
+            var newPathOnly = await workspace.GetUnifiedDiffAsync("new-name.txt", null, CancellationToken.None);
+            Assert.Equal(10, ReviewDiffProcessor.CountChangedLines(newPathOnly));
+        }
+        finally
+        {
+            await workspace.DisposeAsync();
+        }
+    }
+
+    // When the content changed by more than half, git does not pair the paths and would describe the original path as
+    // deleted. The diff then covers the new path alone and lists the file as added.
+    [Fact]
+    public async Task Workspace_DiffOfARewrittenRename_CoversTheNewPathAlone()
+    {
+        await this.CommitRenameAsync(
+            string.Join('\n', Enumerable.Range(1, 10).Select(n => $"old line {n}")) + "\n",
+            string.Join('\n', Enumerable.Range(1, 10).Select(n => $"rewritten {n}")) + "\n");
+
+        var result = await this.CreateManager().PrepareAsync(this.CreateRequest(Guid.NewGuid()), CancellationToken.None);
+        Assert.Null(result.Failure);
+        var workspace = result.Workspace!;
+
+        try
+        {
+            var diff = await workspace.GetUnifiedDiffAsync("new-name.txt", "old-name.txt", CancellationToken.None);
+            Assert.DoesNotContain("old-name.txt", diff, StringComparison.Ordinal);
+            Assert.Contains("+rewritten 1", diff, StringComparison.Ordinal);
+            Assert.Equal(10, ReviewDiffProcessor.CountChangedLines(diff));
+        }
+        finally
+        {
+            await workspace.DisposeAsync();
+        }
+    }
+
+    // The size measurements pair renamed files with their original paths, as the review diff does: a file that was
+    // only moved counts no line and a renamed file with one edited line counts two. Without the original paths, git
+    // counts both files as wholly added.
+    [Fact]
+    public async Task Workspace_MeasuresRenamedFilesWithTheirOriginalPaths()
+    {
+        var lines = Enumerable.Range(1, 10).Select(n => $"line {n}").ToArray();
+        await File.WriteAllTextAsync(Path.Combine(this._originPath, "moved.txt"), string.Join('\n', lines) + "\n");
+        await File.WriteAllTextAsync(Path.Combine(this._originPath, "old-name.txt"), string.Join('\n', lines) + "\n");
+        await GitAsync(this._originPath, "add", "-A");
+        await GitAsync(this._originPath, "commit", "-m", "measure base");
+        this._baseSha = await GitOutputAsync(this._originPath, "rev-parse", "HEAD");
+        await GitAsync(this._originPath, "mv", "moved.txt", "moved-to.txt");
+        await GitAsync(this._originPath, "mv", "old-name.txt", "new-name.txt");
+        await File.WriteAllTextAsync(
+            Path.Combine(this._originPath, "new-name.txt"),
+            string.Join('\n', lines.Select(line => line == "line 5" ? "line five" : line)) + "\n");
+        await GitAsync(this._originPath, "add", "-A");
+        await GitAsync(this._originPath, "commit", "-m", "measure head");
+        this._headSha = await GitOutputAsync(this._originPath, "rev-parse", "HEAD");
+
+        var result = await this.CreateManager().PrepareAsync(this.CreateRequest(Guid.NewGuid()), CancellationToken.None);
+        Assert.Null(result.Failure);
+        var workspace = result.Workspace!;
+
+        try
+        {
+            string[] paths = ["moved-to.txt", "new-name.txt"];
+            Assert.Equal(2, await workspace.CountChangedLinesAsync(paths, ["moved.txt", "old-name.txt"], CancellationToken.None));
+            Assert.Equal(20, await workspace.CountChangedLinesAsync(paths, [], CancellationToken.None));
+            Assert.True(
+                await workspace.CountDiffBytesAsync(paths, ["moved.txt", "old-name.txt"], CancellationToken.None)
+                < await workspace.CountDiffBytesAsync(paths, [], CancellationToken.None));
+        }
+        finally
+        {
+            await workspace.DisposeAsync();
+        }
+    }
+
+    // When git does not pair a rewritten file with its original path, the measurement covers the new path alone, as
+    // the review diff does, and does not add the old content as removed lines.
+    [Fact]
+    public async Task Workspace_MeasuresARewrittenRenameOverTheNewPathAlone()
+    {
+        await this.CommitRenameAsync(
+            string.Join('\n', Enumerable.Range(1, 10).Select(n => $"old line {n}")) + "\n",
+            string.Join('\n', Enumerable.Range(1, 10).Select(n => $"rewritten {n}")) + "\n");
+
+        var result = await this.CreateManager().PrepareAsync(this.CreateRequest(Guid.NewGuid()), CancellationToken.None);
+        Assert.Null(result.Failure);
+        var workspace = result.Workspace!;
+
+        try
+        {
+            Assert.Equal(10, await workspace.CountChangedLinesAsync(["new-name.txt"], ["old-name.txt"], CancellationToken.None));
+            Assert.Equal(
+                await workspace.CountDiffBytesAsync(["new-name.txt"], [], CancellationToken.None),
+                await workspace.CountDiffBytesAsync(["new-name.txt"], ["old-name.txt"], CancellationToken.None));
+        }
+        finally
+        {
+            await workspace.DisposeAsync();
+        }
+    }
+
+    /// <summary>
+    ///     Commits <c>old-name.txt</c> with <paramref name="baseContent" /> as the base revision and, as the head
+    ///     revision, renames it to <c>new-name.txt</c> with <paramref name="headContent" />.
+    /// </summary>
+    private async Task CommitRenameAsync(string baseContent, string headContent)
+    {
+        await File.WriteAllTextAsync(Path.Combine(this._originPath, "old-name.txt"), baseContent);
+        await GitAsync(this._originPath, "add", "-A");
+        await GitAsync(this._originPath, "commit", "-m", "rename base");
+        this._baseSha = await GitOutputAsync(this._originPath, "rev-parse", "HEAD");
+        await GitAsync(this._originPath, "mv", "old-name.txt", "new-name.txt");
+        await File.WriteAllTextAsync(Path.Combine(this._originPath, "new-name.txt"), headContent);
+        await GitAsync(this._originPath, "add", "-A");
+        await GitAsync(this._originPath, "commit", "-m", "rename head");
+        this._headSha = await GitOutputAsync(this._originPath, "rev-parse", "HEAD");
+    }
+
+    /// <summary>
+    ///     Builds two branches from a common commit that holds <c>old-name.txt</c> with the content "moved content".
+    ///     The feature branch renames the file to <c>new-name.txt</c> with <paramref name="headContent" />, and the
+    ///     target branch writes <paramref name="targetContent" /> into the original file afterwards.
+    /// </summary>
+    private async Task CommitDivergedRenameAsync(string headContent, string targetContent)
+    {
+        await File.WriteAllTextAsync(Path.Combine(this._originPath, "old-name.txt"), "moved content\n");
+        await GitAsync(this._originPath, "add", "-A");
+        await GitAsync(this._originPath, "commit", "-m", "common base");
+
+        await GitAsync(this._originPath, "checkout", "-b", "feature/rename");
+        await GitAsync(this._originPath, "mv", "old-name.txt", "new-name.txt");
+        await File.WriteAllTextAsync(Path.Combine(this._originPath, "new-name.txt"), headContent);
+        await GitAsync(this._originPath, "add", "-A");
+        await GitAsync(this._originPath, "commit", "-m", "rename on the feature branch");
+        this._headSha = await GitOutputAsync(this._originPath, "rev-parse", "HEAD");
+
+        await GitAsync(this._originPath, "checkout", "main");
+        await File.WriteAllTextAsync(Path.Combine(this._originPath, "old-name.txt"), targetContent);
+        await GitAsync(this._originPath, "add", "-A");
+        await GitAsync(this._originPath, "commit", "-m", "change on the target branch");
+        this._baseSha = await GitOutputAsync(this._originPath, "rev-parse", "HEAD");
     }
 
     // The measurements name the revisions the lease was taken for, so they describe the same pair as the
@@ -534,7 +779,7 @@ public sealed class GitReviewRepositoryWorkspaceManagerTests : IAsyncLifetime
                 changed.Select(file => (file.Path, file.ChangeType)).OrderBy(file => file.Path).ToArray());
 
             // One line removed and one added in changed.txt, plus the one line of added.txt.
-            Assert.Equal(3, await workspace.CountChangedLinesAsync(["changed.txt", "added.txt"], CancellationToken.None));
+            Assert.Equal(3, await workspace.CountChangedLinesAsync(["changed.txt", "added.txt"], [], CancellationToken.None));
         }
         finally
         {

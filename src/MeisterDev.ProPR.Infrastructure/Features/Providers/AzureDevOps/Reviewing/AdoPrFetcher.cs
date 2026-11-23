@@ -248,11 +248,11 @@ public sealed partial class AdoPrFetcher(
         }
 
         var headContent = sourceCommit.Length >= 6
-            ? await this.TryResolveHeadContentAsync(gitClient, projectId, repositoryId, apiPath, sourceCommit, cancellationToken)
+            ? (await this.TryResolveHeadContentAsync(gitClient, projectId, repositoryId, apiPath, sourceCommit, cancellationToken)).Content
             : string.Empty;
 
         var baseContent = baseCommit.Length >= 6
-            ? await this.TryResolveBaseContentAsync(gitClient, projectId, repositoryId, apiPath, baseCommit, cancellationToken)
+            ? (await this.TryResolveBaseContentAsync(gitClient, projectId, repositoryId, apiPath, baseCommit, cancellationToken)).Content
             : string.Empty;
 
         if (string.IsNullOrEmpty(headContent) && string.IsNullOrEmpty(baseContent))
@@ -487,7 +487,7 @@ public sealed partial class AdoPrFetcher(
         var renameWithMissingSource = changeType == ChangeType.Rename && originalPath is null;
         var isBinary = BinaryFileDetector.IsBinary(path);
 
-        var (headContent, baseContent, diff) = await this.ReadChangeContentAsync(
+        var (headContent, baseContent, diff, contentUnchanged) = await this.ReadChangeContentAsync(
             gitClient,
             projectId,
             repositoryId,
@@ -510,7 +510,8 @@ public sealed partial class AdoPrFetcher(
             headContent,
             resolvedDiff,
             isBinary,
-            originalPath is null ? null : ToRepoRelativePath(originalPath));
+            originalPath is null ? null : ToRepoRelativePath(originalPath),
+            contentUnchanged);
     }
 
     private static ChangeType MapAdoChangeType(GitPullRequestChange change)
@@ -534,7 +535,7 @@ public sealed partial class AdoPrFetcher(
         return changeType == ChangeType.Rename ? change.SourceServerItem : null;
     }
 
-    private async Task<(string HeadContent, string BaseContent, string? Diff)> ReadChangeContentAsync(
+    private async Task<(string HeadContent, string BaseContent, string? Diff, bool ContentUnchanged)> ReadChangeContentAsync(
         GitHttpClient gitClient,
         string projectId,
         string repositoryId,
@@ -550,7 +551,7 @@ public sealed partial class AdoPrFetcher(
     {
         if (isBinary)
         {
-            return (string.Empty, string.Empty, null);
+            return (string.Empty, string.Empty, null, false);
         }
 
         return workspace is not null
@@ -568,7 +569,7 @@ public sealed partial class AdoPrFetcher(
                 cancellationToken);
     }
 
-    private async Task<(string HeadContent, string BaseContent, string? Diff)> ReadChangeContentFromWorkspaceAsync(
+    private async Task<(string HeadContent, string BaseContent, string? Diff, bool ContentUnchanged)> ReadChangeContentFromWorkspaceAsync(
         IReviewRepositoryWorkspace workspace,
         string path,
         ChangeType changeType,
@@ -591,11 +592,25 @@ public sealed partial class AdoPrFetcher(
             baseContent = await workspace.ReadFileAsync(basePathToRead, "target", cancellationToken) ?? string.Empty;
         }
 
-        var diff = await workspace.GetUnifiedDiffAsync(path, cancellationToken);
-        return (headContent, baseContent, diff);
+        // The workspace compares the blob of the original path in the merge-base revision with the blob of the new
+        // path in the head revision. When they are the same blob, the rename changed no line, and the diff is empty.
+        // Otherwise the workspace receives the original path with the new one, so the diff of a renamed file
+        // contains the lines the pull request changed and not the whole file as added.
+        if (changeType == ChangeType.Rename
+            && originalPath is not null
+            && await workspace.IsUnchangedMoveAsync(originalPath, path, cancellationToken))
+        {
+            return (headContent, baseContent, string.Empty, true);
+        }
+
+        var diff = await workspace.GetUnifiedDiffAsync(
+            path,
+            changeType == ChangeType.Rename ? originalPath : null,
+            cancellationToken);
+        return (headContent, baseContent, diff, false);
     }
 
-    private async Task<(string HeadContent, string BaseContent, string? Diff)> ReadChangeContentFromRemoteAsync(
+    private async Task<(string HeadContent, string BaseContent, string? Diff, bool ContentUnchanged)> ReadChangeContentFromRemoteAsync(
         GitHttpClient gitClient,
         string projectId,
         string repositoryId,
@@ -607,12 +622,12 @@ public sealed partial class AdoPrFetcher(
         bool renameWithMissingSource,
         CancellationToken cancellationToken)
     {
-        var headContent = string.Empty;
-        var baseContent = string.Empty;
+        var head = new AdoItemRead(string.Empty, null);
+        var @base = new AdoItemRead(string.Empty, null);
 
         if (changeType != ChangeType.Delete && sourceCommit.Length >= 6)
         {
-            headContent = await this.TryResolveHeadContentAsync(
+            head = await this.TryResolveHeadContentAsync(
                 gitClient,
                 projectId,
                 repositoryId,
@@ -633,7 +648,7 @@ public sealed partial class AdoPrFetcher(
         else if (baseCommit.Length >= 6)
         {
             var basePathToFetch = originalPath ?? path;
-            baseContent = await this.TryResolveBaseContentAsync(
+            @base = await this.TryResolveBaseContentAsync(
                 gitClient,
                 projectId,
                 repositoryId,
@@ -648,13 +663,20 @@ public sealed partial class AdoPrFetcher(
                 path);
         }
 
-        return (headContent, baseContent, null);
+        // Azure DevOps returns the blob id with each item. A rename whose two items have the same blob id changed
+        // no content. A failed read has no blob id, so it never counts as unchanged.
+        var contentUnchanged = changeType == ChangeType.Rename
+                               && originalPath is not null
+                               && !string.IsNullOrWhiteSpace(head.ObjectId)
+                               && string.Equals(head.ObjectId, @base.ObjectId, StringComparison.OrdinalIgnoreCase);
+        return (head.Content, @base.Content, null, contentUnchanged);
     }
 
     /// <summary>
-    ///     Tries to fetch the base content of a change.
+    ///     Tries to fetch the base content of a change, with the blob id of the item. A failed fetch returns empty
+    ///     content and no blob id.
     /// </summary>
-    private async Task<string> TryResolveBaseContentAsync(
+    private async Task<AdoItemRead> TryResolveBaseContentAsync(
         GitHttpClient gitClient,
         string projectId,
         string repositoryId,
@@ -662,7 +684,6 @@ public sealed partial class AdoPrFetcher(
         string baseCommit,
         CancellationToken cancellationToken)
     {
-        string baseContent;
         try
         {
             var item = await gitClient.GetItemAsync(
@@ -684,21 +705,20 @@ public sealed partial class AdoPrFetcher(
                 null, // sanitize
                 null, // userState
                 cancellationToken);
-            baseContent = item.Content ?? "";
+            return new AdoItemRead(item.Content ?? "", item.ObjectId);
         }
         catch (Exception ex)
         {
             LogBaseContentFetchWarning(logger, path, baseCommit, ex);
-            baseContent = "";
+            return new AdoItemRead(string.Empty, null);
         }
-
-        return baseContent;
     }
 
     /// <summary>
-    ///     Tries to fetch the head content of a change.
+    ///     Tries to fetch the head content of a change, with the blob id of the item. A failed fetch returns empty
+    ///     content and no blob id.
     /// </summary>
-    private async Task<string> TryResolveHeadContentAsync(
+    private async Task<AdoItemRead> TryResolveHeadContentAsync(
         GitHttpClient gitClient,
         string projectId,
         string repositoryId,
@@ -706,7 +726,6 @@ public sealed partial class AdoPrFetcher(
         string sourceCommit,
         CancellationToken cancellationToken)
     {
-        string headContent;
         try
         {
             var item = await gitClient.GetItemAsync(
@@ -728,15 +747,13 @@ public sealed partial class AdoPrFetcher(
                 null, // sanitize
                 null, // userState
                 cancellationToken);
-            headContent = item.Content ?? "";
+            return new AdoItemRead(item.Content ?? "", item.ObjectId);
         }
         catch (Exception ex)
         {
             LogHeadContentFetchWarning(logger, path, sourceCommit, ex);
-            headContent = "";
+            return new AdoItemRead(string.Empty, null);
         }
-
-        return headContent;
     }
 
     private static string BuildUnifiedDiff(string oldContent, string newContent, string filePath)
@@ -845,4 +862,9 @@ public sealed partial class AdoPrFetcher(
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
+
+    /// <summary>The content of one item read from Azure DevOps, and its blob id.</summary>
+    /// <param name="Content">The content, or an empty string when the read failed.</param>
+    /// <param name="ObjectId">The blob id of the item, or null when the read failed or returned none.</param>
+    private sealed record AdoItemRead(string Content, string? ObjectId);
 }

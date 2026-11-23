@@ -19,7 +19,8 @@ public sealed record ChangedFile
         string fullContent,
         string unifiedDiff,
         bool isBinary = false,
-        string? originalPath = null)
+        string? originalPath = null,
+        bool contentUnchanged = false)
     {
         if (string.IsNullOrEmpty(path))
         {
@@ -32,6 +33,7 @@ public sealed record ChangedFile
         this.UnifiedDiff = unifiedDiff ?? "";
         this.IsBinary = isBinary;
         this.OriginalPath = originalPath;
+        this.ContentUnchanged = contentUnchanged;
     }
 
     /// <summary>File path relative to the repository root.</summary>
@@ -58,4 +60,12 @@ public sealed record ChangedFile
     ///     <see langword="null" /> for all other change types.
     /// </summary>
     public string? OriginalPath { get; init; }
+
+    /// <summary>
+    ///     <see langword="true" /> when the source of the file confirmed that the file has the same content at
+    ///     <see cref="Path" /> in the head revision as at <see cref="OriginalPath" /> in the base revision, for example
+    ///     by equal blob ids. <see langword="false" /> when the content differs or the source could not confirm it,
+    ///     also when a read of either side failed.
+    /// </summary>
+    public bool ContentUnchanged { get; init; }
 }

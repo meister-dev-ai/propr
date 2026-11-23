@@ -5,6 +5,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
@@ -168,6 +169,77 @@ public sealed class GitHubCodeReviewQueryServiceTests
 
         Assert.Contains("no longer has permission", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Resource not accessible by integration", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // GitHub counts the added and deleted lines of each file. A rename counts as only moved when GitHub reports no
+    // added and no deleted line and both contents were read and are equal. A rename whose contents could not be read
+    // is reviewed, and a rename with changed lines keeps its patch.
+    [Fact]
+    public async Task PullRequestFetcher_TakesAnUnchangedMoveFromZeroCountsAndEqualContents_AndNeverFromAFailedRead()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var connectionRepository = CreateConnectionRepository(clientId, host);
+        const string changedPatch = "@@ -1 +1 @@\n-public class Before {}\n+public class After {}";
+        var httpClientFactory = CreateHttpClientFactory(request => request.RequestUri!.AbsoluteUri switch
+        {
+            "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
+            "https://api.github.com/repositories/101" => CreateJsonResponse(new { full_name = "acme/propr" }),
+            "https://api.github.com/repos/acme/propr/pulls/42" => CreateJsonResponse(
+                new
+                {
+                    title = "Move the providers",
+                    state = "open",
+                    merged_at = (string?)null,
+                    head = new { @ref = "feature/move", sha = "head-sha" },
+                    @base = new { @ref = "main", sha = "base-sha" },
+                }),
+            "https://api.github.com/repos/acme/propr/pulls/42/files?per_page=100" => CreateJsonResponse(
+                new object[]
+                {
+                    new { filename = "src/moved/Moved.cs", status = "renamed", previous_filename = "src/Moved.cs", additions = 0, deletions = 0 },
+                    new { filename = "src/moved/Unreadable.cs", status = "renamed", previous_filename = "src/Unreadable.cs", additions = 0, deletions = 0 },
+                    new
+                    {
+                        filename = "src/moved/Changed.cs", status = "renamed", previous_filename = "src/Changed.cs", additions = 1, deletions = 1,
+                        patch = changedPatch,
+                    },
+                }),
+            "https://api.github.com/repos/acme/propr/contents/src%2Fmoved%2FMoved.cs?ref=head-sha" => CreateContentResponse("public class Moved {}"),
+            "https://api.github.com/repos/acme/propr/contents/src%2FMoved.cs?ref=base-sha" => CreateContentResponse("public class Moved {}"),
+            "https://api.github.com/repos/acme/propr/contents/src%2Fmoved%2FChanged.cs?ref=head-sha" => CreateContentResponse("public class After {}"),
+            "https://api.github.com/repos/acme/propr/contents/src%2FChanged.cs?ref=base-sha" => CreateContentResponse("public class Before {}"),
+            "https://api.github.com/graphql" => CreateJsonResponse(
+                new { data = new { repository = new { pullRequest = new { reviewThreads = new { nodes = Array.Empty<object>() } } } } }),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+        });
+
+        var sut = new GitHubPullRequestFetcher(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.FetchAsync(
+            "https://github.com",
+            "acme",
+            "101",
+            42,
+            7,
+            clientId: clientId,
+            cancellationToken: CancellationToken.None);
+
+        var moved = Assert.Single(result.ChangedFiles, file => file.Path == "src/moved/Moved.cs");
+        Assert.True(moved.ContentUnchanged);
+        Assert.True(ReviewFileSelectionService.IsUnchangedMove(moved));
+
+        var unreadable = Assert.Single(result.ChangedFiles, file => file.Path == "src/moved/Unreadable.cs");
+        Assert.False(unreadable.ContentUnchanged);
+        Assert.False(ReviewFileSelectionService.IsUnchangedMove(unreadable));
+
+        var changed = Assert.Single(result.ChangedFiles, file => file.Path == "src/moved/Changed.cs");
+        Assert.Equal(ChangeType.Rename, changed.ChangeType);
+        Assert.Equal("src/Changed.cs", changed.OriginalPath);
+        Assert.Equal(changedPatch, changed.UnifiedDiff);
+        Assert.False(ReviewFileSelectionService.IsUnchangedMove(changed));
     }
 
     [Fact]

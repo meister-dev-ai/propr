@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using System.Text;
 using System.Text.Json;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.Exceptions;
@@ -16,6 +17,7 @@ using MeisterDev.ProPR.Application.ValueObjects;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Deduplication;
@@ -174,7 +176,8 @@ internal sealed partial class FileByFileReviewOrchestrator(
             ReviewResult? partialResult = null;
             try
             {
-                var synthesized = await this.SynthesizeResultsAsync(job, pr, baseContext, effectiveClient, prWideCandidates, budgetSoftCap, ct);
+                var synthesized = await this.SynthesizeResultsAsync(
+                    job, pr, baseContext, effectiveClient, prWideCandidates, budgetSoftCap, dispatchResult.UnchangedMoveFileCount, ct);
                 partialResult = synthesized with { FailedReviewFilePaths = dispatchResult.FailedReviewFilePaths };
             }
             catch (Exception ex)
@@ -191,7 +194,8 @@ internal sealed partial class FileByFileReviewOrchestrator(
                 reviewedFileCount);
         }
 
-        return await this.SynthesizeResultsAsync(job, pr, baseContext, effectiveClient, prWideCandidates, budgetSoftCap, ct);
+        return await this.SynthesizeResultsAsync(
+            job, pr, baseContext, effectiveClient, prWideCandidates, budgetSoftCap, dispatchResult.UnchangedMoveFileCount, ct);
     }
 
     // Runs each pr_wide-scope entry in the client's review-pass list once at the job level. Each entry resolves to
@@ -312,6 +316,7 @@ internal sealed partial class FileByFileReviewOrchestrator(
         IChatClient effectiveClient,
         IReadOnlyList<CandidateReviewFinding> prWideCandidates,
         FileReviewDispatchPlanner.BudgetSoftCapSummary budgetSoftCap,
+        int unchangedMoveFileCount,
         CancellationToken ct)
     {
         // The quality filter runs only on findings that the evidence judge did not decide.
@@ -321,7 +326,41 @@ internal sealed partial class FileByFileReviewOrchestrator(
 
         // A scan the tenant's maximum review duration cut short carries the files and passes it left out, so the
         // summary can name them and the job can record why it ended early.
-        return baseContext.TimeLimit?.ApplyTo(result) ?? result;
+        result = baseContext.TimeLimit?.ApplyTo(result) ?? result;
+        return AppendCoverageNotes(result, unchangedMoveFileCount);
+    }
+
+    /// <summary>
+    ///     Appends to the summary text the notes on files the review did not cover: the files that the pull request
+    ///     only moves or renames, and the files that were not reviewed because the tenant's maximum review duration
+    ///     was reached. The notes are part of the summary text, so the summary that ProPR stores with the job and
+    ///     the summary that it posts on the pull request contain them both.
+    /// </summary>
+    private static ReviewResult AppendCoverageNotes(ReviewResult result, int unchangedMoveFileCount)
+    {
+        var notes = new List<string>(2);
+        if (unchangedMoveFileCount > 0)
+        {
+            notes.Add(ContextBudgetSummarySections.FormatUnchangedMovesNote(unchangedMoveFileCount));
+        }
+
+        if (result.TimeLimitReached)
+        {
+            notes.Add(ContextBudgetSummarySections.FormatTimeLimitNote(result));
+        }
+
+        if (notes.Count == 0)
+        {
+            return result;
+        }
+
+        var summary = new StringBuilder(result.Summary.TrimEnd());
+        foreach (var note in notes)
+        {
+            summary.AppendLine().AppendLine().Append(note);
+        }
+
+        return result with { Summary = summary.ToString() };
     }
 
     /// <summary>

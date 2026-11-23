@@ -11,15 +11,16 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 /// <summary>
 ///     Renders the plain-markdown sections of a review summary that list the files a review did not cover in full:
 ///     failed file reviews, the budgeting decisions on the context window and on USD spend, and the maximum review
-///     duration. The plain-markdown providers share these sections.
+///     duration. The plain-markdown providers share these sections. The note that a review reached the maximum
+///     review duration is part of the summary text itself, so this section contains only the list of files.
 /// </summary>
 public static class ContextBudgetSummarySections
 {
     /// <summary>
     ///     Appends a note and a list for files whose review failed, a note when the review was stopped early by the
-    ///     per-increment budget soft cap or by the maximum review duration of its tenant, a section for files
-    ///     reviewed diff-only, and a section for files skipped because they exceeded the model context window, when
-    ///     the result contains any. No output when none apply.
+    ///     per-increment budget soft cap, a list of the files not reviewed because the maximum review duration of the
+    ///     tenant was reached, a section for files reviewed diff-only, and a section for files skipped because they
+    ///     exceeded the model context window, when the result contains any. No output when none apply.
     /// </summary>
     /// <param name="builder">The summary builder to append to.</param>
     /// <param name="result">The review result carrying the failed file reviews and the budget, time-limit and context-window outcomes.</param>
@@ -52,17 +53,14 @@ public static class ContextBudgetSummarySections
             }
         }
 
-        if (result.TimeLimitReached)
+        if (result.TimeLimitReached && result.TimeLimitSkippedFilePaths.Count > 0)
         {
             builder.AppendLine();
-            builder.AppendLine(FormatTimeLimitNote(result));
-            if (result.TimeLimitSkippedFilePaths.Count > 0)
+            builder.AppendLine(FormatTimeLimitSkippedFilesHeading(result));
+            builder.AppendLine();
+            foreach (var path in result.TimeLimitSkippedFilePaths)
             {
-                builder.AppendLine();
-                foreach (var path in result.TimeLimitSkippedFilePaths)
-                {
-                    builder.AppendLine($"- {renderText(path.ReplaceLineEndings(" "))}");
-                }
+                builder.AppendLine($"- {renderText(path.ReplaceLineEndings(" "))}");
             }
         }
 
@@ -122,25 +120,55 @@ public static class ContextBudgetSummarySections
 
     /// <summary>
     ///     Formats the note for a review that ended at the maximum review duration of its tenant, with the duration,
-    ///     how many files were not reviewed, and whether the pull-request-wide passes did not run. The paths of the
-    ///     files follow the note as a list.
+    ///     how many files were not reviewed, and whether the pull-request-wide passes did not run. The review appends
+    ///     the note to its summary text.
     /// </summary>
     public static string FormatTimeLimitNote(ReviewResult result)
     {
         ArgumentNullException.ThrowIfNull(result);
 
         var limit = result.TimeLimitSeconds is { } seconds
-            ? $"the tenant's time limit of {FormatDuration(seconds)}"
-            : "the tenant's time limit";
+            ? $"the tenant's maximum review duration of {FormatDuration(seconds)}"
+            : "the tenant's maximum review duration";
         var skipped = result.TimeLimitSkippedFilePaths.Count;
         var files = skipped switch
         {
-            0 => "Every file was reviewed.",
-            1 => "1 file was not reviewed.",
-            _ => string.Create(CultureInfo.InvariantCulture, $"{skipped} files were not reviewed."),
+            0 => ". No file was left out because of this limit.",
+            1 => ", so 1 file was not reviewed.",
+            _ => string.Create(CultureInfo.InvariantCulture, $", so {skipped} files were not reviewed."),
         };
         var passes = result.TimeLimitSkippedPrWidePasses ? " The pull-request-wide passes did not run." : string.Empty;
-        return $"**Time limit reached.** The review ended at {limit}. {files}{passes}";
+        return $"**Maximum review duration reached.** The review ended when it reached {limit}{files}{passes}";
+    }
+
+    /// <summary>
+    ///     Formats the heading of the list of files that were not reviewed because the review reached the maximum
+    ///     review duration of its tenant, with the number of those files.
+    /// </summary>
+    public static string FormatTimeLimitSkippedFilesHeading(ReviewResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+
+        var skipped = result.TimeLimitSkippedFilePaths.Count;
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"**Not reviewed because the maximum review duration was reached** ({skipped} {(skipped == 1 ? "file" : "files")})");
+    }
+
+    /// <summary>
+    ///     Formats the note for a review in which the pull request only moves or renames files without changing
+    ///     their content, with the number of those files. The review appends the note to its summary text.
+    /// </summary>
+    /// <param name="unchangedMoveFileCount">How many files were only moved or renamed; at least one.</param>
+    public static string FormatUnchangedMovesNote(int unchangedMoveFileCount)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(unchangedMoveFileCount, 1);
+
+        return unchangedMoveFileCount == 1
+            ? "**Moved file not reviewed.** 1 file was only moved or renamed, without changes to its content, so ProPR did not review it."
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $"**Moved files not reviewed.** {unchangedMoveFileCount} files were only moved or renamed, without changes to their content, so ProPR did not review them.");
     }
 
     /// <summary>Writes a duration in whole hours or minutes where it divides evenly, and in seconds otherwise.</summary>

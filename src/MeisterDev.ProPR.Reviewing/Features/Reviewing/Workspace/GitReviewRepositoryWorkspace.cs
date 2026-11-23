@@ -77,7 +77,9 @@ internal sealed class GitReviewRepositoryWorkspace(
                 break;
             }
 
-            summaries.Add(new ChangedFileSummary(fields[index + pathFields].TrimStart('/'), changeType));
+            // For a rename, the field after the status is the path at the base commit.
+            var originalPath = changeType == ChangeType.Rename ? fields[index + 1].TrimStart('/') : null;
+            summaries.Add(new ChangedFileSummary(fields[index + pathFields].TrimStart('/'), changeType, originalPath));
             index += pathFields + 1;
         }
 
@@ -122,77 +124,57 @@ internal sealed class GitReviewRepositoryWorkspace(
     }
 
     /// <inheritdoc />
-    public async Task<int> CountChangedLinesAsync(IReadOnlyCollection<string> paths, CancellationToken ct)
+    public async Task<int> CountChangedLinesAsync(
+        IReadOnlyCollection<string> paths,
+        IReadOnlyCollection<string> originalPaths,
+        CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(paths);
+        ArgumentNullException.ThrowIfNull(originalPaths);
         var measured = DistinctPaths(paths);
         if (measured.Count == 0)
         {
             return 0;
         }
 
-        // One numstat over the named paths: the output is two numbers and a path per file, so the size of the
-        // change is read without the diff itself ever entering this process. --literal-pathspecs turns off
-        // pathspec magic, so a repository file actually named ":(exclude)large" selects that file instead of
-        // being read as an exclusion that removes it from the measurement.
-        List<string> arguments = ["--literal-pathspecs", "diff", "--numstat", "-z", $"{this.Lease.MergeBaseSha}...{this.Lease.HeadSha}", "--"];
-        arguments.AddRange(measured);
-
-        var result = await gitCommandRunner.RunAsync(
-            this.Lease.HeadWorkspacePath,
-            arguments,
-            authEnvironment,
-            ct,
-            preserveStandardOutput: true);
-        result.EnsureSuccess("count changed lines", "git diff --numstat -z <merge-base>...<head> -- <paths>");
-
-        // With -z each record is "added\tdeleted\t" followed by the NUL-terminated path, and a rename adds two
-        // more NUL-terminated path fields. Only the counts are read, so the path fields are stepped over.
-        var fields = result.StandardOutput.Split('\0', StringSplitOptions.RemoveEmptyEntries);
+        var numstat = await this.ReadNumstatAsync(measured, originalPaths, ct);
 
         // Accumulated in long: a pull request of a few million changed lines overflows an int total and the
         // negative number that comes out reads as a change well under any bound.
-        var total = 0L;
-        foreach (var field in fields)
-        {
-            var columns = field.Split('\t');
-            if (columns.Length < 2)
-            {
-                continue;
-            }
-
-            // A binary file is reported as "-" in both columns and counts as no lines.
-            if (int.TryParse(columns[0], out var added))
-            {
-                total += added;
-            }
-
-            if (int.TryParse(columns[1], out var deleted))
-            {
-                total += deleted;
-            }
-        }
-
+        var total = numstat.Records.Where(record => record.Measured).Sum(record => (long)record.Added + record.Deleted);
         return (int)Math.Min(int.MaxValue, total);
     }
 
     /// <inheritdoc />
-    public async Task<long> CountDiffBytesAsync(IReadOnlyCollection<string> paths, CancellationToken ct)
+    public async Task<long> CountDiffBytesAsync(
+        IReadOnlyCollection<string> paths,
+        IReadOnlyCollection<string> originalPaths,
+        CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(paths);
+        ArgumentNullException.ThrowIfNull(originalPaths);
         var measured = DistinctPaths(paths);
         if (measured.Count == 0)
         {
             return 0;
         }
+
+        // The diff pairs a renamed file with its original path only when git detects the rename. An original path
+        // that git does not pair would add the whole old file as removed lines, which the review diff does not
+        // contain, so the numstat first tells which original paths git pairs, and only those join the pathspec.
+        var pairedOriginalPaths = originalPaths.Count == 0
+            ? []
+            : (await this.ReadNumstatAsync(measured, originalPaths, ct)).PairedOriginalPaths;
 
         // The same diff the reviewer would be sent, counted as it streams out of git. Loading it to measure it
         // would take on exactly the memory the bound exists to refuse.
         List<string> arguments =
         [
-            "--literal-pathspecs", "diff", "--no-ext-diff", "--unified=3", this.Lease.MergeBaseSha, this.Lease.HeadSha, "--",
+            "--literal-pathspecs", "diff", "--no-ext-diff", "--unified=3", "--find-renames", this.Lease.MergeBaseSha,
+            this.Lease.HeadSha, "--",
         ];
         arguments.AddRange(measured);
+        arguments.AddRange(pairedOriginalPaths.Where(path => !measured.Contains(path, StringComparer.Ordinal)));
 
         var result = await gitCommandRunner.CountStandardOutputBytesAsync(
             this.Lease.HeadWorkspacePath,
@@ -206,6 +188,85 @@ internal sealed class GitReviewRepositoryWorkspace(
 
         return result.StandardOutputBytes;
     }
+
+    /// <summary>
+    ///     Runs one numstat with rename detection over the measured paths and the original paths of their renames.
+    ///     The output is two numbers and a path per file, so the size of the change is read without the diff itself
+    ///     ever entering this process. --literal-pathspecs turns off pathspec magic, so a repository file actually
+    ///     named ":(exclude)large" selects that file instead of being read as an exclusion that removes it from the
+    ///     measurement.
+    /// </summary>
+    private async Task<NumstatResult> ReadNumstatAsync(
+        IReadOnlyList<string> measured,
+        IReadOnlyCollection<string> originalPaths,
+        CancellationToken ct)
+    {
+        var originals = originalPaths
+            .Select(NormalizePath)
+            .Where(path => !measured.Contains(path, StringComparer.Ordinal))
+            .ToHashSet(StringComparer.Ordinal);
+        List<string> arguments =
+        [
+            "--literal-pathspecs", "diff", "--numstat", "-z", "--find-renames", $"{this.Lease.MergeBaseSha}...{this.Lease.HeadSha}", "--",
+        ];
+        arguments.AddRange(measured);
+        arguments.AddRange(originals);
+
+        var result = await gitCommandRunner.RunAsync(
+            this.Lease.HeadWorkspacePath,
+            arguments,
+            authEnvironment,
+            ct,
+            preserveStandardOutput: true);
+        result.EnsureSuccess("count changed lines", "git diff --numstat -z --find-renames <merge-base>...<head> -- <paths>");
+        return ParseNumstat(result.StandardOutput, originals);
+    }
+
+    /// <summary>
+    ///     Reads the records of <c>git diff --numstat -z</c>. A record is "added\tdeleted\tpath" ended by NUL; for a
+    ///     rename the path field is empty and the original and the new path follow as two NUL-terminated fields. A
+    ///     binary file is reported as "-" in both columns and counts as no lines. A record of an original path that
+    ///     git did not pair with a renamed file is kept out of the measurement, because the review diff of that file
+    ///     covers the new path alone.
+    /// </summary>
+    private static NumstatResult ParseNumstat(string output, IReadOnlySet<string> originals)
+    {
+        var fields = output.Split('\0');
+        var records = new List<NumstatRecord>();
+        var paired = new List<string>();
+        for (var index = 0; index < fields.Length; index++)
+        {
+            var columns = fields[index].Split('\t', 3);
+            if (columns.Length < 3)
+            {
+                continue;
+            }
+
+            var added = int.TryParse(columns[0], out var a) ? a : 0;
+            var deleted = int.TryParse(columns[1], out var d) ? d : 0;
+            if (columns[2].Length == 0 && index + 2 < fields.Length)
+            {
+                var originalPath = fields[index + 1];
+                if (originals.Contains(originalPath))
+                {
+                    paired.Add(originalPath);
+                }
+
+                records.Add(new NumstatRecord(added, deleted, Measured: true));
+                index += 2;
+            }
+            else
+            {
+                records.Add(new NumstatRecord(added, deleted, Measured: !originals.Contains(columns[2])));
+            }
+        }
+
+        return new NumstatResult(records, paired);
+    }
+
+    private sealed record NumstatRecord(int Added, int Deleted, bool Measured);
+
+    private sealed record NumstatResult(IReadOnlyList<NumstatRecord> Records, IReadOnlyList<string> PairedOriginalPaths);
 
     /// <inheritdoc />
     /// <remarks>
@@ -255,9 +316,37 @@ internal sealed class GitReviewRepositoryWorkspace(
         paths.Distinct(StringComparer.Ordinal).ToList();
 
     /// <inheritdoc />
-    public async Task<string?> GetUnifiedDiffAsync(string path, CancellationToken ct)
+    /// <remarks>
+    ///     Git pairs a renamed file with its original path only when both paths are in the pathspec. With the new
+    ///     path alone, it lists every line of the file as added. For a rename, the method therefore first diffs both
+    ///     paths with rename detection. When git does not pair them, because more than half of the content changed,
+    ///     that output describes the original path as deleted and the new path as added, and the method returns the
+    ///     diff of the new path alone.
+    /// </remarks>
+    public async Task<string?> GetUnifiedDiffAsync(string path, string? originalPath, CancellationToken ct)
     {
         var normalizedPath = NormalizePath(path);
+        var normalizedOriginalPath = originalPath is null ? null : NormalizePath(originalPath);
+        if (normalizedOriginalPath is not null
+            && !string.Equals(normalizedOriginalPath, normalizedPath, StringComparison.Ordinal))
+        {
+            var renameResult = await gitCommandRunner.RunAsync(
+                this.Lease.HeadWorkspacePath,
+                [
+                    "--literal-pathspecs", "diff", "--no-ext-diff", "--unified=3", "--find-renames", this.Lease.MergeBaseSha,
+                    this.Lease.HeadSha, "--", normalizedOriginalPath, normalizedPath,
+                ],
+                authEnvironment,
+                ct);
+            renameResult.EnsureSuccess(
+                "load unified diff of a renamed file",
+                "git diff --find-renames <merge-base> <head> -- <original path> <path>");
+            if (IsSinglePairedRename(renameResult.StandardOutput))
+            {
+                return renameResult.StandardOutput;
+            }
+        }
+
         var result = await gitCommandRunner.RunAsync(
             this.Lease.HeadWorkspacePath,
             ["diff", "--no-ext-diff", "--unified=3", this.Lease.MergeBaseSha, this.Lease.HeadSha, "--", normalizedPath],
@@ -265,6 +354,91 @@ internal sealed class GitReviewRepositoryWorkspace(
             ct);
         result.EnsureSuccess("load unified diff", "git diff --unified=3 <merge-base> <head> -- <path>");
         return result.StandardOutput;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    ///     Both sides are read from the tree entries in the mirror, so the comparison needs no file content and
+    ///     is not affected by what a checkout converts, such as line endings or LFS content. The merge-base
+    ///     revision is the one the diff and the rename listing compare against.
+    /// </remarks>
+    public async Task<bool> IsUnchangedMoveAsync(string originalPath, string path, CancellationToken ct)
+    {
+        try
+        {
+            var originalBlob = await this.ResolveBlobIdAsync(this.Lease.MergeBaseSha, NormalizePath(originalPath), ct);
+            if (originalBlob is null)
+            {
+                return false;
+            }
+
+            var headBlob = await this.ResolveBlobIdAsync(this.Lease.HeadSha, NormalizePath(path), ct);
+            return string.Equals(originalBlob, headBlob, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogInformation(ex, "The mirror could not compare the blobs of {OriginalPath} and {Path}.", originalPath, path);
+            return false;
+        }
+    }
+
+    /// <summary>
+    ///     The object id of the blob at <paramref name="normalizedPath" /> in <paramref name="revision" />, or null
+    ///     when the path is not in the revision, is not a file, or the lookup fails.
+    /// </summary>
+    private async Task<string?> ResolveBlobIdAsync(string revision, string normalizedPath, CancellationToken ct)
+    {
+        if (normalizedPath.Length == 0)
+        {
+            return null;
+        }
+
+        var result = await gitCommandRunner.RunAsync(
+            this.Lease.MirrorPath,
+            ["--literal-pathspecs", "ls-tree", "-z", revision, "--", normalizedPath],
+            authEnvironment,
+            ct,
+            preserveStandardOutput: true);
+        if (result.ExitCode != 0)
+        {
+            logger.LogDebug(
+                "No blob for {Path} at {Revision}: {Reason}",
+                normalizedPath,
+                revision,
+                result.StandardError.Trim());
+            return null;
+        }
+
+        var entry = result.StandardOutput
+            .Split('\0', StringSplitOptions.RemoveEmptyEntries)
+            .Select(ParseTreeEntry)
+            .FirstOrDefault(candidate => string.Equals(candidate.Path, normalizedPath, StringComparison.Ordinal));
+        return entry.IsBlob && entry.ObjectId.Length > 0 ? entry.ObjectId : null;
+    }
+
+    // A diff in which git paired the two paths has one file section, and that section has a "rename from" line.
+    private static bool IsSinglePairedRename(string? diff)
+    {
+        if (string.IsNullOrEmpty(diff))
+        {
+            return false;
+        }
+
+        var sections = 0;
+        var renamed = false;
+        foreach (var line in diff.AsSpan().EnumerateLines())
+        {
+            if (line.StartsWith("diff --git ", StringComparison.Ordinal))
+            {
+                sections++;
+            }
+            else if (line.StartsWith("rename from ", StringComparison.Ordinal))
+            {
+                renamed = true;
+            }
+        }
+
+        return sections == 1 && renamed;
     }
 
     /// <remarks>
@@ -568,24 +742,25 @@ internal sealed class GitReviewRepositoryWorkspace(
 
     /// <summary>
     ///     Splits one <c>ls-tree</c> record into what this class needs from it: whether the entry is a file,
-    ///     and its path.
+    ///     its object id, and its path.
     /// </summary>
     /// <remarks>
     ///     A record is the mode, the type and the object name separated by spaces, then a tab, then the path.
     ///     The path is taken from the first tab onwards so that a filename containing a tab, a space, or
     ///     leading and trailing spaces arrives as the revision stores it.
     /// </remarks>
-    private static (bool IsBlob, string Path) ParseTreeEntry(string record)
+    private static (bool IsBlob, string ObjectId, string Path) ParseTreeEntry(string record)
     {
         var separator = record.IndexOf('\t', StringComparison.Ordinal);
         if (separator < 0)
         {
-            return (false, string.Empty);
+            return (false, string.Empty, string.Empty);
         }
 
         var fields = record[..separator].Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var isBlob = fields.Length >= 2 && string.Equals(fields[1], "blob", StringComparison.Ordinal);
-        return (isBlob, record[(separator + 1)..]);
+        var objectId = fields.Length >= 3 ? fields[2] : string.Empty;
+        return (isBlob, objectId, record[(separator + 1)..]);
     }
 
     private static bool IsTargetSide(string branchSide)

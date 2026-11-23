@@ -4,8 +4,8 @@
 
 /**
  * The explanation for a completed review that ended at the maximum review duration of its tenant, or null when the
- * review did not end there. The review published the findings it had and a summary that lists the files it did not
- * review, so there is nothing to restart.
+ * review did not end there. The review published the findings it had and a summary with the number of files it did
+ * not review, so there is nothing to restart.
  */
 export function formatTimeLimitMessage(
   status: string | null | undefined,
@@ -17,6 +17,7 @@ export function formatTimeLimitMessage(
 
   return (
     'This review reached the maximum review duration of its tenant, so it started no further files and finished '
-    + 'with a synthesis of what it reviewed. The files it did not review are listed in its summary.'
+    + 'with a synthesis of what it reviewed. Its summary contains the number of files it did not review, and the '
+    + 'summary on the pull request also contains their paths.'
   )
 }

@@ -6,6 +6,7 @@ using System.Text.Json;
 using MeisterDev.ProPR.Application.Features.ThreadOwnership;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
@@ -411,6 +412,87 @@ public sealed class GitLabPullRequestFetcherTests
 
         Assert.Equal("4111", result.Author!.ExternalUserId);
         Assert.True(result.Author.IsBot);
+    }
+
+    // GitLab reports no line counts per file, and an empty diff for a renamed file, so the fetcher builds the diff
+    // from the raw content at the merge base and at the head. A rename counts as only moved when both contents were
+    // read and are equal. A rename whose content could not be read, and a rename that only adds the final newline,
+    // which the built diff does not show, are reviewed.
+    [Fact]
+    public async Task FetchAsync_TakesAnUnchangedMoveFromEqualContents_AndNeverFromAFailedRead()
+    {
+        static HttpResponseMessage Raw(string text) => new(HttpStatusCode.OK) { Content = new StringContent(text) };
+
+        static object Rename(string oldPath, string newPath) =>
+            new { old_path = oldPath, new_path = newPath, diff = string.Empty, new_file = false, deleted_file = false, renamed_file = true };
+
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.example.com");
+        var connectionRepository = GitLabTestHelpers.CreateConnectionRepository(clientId, host);
+        var httpClientFactory = GitLabTestHelpers.CreateHttpClientFactory(request =>
+            request.RequestUri!.AbsoluteUri switch
+            {
+                "https://gitlab.example.com/api/v4/user" => GitLabTestHelpers.CreateJsonResponse(new { username = "meister-dev" }),
+                "https://gitlab.example.com/api/v4/projects/101/merge_requests/42" => GitLabTestHelpers
+                    .CreateJsonResponse(
+                        new
+                        {
+                            title = "Move the providers",
+                            state = "opened",
+                            source_branch = "feature/move",
+                            target_branch = "main",
+                            sha = "head-sha",
+                            diff_refs = new { base_sha = "base-sha", head_sha = "head-sha", start_sha = "start-sha" },
+                        }),
+                "https://gitlab.example.com/api/v4/projects/101/merge_requests/42/changes" => GitLabTestHelpers
+                    .CreateJsonResponse(
+                        new
+                        {
+                            changes = new[]
+                            {
+                                Rename("src/Moved.cs", "src/moved/Moved.cs"),
+                                Rename("src/Unreadable.cs", "src/moved/Unreadable.cs"),
+                                Rename("src/Newline.cs", "src/moved/Newline.cs"),
+                            },
+                        }),
+                "https://gitlab.example.com/api/v4/projects/101/repository/files/src%2Fmoved%2FMoved.cs/raw?ref=head-sha" =>
+                    Raw("public class Moved {}\n"),
+                "https://gitlab.example.com/api/v4/projects/101/repository/files/src%2FMoved.cs/raw?ref=base-sha" =>
+                    Raw("public class Moved {}\n"),
+                "https://gitlab.example.com/api/v4/projects/101/repository/files/src%2Fmoved%2FNewline.cs/raw?ref=head-sha" =>
+                    Raw("public class Newline {}\n"),
+                "https://gitlab.example.com/api/v4/projects/101/repository/files/src%2FNewline.cs/raw?ref=base-sha" =>
+                    Raw("public class Newline {}"),
+                "https://gitlab.example.com/api/v4/projects/101/merge_requests/42/discussions?per_page=100" =>
+                    GitLabTestHelpers.CreateJsonResponse(Array.Empty<object>()),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+            });
+
+        var sut = new GitLabPullRequestFetcher(
+            new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.FetchAsync(
+            "https://gitlab.example.com",
+            "acme/platform",
+            "101",
+            42,
+            7,
+            clientId: clientId,
+            cancellationToken: CancellationToken.None);
+
+        var moved = Assert.Single(result.ChangedFiles, file => file.Path == "src/moved/Moved.cs");
+        Assert.True(moved.ContentUnchanged);
+        Assert.True(ReviewFileSelectionService.IsUnchangedMove(moved));
+
+        var unreadable = Assert.Single(result.ChangedFiles, file => file.Path == "src/moved/Unreadable.cs");
+        Assert.Equal(ChangeType.Rename, unreadable.ChangeType);
+        Assert.False(unreadable.ContentUnchanged);
+        Assert.False(ReviewFileSelectionService.IsUnchangedMove(unreadable));
+
+        var newline = Assert.Single(result.ChangedFiles, file => file.Path == "src/moved/Newline.cs");
+        Assert.False(newline.ContentUnchanged);
+        Assert.False(ReviewFileSelectionService.IsUnchangedMove(newline));
     }
 
     [Fact]

@@ -157,17 +157,24 @@ public sealed class LocalGitReviewContextToolsTests
             return Task.FromResult<string?>("line1\nline2\nline3\nline4");
         }
 
-        public Task<int> CountChangedLinesAsync(IReadOnlyCollection<string> paths, CancellationToken ct) => Task.FromResult(0);
+        public Task<int> CountChangedLinesAsync(IReadOnlyCollection<string> paths, IReadOnlyCollection<string> originalPaths, CancellationToken ct) =>
+            Task.FromResult(0);
 
-        public Task<long> CountDiffBytesAsync(IReadOnlyCollection<string> paths, CancellationToken ct) => Task.FromResult(0L);
+        public Task<long> CountDiffBytesAsync(IReadOnlyCollection<string> paths, IReadOnlyCollection<string> originalPaths, CancellationToken ct) =>
+            Task.FromResult(0L);
 
         public Task<IReadOnlySet<string>?> GetPathsChangedSinceAsync(string revision, CancellationToken ct) =>
             Task.FromResult<IReadOnlySet<string>?>(null);
 
 
-        public Task<string?> GetUnifiedDiffAsync(string path, CancellationToken ct)
+        public Task<string?> GetUnifiedDiffAsync(string path, string? originalPath, CancellationToken ct)
         {
             return Task.FromResult<string?>("@@ -1,1 +1,2 @@\n-line1\n+line1\n+line2");
+        }
+
+        public Task<bool> IsUnchangedMoveAsync(string originalPath, string path, CancellationToken ct)
+        {
+            return Task.FromResult(false);
         }
 
         public ValueTask DisposeAsync()

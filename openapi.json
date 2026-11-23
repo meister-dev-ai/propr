@@ -47300,11 +47300,11 @@
           },
           "isExcluded": {
             "type": "boolean",
-            "description": "Whether the file matched an exclusion and was never reviewed."
+            "description": "Whether the file was never reviewed, because it matched an exclusion or the pull request only moved it."
           },
           "exclusionReason": {
             "type": "string",
-            "description": "The matching rule, when it was excluded.",
+            "description": "The matching rule or the note on the move, when it was excluded.",
             "nullable": true
           },
           "withheldFindings": {

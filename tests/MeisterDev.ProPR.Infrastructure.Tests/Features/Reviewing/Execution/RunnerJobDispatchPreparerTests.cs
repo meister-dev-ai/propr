@@ -350,7 +350,8 @@ public sealed class RunnerJobDispatchPreparerTests
         var job = MakeJob();
         this.GivenAPreparedWorkspace(["src/a.cs"]);
         this._toolsFactory.Create(Arg.Any<ReviewContextToolsRequest>()).Returns(Substitute.For<IReviewContextTools>());
-        this._preparedWorkspace!.CountDiffBytesAsync(Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
+        this._preparedWorkspace!.CountDiffBytesAsync(
+                Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
             .Returns(9_000_000L);
         var clients = Substitute.For<IClientRegistry>();
         clients.GetReviewAdmissionPolicyAsync(job.ClientId, Arg.Any<CancellationToken>())
@@ -368,6 +369,37 @@ public sealed class RunnerJobDispatchPreparerTests
             Arg.Any<CancellationToken>());
     }
 
+    // The measurement pairs every renamed file with its original path, as the review diff does, so a file that the
+    // pull request only moves does not count its whole content toward the bound.
+    [Fact]
+    public async Task PreparingAJob_MeasuresRenamedFilesWithTheirOriginalPaths()
+    {
+        var job = MakeJob();
+        this.GivenAPreparedWorkspace(["src/a.cs"]);
+        this._preparedWorkspace!.GetChangedFilesAsync(Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult<IReadOnlyList<ChangedFileSummary>>(
+                [
+                    new ChangedFileSummary("src/a.cs", ChangeType.Edit),
+                    new ChangedFileSummary("src/moved/b.cs", ChangeType.Rename, "src/b.cs"),
+                ]));
+        this._toolsFactory.Create(Arg.Any<ReviewContextToolsRequest>()).Returns(Substitute.For<IReviewContextTools>());
+        var clients = Substitute.For<IClientRegistry>();
+        clients.GetReviewAdmissionPolicyAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(new ReviewAdmissionPolicy(MaxChangedLines: 1_000, MaxDiffBytes: 1_000_000));
+
+        await this.CreatePreparer(clientRegistry: clients).PrepareAsync(job, MakeLease());
+
+        await this._preparedWorkspace.Received(1).CountChangedLinesAsync(
+            Arg.Is<IReadOnlyCollection<string>>(paths => paths.SequenceEqual(new[] { "src/a.cs", "src/moved/b.cs" })),
+            Arg.Is<IReadOnlyCollection<string>>(originals => originals.SequenceEqual(new[] { "src/b.cs" })),
+            Arg.Any<CancellationToken>());
+        await this._preparedWorkspace.Received(1).CountDiffBytesAsync(
+            Arg.Any<IReadOnlyCollection<string>>(),
+            Arg.Is<IReadOnlyCollection<string>>(originals => originals.SequenceEqual(new[] { "src/b.cs" })),
+            Arg.Any<CancellationToken>());
+    }
+
     // The refusal is recorded on the job and shown there. A provider that refuses the comment must not turn
     // the refusal into a failed preparation, which would return the job to the queue and dispatch it again.
     [Fact]
@@ -376,7 +408,8 @@ public sealed class RunnerJobDispatchPreparerTests
         var job = MakeJob();
         this.GivenAPreparedWorkspace(["src/a.cs"]);
         this._toolsFactory.Create(Arg.Any<ReviewContextToolsRequest>()).Returns(Substitute.For<IReviewContextTools>());
-        this._preparedWorkspace!.CountDiffBytesAsync(Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
+        this._preparedWorkspace!.CountDiffBytesAsync(
+                Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
             .Returns(9_000_000L);
         var clients = Substitute.For<IClientRegistry>();
         clients.GetReviewAdmissionPolicyAsync(job.ClientId, Arg.Any<CancellationToken>())
@@ -484,8 +517,8 @@ public sealed class RunnerJobDispatchPreparerTests
         var preparation = await this.CreatePreparer(jobs: jobs, clientRegistry: clients).PrepareAsync(job, MakeLease());
 
         Assert.True(preparation.Succeeded);
-        await this._preparedWorkspace!.DidNotReceiveWithAnyArgs().CountChangedLinesAsync(default!, default);
-        await this._preparedWorkspace.DidNotReceiveWithAnyArgs().CountDiffBytesAsync(default!, default);
+        await this._preparedWorkspace!.DidNotReceiveWithAnyArgs().CountChangedLinesAsync(default!, default!, default);
+        await this._preparedWorkspace.DidNotReceiveWithAnyArgs().CountDiffBytesAsync(default!, default!, default);
         await jobs.DidNotReceiveWithAnyArgs().SetAdmissionRefusedAsync(default, default!, default, default);
     }
 

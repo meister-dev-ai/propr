@@ -50,10 +50,10 @@ public sealed class ContextBudgetSummarySectionsTests
         Assert.Contains("1 file not reviewed", builder.ToString());
     }
 
-    // ProPR writes the tenant's maximum review duration into the summary of a review that ended at it, followed by
-    // the files the review did not reach, so a reader can tell a shortened review from a complete one.
+    // The note that a review reached the tenant's maximum review duration is part of the summary text. ProPR lists
+    // the files the review did not reach under a heading in the posted summary and does not repeat the note there.
     [Fact]
-    public void Append_StatesTheTimeLimitAndListsTheFilesNotReviewed_WhenTheTimeLimitWasReached()
+    public void Append_ListsTheFilesNotReviewed_WhenTheMaximumReviewDurationWasReached()
     {
         var result = new ReviewResult("summary", [])
         {
@@ -66,18 +66,36 @@ public sealed class ContextBudgetSummarySectionsTests
         ContextBudgetSummarySections.Append(builder, result);
         var output = builder.ToString();
 
-        Assert.Contains("Time limit reached", output);
-        Assert.Contains("tenant's time limit of 30 minutes", output);
-        Assert.Contains("2 files were not reviewed", output);
+        Assert.Contains("**Not reviewed because the maximum review duration was reached** (2 files)", output);
         Assert.Contains("- src/a.cs", output);
         Assert.Contains("- src/b.cs", output);
+        Assert.DoesNotContain(ContextBudgetSummarySections.FormatTimeLimitNote(result), output);
+    }
+
+    // A review that reached the maximum review duration after its last file skipped only the pull-request-wide
+    // passes. There is no file to list, and the note in the summary text contains the rest.
+    [Fact]
+    public void Append_WritesNothingForTheMaximumReviewDuration_WhenNoFileWasLeftOut()
+    {
+        var result = new ReviewResult("summary", [])
+        {
+            TimeLimitReached = true,
+            TimeLimitSeconds = 1800,
+            TimeLimitSkippedPrWidePasses = true,
+        };
+
+        var builder = new StringBuilder();
+        ContextBudgetSummarySections.Append(builder, result);
+
+        Assert.Equal(string.Empty, builder.ToString());
     }
 
     [Theory]
-    [InlineData(90, 1, false, "time limit of 90 seconds", "1 file was not reviewed.")]
-    [InlineData(3600, 0, true, "time limit of 1 hour", "Every file was reviewed. The pull-request-wide passes did not run.")]
-    [InlineData(7200, 3, false, "time limit of 2 hours", "3 files were not reviewed.")]
-    [InlineData(60, 2, true, "time limit of 1 minute", "2 files were not reviewed. The pull-request-wide passes did not run.")]
+    [InlineData(90, 1, false, "maximum review duration of 90 seconds", "so 1 file was not reviewed.")]
+    [InlineData(
+        3600, 0, true, "maximum review duration of 1 hour", "1 hour. No file was left out because of this limit. The pull-request-wide passes did not run.")]
+    [InlineData(7200, 3, false, "maximum review duration of 2 hours", "so 3 files were not reviewed.")]
+    [InlineData(60, 2, true, "maximum review duration of 1 minute", "so 2 files were not reviewed. The pull-request-wide passes did not run.")]
     public void FormatTimeLimitNote_NamesTheDurationAndWhatTheReviewLeftOut(
         int seconds,
         int skippedFiles,
@@ -95,8 +113,19 @@ public sealed class ContextBudgetSummarySectionsTests
 
         var note = ContextBudgetSummarySections.FormatTimeLimitNote(result);
 
+        Assert.StartsWith("**Maximum review duration reached.**", note);
         Assert.Contains(expectedLimit, note);
         Assert.EndsWith(expectedOutcome, note);
+    }
+
+    [Theory]
+    [InlineData(1, "1 file was only moved or renamed, without changes to its content, so ProPR did not review it.")]
+    [InlineData(438, "438 files were only moved or renamed, without changes to their content, so ProPR did not review them.")]
+    public void FormatUnchangedMovesNote_StatesHowManyFilesWereOnlyMoved(int count, string expectedSentence)
+    {
+        var note = ContextBudgetSummarySections.FormatUnchangedMovesNote(count);
+
+        Assert.EndsWith(expectedSentence, note);
     }
 
     // ProPR lists the files whose review failed, so a reader can tell a review that left files out from a review

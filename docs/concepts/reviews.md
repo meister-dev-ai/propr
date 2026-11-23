@@ -174,8 +174,19 @@ flowchart TD
 
 **Per file.** ProPR reviews each changed file separately, in parallel, each in its own conversation with
 the model. It skips files matched by the repository's [exclusion patterns](repository-configuration.md),
-and files whose estimated input would not fit the model's context budget. Both skips are recorded in the
-job protocol.
+files that the pull request only moves or renames, and files whose estimated input would not fit the model's
+context budget. All three skips are recorded in the job protocol.
+
+**Moved files.** A file counts as moved without changes when the provider reports it as renamed with its previous
+path and ProPR confirms that its content did not change. With a repository workspace and on a runner, ProPR compares
+the blob ids of the previous path at the merge base and of the new path at the head. Azure DevOps without a workspace
+returns the blob ids with the files. On GitHub, GitLab and Forgejo, ProPR compares the two file contents, and GitHub
+and Forgejo must also report no added and no deleted line. ProPR reviews a renamed file whose content it cannot read
+on either side, and a renamed binary file. ProPR records a moved file in the job protocol with the reason
+`Moved from <previous path> without content changes` and writes the number of these files into the summary. For a
+file that the pull request renames and edits, the review receives the changed lines: the provider pairs the two
+paths, and with a repository workspace and on a runner, ProPR diffs the previous and the new path together. When more
+than half of the content changed, git does not pair the paths, and the diff shows the whole file as added.
 
 **Failed file reviews.** The review of a file fails when a model call or a later step of that review returns an
 error, for example when the model endpoint refuses the request. ProPR then runs the job again, up to
@@ -346,9 +357,11 @@ budget for the period is used up, without calling the model. A stopped answer is
 The job ends there; ask again once an administrator raises the cap. An answer whose increment cannot be
 determined counts toward the client and pull-request totals, and toward no per-increment cap.
 
-**Review limits in detail.** ProPR measures a review after the repository is fetched and the files carried
-forward from an earlier review are removed, and before any model call. A review over the changed-file,
-changed-line or diff-size bound ends in the **Not started** state. The job carries the reason, and ProPR
+**Review limits in detail.** ProPR measures a review after the repository is fetched and the files carried forward
+from an earlier review are removed, and before any model call. A renamed file counts the lines and the diff that
+the pull request changes in it. A file that the pull request only moves counts no line, but it counts toward the
+changed-file bound. A review over the changed-file, changed-line or diff-size bound ends in the **Not started**
+state. The job carries the reason, and ProPR
 posts it on the pull request as a review without findings, naming the measured value, the bound and what to
 do: split the pull request, or raise the bound. A review refused on the repository-size bound has a different
 remedy, because splitting the pull request leaves the repository the size it is: make the repository smaller,
@@ -406,10 +419,11 @@ review that starts. Reviews that are running when the limit changes continue.
 **Maximum review duration.** The time counts from the moment the review starts processing. Once it has passed, the
 review starts no further file and no pull-request-wide pass. Files that are being reviewed at that moment are
 finished. The review then writes its summary over the files it reviewed and publishes the findings it has. ProPR adds
-a note to the summary that the review ended at the tenant's time limit, followed by the files it did not review. The
-job ends as completed, and ProPR records the reason `timeLimitReached` on the job and shows it on the review record. A
-review on a runner ends at the same deadline, because the lease carries the time that is left. A runner of an earlier
-release does not read it and reviews every file.
+a note to the summary that the review reached the maximum review duration, with the number of files it did not
+review. The summary on the pull request also contains the paths of these files. The job ends as completed, and ProPR
+records the reason `timeLimitReached` on the job and shows it on the review record. A review on a runner ends at the
+same deadline, because the lease carries the time that is left. A runner of an earlier release does not read it and
+reviews every file.
 
 `REVIEW_LEASE_MAX_REVIEW_DURATION_MINUTES` is a separate ceiling for the whole installation. A review that runs past
 that ceiling is stopped and fails, as described under

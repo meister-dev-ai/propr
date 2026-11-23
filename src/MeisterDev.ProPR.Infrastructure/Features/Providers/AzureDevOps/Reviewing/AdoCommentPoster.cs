@@ -645,9 +645,11 @@ public sealed class AdoCommentPoster(
             }
         }
 
-        if (result.TimeLimitReached)
+        // The note that the review reached the maximum review duration is part of the summary text, so only the
+        // files it did not review are listed here.
+        if (result.TimeLimitReached && result.TimeLimitSkippedFilePaths.Count > 0)
         {
-            sb.Append($"\n\n{ContextBudgetSummarySections.FormatTimeLimitNote(result)}\n\n");
+            sb.Append($"\n\n{ContextBudgetSummarySections.FormatTimeLimitSkippedFilesHeading(result)}\n\n");
             foreach (var path in result.TimeLimitSkippedFilePaths)
             {
                 var renderedPath = AdoFindingCommentRenderer.RenderText(path.ReplaceLineEndings(" "));

@@ -123,6 +123,50 @@ public static class ReviewDiffProcessor
     }
 
     /// <summary>
+    ///     Whether a unified diff adds or removes at least one line. Inside a hunk, every line that starts with
+    ///     <c>+</c> or <c>-</c> counts, also a removed line whose content begins with <c>--</c>. Before the first
+    ///     hunk header, the <c>---</c> and <c>+++</c> lines contain the paths of the two sides and do not count. A
+    ///     diff with a binary-change marker counts as changed, because it has no lines to compare.
+    /// </summary>
+    /// <param name="diff">The unified diff of one file.</param>
+    public static bool HasChangedLines(string? diff)
+    {
+        if (string.IsNullOrEmpty(diff))
+        {
+            return false;
+        }
+
+        var inHunk = false;
+        foreach (var line in diff.AsSpan().EnumerateLines())
+        {
+            if (line.StartsWith("@@", StringComparison.Ordinal))
+            {
+                inHunk = true;
+                continue;
+            }
+
+            if (line.StartsWith("Binary files ", StringComparison.Ordinal)
+                || line.StartsWith("GIT binary patch", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (line.IsEmpty || line[0] is not ('+' or '-'))
+            {
+                continue;
+            }
+
+            if (inHunk
+                || !(line.StartsWith("---", StringComparison.Ordinal) || line.StartsWith("+++", StringComparison.Ordinal)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     ///     Extracts only the added payload of a unified diff: the text of lines beginning with a single
     ///     <c>+</c> (excluding the <c>+++</c> file header), with the leading <c>+</c> removed. Matching against
     ///     this — rather than the raw diff — ensures file headers, hunk headers, context lines, and removed

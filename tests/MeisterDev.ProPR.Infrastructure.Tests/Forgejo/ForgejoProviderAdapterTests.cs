@@ -4,6 +4,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Application.Features.ThreadOwnership;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -614,6 +615,94 @@ public sealed class ForgejoPullRequestFetcherTests
 
         static HttpResponseMessage Base64Content(string content) => ForgejoTestHelpers.CreateJsonResponse(
             new { content = Convert.ToBase64String(Encoding.UTF8.GetBytes(content)), encoding = "base64" });
+    }
+
+    // Forgejo lists a renamed file without a patch, so the fetcher builds the diff from the content at the old and
+    // the new path. A file counts as only moved when Forgejo reports no added and no deleted line and both contents
+    // were read and are equal. A rename whose contents could not be read, and a rename that only adds the final
+    // newline, which the built diff does not show, are reviewed. A file that was moved and changed keeps its
+    // changed lines.
+    [Fact]
+    public async Task FetchAsync_RenamedFileWithTheSameContent_IsAnUnchangedMove()
+    {
+        static HttpResponseMessage Content(string text) => ForgejoTestHelpers.CreateJsonResponse(
+            new { content = Convert.ToBase64String(Encoding.UTF8.GetBytes(text)), encoding = "base64" });
+
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.Forgejo, "https://codeberg.example.com");
+        var connectionRepository = ForgejoTestHelpers.CreateConnectionRepository(clientId, host);
+        var httpClientFactory = ForgejoTestHelpers.CreateHttpClientFactory(request =>
+            request.RequestUri!.AbsoluteUri switch
+            {
+                "https://codeberg.example.com/api/v1/user" => ForgejoTestHelpers.CreateJsonResponse(new { login = "meister-dev" }),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/pulls/42" => ForgejoTestHelpers.CreateJsonResponse(
+                    new
+                    {
+                        title = "Move the packages",
+                        state = "open",
+                        merged = false,
+                        head = new { @ref = "feature/move", sha = "head-sha" },
+                        @base = new { @ref = "main", sha = "base-sha" },
+                    }),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/pulls/42/files?limit=100" => ForgejoTestHelpers.CreateJsonResponse(
+                    new object[]
+                    {
+                        new { filename = "packages/core/Moved.ts", status = "renamed", previous_filename = "core/Moved.ts", additions = 0, deletions = 0 },
+                        new { filename = "packages/core/Changed.ts", status = "renamed", previous_filename = "core/Changed.ts", additions = 1, deletions = 1 },
+                        new
+                        {
+                            filename = "packages/core/Unreadable.ts", status = "renamed", previous_filename = "core/Unreadable.ts", additions = 0, deletions = 0
+                        },
+                        new { filename = "packages/core/Newline.ts", status = "renamed", previous_filename = "core/Newline.ts", additions = 1, deletions = 1 },
+                    }),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/contents/packages%2Fcore%2FMoved.ts?ref=head-sha" =>
+                    Content("export const moved = 1;\n"),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/contents/core%2FMoved.ts?ref=base-sha" =>
+                    Content("export const moved = 1;\n"),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/contents/packages%2Fcore%2FChanged.ts?ref=head-sha" =>
+                    Content("export const changed = 2;\n"),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/contents/core%2FChanged.ts?ref=base-sha" =>
+                    Content("export const changed = 1;\n"),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/contents/packages%2Fcore%2FNewline.ts?ref=head-sha" =>
+                    Content("export const newline = 1;\n"),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/contents/core%2FNewline.ts?ref=base-sha" =>
+                    Content("export const newline = 1;"),
+                "https://codeberg.example.com/api/v1/repos/acme/propr/pulls/42/reviews?limit=100" =>
+                    ForgejoTestHelpers.CreateJsonResponse(Array.Empty<object>()),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+            });
+
+        var sut = new ForgejoPullRequestFetcher(
+            new ForgejoConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.FetchAsync(
+            "https://codeberg.example.com",
+            "acme",
+            "acme/propr",
+            42,
+            7,
+            clientId: clientId,
+            cancellationToken: CancellationToken.None);
+
+        var moved = Assert.Single(result.ChangedFiles, file => file.Path == "packages/core/Moved.ts");
+        Assert.True(moved.ContentUnchanged);
+        Assert.True(ReviewFileSelectionService.IsUnchangedMove(moved));
+
+        var changed = Assert.Single(result.ChangedFiles, file => file.Path == "packages/core/Changed.ts");
+        Assert.Equal(ChangeType.Rename, changed.ChangeType);
+        Assert.Equal("core/Changed.ts", changed.OriginalPath);
+        Assert.Contains("-export const changed = 1;", changed.UnifiedDiff, StringComparison.Ordinal);
+        Assert.Contains("+export const changed = 2;", changed.UnifiedDiff, StringComparison.Ordinal);
+        Assert.False(ReviewFileSelectionService.IsUnchangedMove(changed));
+
+        var unreadable = Assert.Single(result.ChangedFiles, file => file.Path == "packages/core/Unreadable.ts");
+        Assert.False(unreadable.ContentUnchanged);
+        Assert.False(ReviewFileSelectionService.IsUnchangedMove(unreadable));
+
+        var newline = Assert.Single(result.ChangedFiles, file => file.Path == "packages/core/Newline.ts");
+        Assert.False(newline.ContentUnchanged);
+        Assert.False(ReviewFileSelectionService.IsUnchangedMove(newline));
     }
 
     [Fact]

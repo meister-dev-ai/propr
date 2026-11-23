@@ -64,6 +64,30 @@ public sealed class FileByFileReviewOrchestratorTimeLimitTests
         Assert.False(result.TimeLimitSkippedPrWidePasses);
     }
 
+    // ProPR writes into the summary, which it stores with the job and posts on the pull request, that the review
+    // ended at the maximum review duration and how many files it left out. A reader of either can then tell a
+    // shortened review from a complete one.
+    [Fact]
+    public async Task AReviewThatReachesItsTimeLimit_StatesTheDurationAndTheNumberOfFilesNotReviewedInItsSummary()
+    {
+        var clock = new FakeTimeProvider();
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                clock.Advance(TimeSpan.FromSeconds(3601));
+                return new ReviewResult("file summary", []);
+            });
+        var (sut, job, pr) = Build(aiCore, "a.cs", "b.cs", "c.cs");
+        var context = new ReviewSystemContext(null, [], null) { TimeLimit = new ReviewTimeLimit(3600, TimeSpan.FromSeconds(3600), clock) };
+
+        var result = await sut.ReviewAsync(job, pr, context, CancellationToken.None);
+
+        Assert.EndsWith(
+            "**Maximum review duration reached.** The review ended when it reached the tenant's maximum review duration of 1 hour, so 2 files were not reviewed.",
+            result.Summary);
+    }
+
     [Fact]
     public async Task AReviewThatFinishesBeforeItsTimeLimit_CarriesNoTimeLimit()
     {
@@ -77,6 +101,7 @@ public sealed class FileByFileReviewOrchestratorTimeLimitTests
         Assert.False(result.TimeLimitReached);
         Assert.Null(result.TimeLimitSeconds);
         Assert.Empty(result.TimeLimitSkippedFilePaths);
+        Assert.DoesNotContain("Maximum review duration reached", result.Summary);
     }
 
     private static IAiReviewCore AiCoreReturning(string summary)

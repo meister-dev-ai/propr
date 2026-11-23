@@ -51,7 +51,7 @@ internal sealed class ReviewSynthesisExecutor(
 
     /// <summary>The summary of a review that reached the tenant's maximum review duration before it reviewed a file.</summary>
     internal const string NothingReviewedBeforeTheTimeLimitSummary =
-        "The review reached its time limit before it reviewed any file, so it reports no findings.";
+        "The review reached the tenant's maximum review duration before it reviewed any file, so it reports no findings.";
 
     private static readonly JsonSerializerOptions FinalGateJsonOptions = new(JsonSerializerDefaults.Web);
 

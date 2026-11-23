@@ -251,19 +251,24 @@ public partial class ReviewOrchestrationServiceTests
 
         public long DiffBytes { get; set; }
 
-        public Task<int> CountChangedLinesAsync(IReadOnlyCollection<string> paths, CancellationToken ct) =>
+        public Task<int> CountChangedLinesAsync(IReadOnlyCollection<string> paths, IReadOnlyCollection<string> originalPaths, CancellationToken ct) =>
             Task.FromResult(this.ChangedLines);
 
-        public Task<long> CountDiffBytesAsync(IReadOnlyCollection<string> paths, CancellationToken ct) =>
+        public Task<long> CountDiffBytesAsync(IReadOnlyCollection<string> paths, IReadOnlyCollection<string> originalPaths, CancellationToken ct) =>
             Task.FromResult(this.DiffBytes);
 
         public Task<IReadOnlySet<string>?> GetPathsChangedSinceAsync(string revision, CancellationToken ct) =>
             Task.FromResult<IReadOnlySet<string>?>(null);
 
 
-        public Task<string?> GetUnifiedDiffAsync(string path, CancellationToken ct)
+        public Task<string?> GetUnifiedDiffAsync(string path, string? originalPath, CancellationToken ct)
         {
             return Task.FromResult<string?>(null);
+        }
+
+        public Task<bool> IsUnchangedMoveAsync(string originalPath, string path, CancellationToken ct)
+        {
+            return Task.FromResult(false);
         }
 
         public ValueTask DisposeAsync()

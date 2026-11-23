@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -108,7 +109,7 @@ public class AdoPrFetcherTests
         var workspace = Substitute.For<IReviewRepositoryWorkspace>();
         workspace.ReadFileAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(call => $"{call.ArgAt<string>(1)} {call.ArgAt<string>(0)}");
-        workspace.GetUnifiedDiffAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        workspace.GetUnifiedDiffAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(call => $"diff {call.ArgAt<string>(0)}");
 
         var sut = new AdoPrFetcher(
@@ -142,6 +143,152 @@ public class AdoPrFetcherTests
         Assert.Equal(
             ["src/Fetcher.cs", "src/Stable.cs", "src/Other.cs"],
             result.AllPrFileSummaries.Select(summary => summary.Path));
+    }
+
+    // A diff that git limits to the new path lists every line of a renamed file as added. The fetcher therefore asks
+    // the workspace whether the original path at the merge base and the new path at the head are the same blob. A
+    // file that was only moved gets an empty diff, and ProPR does not review it. Equal text read from the two sides
+    // is not enough, because the target side is read at the tip of the target branch and the head side from the
+    // checkout. Every other rename keeps the diff from the workspace.
+    [Fact]
+    public async Task FetchAsync_FromAWorkspace_RenamedFileWithTheSameBlob_IsAnUnchangedMove()
+    {
+        var git = SubstituteRenamePullRequest(
+            RenameOf("/src/services/Moved.cs", "/src/Moved.cs"),
+            RenameOf("/src/services/Changed.cs", "/src/Changed.cs"),
+            RenameOf("/src/services/SameText.cs", "/src/SameText.cs"));
+
+        var contents = new Dictionary<(string Path, string Side), string>
+        {
+            [("/src/services/Moved.cs", "source")] = "class Moved {}\n",
+            [("/src/Moved.cs", "target")] = "class Moved {}\n",
+            [("/src/services/Changed.cs", "source")] = "class Changed { int after; }\n",
+            [("/src/Changed.cs", "target")] = "class Changed { int before; }\n",
+            [("/src/services/SameText.cs", "source")] = "class SameText {}\n",
+            [("/src/SameText.cs", "target")] = "class SameText {}\n",
+        };
+        var workspace = Substitute.For<IReviewRepositoryWorkspace>();
+        workspace.ReadFileAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call => contents.GetValueOrDefault((call.ArgAt<string>(0), call.ArgAt<string>(1))));
+        workspace.GetUnifiedDiffAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(call => $"--- /dev/null\n+++ b{call.ArgAt<string>(0)}\n@@ -0,0 +1 @@\n+{contents[(call.ArgAt<string>(0), "source")]}");
+        workspace.IsUnchangedMoveAsync("/src/Moved.cs", "/src/services/Moved.cs", Arg.Any<CancellationToken>()).Returns(true);
+
+        var result = await CreateFetcher(git).FetchAsync(
+            "https://dev.azure.com/testorg",
+            "project",
+            "repo",
+            42,
+            3,
+            clientId: Guid.NewGuid(),
+            workspace: workspace);
+
+        var moved = Assert.Single(result.ChangedFiles, file => file.Path == "src/services/Moved.cs");
+        Assert.Equal("src/Moved.cs", moved.OriginalPath);
+        Assert.True(moved.ContentUnchanged);
+        Assert.Equal(string.Empty, moved.UnifiedDiff);
+        Assert.True(ReviewFileSelectionService.IsUnchangedMove(moved));
+
+        var changed = Assert.Single(result.ChangedFiles, file => file.Path == "src/services/Changed.cs");
+        Assert.Equal(ChangeType.Rename, changed.ChangeType);
+        Assert.Equal("src/Changed.cs", changed.OriginalPath);
+        Assert.Contains("+class Changed { int after; }", changed.UnifiedDiff, StringComparison.Ordinal);
+        Assert.False(ReviewFileSelectionService.IsUnchangedMove(changed));
+        await workspace.Received(1).GetUnifiedDiffAsync("/src/services/Changed.cs", "/src/Changed.cs", Arg.Any<CancellationToken>());
+
+        var sameText = Assert.Single(result.ChangedFiles, file => file.Path == "src/services/SameText.cs");
+        Assert.Contains("+class SameText {}", sameText.UnifiedDiff, StringComparison.Ordinal);
+        Assert.False(ReviewFileSelectionService.IsUnchangedMove(sameText));
+    }
+
+    // Without a workspace, Azure DevOps returns the blob id with each item it reads. A rename whose two items have the
+    // same blob id is an unchanged move. A failed read has no blob id, so its empty content, and the diff without
+    // changed lines built from it, never count as an unchanged move.
+    [Fact]
+    public async Task FetchAsync_WithoutAWorkspace_TakesAnUnchangedMoveFromEqualBlobIds_AndNeverFromAFailedRead()
+    {
+        var git = SubstituteRenamePullRequest(
+            RenameOf("/src/services/Moved.cs", "/src/Moved.cs"),
+            RenameOf("/src/services/Unreadable.cs", "/src/Unreadable.cs"));
+        var items = new Dictionary<(string Path, string Commit), GitItem>
+        {
+            [("/src/services/Moved.cs", "head-sha")] = new() { Path = "/src/services/Moved.cs", Content = "class Moved {}\n", ObjectId = "4b825dc6" },
+            [("/src/Moved.cs", "base-sha")] = new() { Path = "/src/Moved.cs", Content = "class Moved {}\n", ObjectId = "4b825dc6" },
+        };
+        git.GetItemAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<VersionControlRecursionType?>(),
+                Arg.Any<bool?>(), Arg.Any<bool?>(), Arg.Any<bool?>(), Arg.Any<GitVersionDescriptor>(), Arg.Any<bool?>(), Arg.Any<bool?>(),
+                Arg.Any<bool?>(), Arg.Any<object>(), Arg.Any<CancellationToken>())
+            .Returns(call => items.TryGetValue((call.ArgAt<string>(2), call.ArgAt<GitVersionDescriptor>(8).Version), out var item)
+                ? Task.FromResult(item)
+                : Task.FromException<GitItem>(new InvalidOperationException("The item could not be read.")));
+
+        var result = await CreateFetcher(git).FetchAsync(
+            "https://dev.azure.com/testorg",
+            "project",
+            "repo",
+            42,
+            3,
+            clientId: Guid.NewGuid());
+
+        var moved = Assert.Single(result.ChangedFiles, file => file.Path == "src/services/Moved.cs");
+        Assert.True(moved.ContentUnchanged);
+        Assert.True(ReviewFileSelectionService.IsUnchangedMove(moved));
+
+        var unreadable = Assert.Single(result.ChangedFiles, file => file.Path == "src/services/Unreadable.cs");
+        Assert.Equal(ChangeType.Rename, unreadable.ChangeType);
+        Assert.False(unreadable.ContentUnchanged);
+        Assert.False(ReviewFileSelectionService.IsUnchangedMove(unreadable));
+    }
+
+    private static GitHttpClient SubstituteRenamePullRequest(params GitPullRequestChange[] changes)
+    {
+        var git = Substitute.For<GitHttpClient>(new Uri("https://dev.azure.com/testorg"), new VssCredentials());
+        git.GetPullRequestAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), cancellationToken: Arg.Any<CancellationToken>())
+            .Returns(
+                new GitPullRequest
+                {
+                    PullRequestId = 42,
+                    Title = "Move the services",
+                    SourceRefName = "refs/heads/feature",
+                    TargetRefName = "refs/heads/main",
+                    Repository = new GitRepository { Name = "repo" },
+                });
+        git.GetPullRequestIterationAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<object>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new GitPullRequestIteration
+                {
+                    SourceRefCommit = new GitCommitRef { CommitId = "head-sha" },
+                    CommonRefCommit = new GitCommitRef { CommitId = "base-sha" },
+                });
+        git.GetPullRequestIterationChangesAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<int?>(),
+                Arg.Any<int?>(), Arg.Any<object>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new GitPullRequestIterationChanges { ChangeEntries = changes.ToList() }));
+        git.GetThreadsAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<object>(), Arg.Any<CancellationToken>())
+            .Returns(new List<GitPullRequestCommentThread>());
+        return git;
+    }
+
+    private static AdoPrFetcher CreateFetcher(GitHttpClient git)
+    {
+        return new AdoPrFetcher(
+            new VssConnectionFactory(Substitute.For<TokenCredential>()),
+            Substitute.For<IClientScmConnectionRepository>(), NullLogger<AdoPrFetcher>.Instance)
+        {
+            GitClientResolver = (_, _) => Task.FromResult(git),
+        };
+    }
+
+    private static GitPullRequestChange RenameOf(string path, string originalPath)
+    {
+        return new GitPullRequestChange
+        {
+            ChangeType = VersionControlChangeType.Rename,
+            Item = new GitItem { Path = path },
+            SourceServerItem = originalPath,
+        };
     }
 
     private static GitPullRequestChange EditOf(string path)

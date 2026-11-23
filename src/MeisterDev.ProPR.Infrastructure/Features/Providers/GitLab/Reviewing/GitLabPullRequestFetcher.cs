@@ -478,29 +478,24 @@ internal sealed class GitLabPullRequestFetcher(
         var originalPath = changeType == ChangeType.Rename ? NormalizePath(change.OldPath) : null;
         var isBinary = BinaryFileDetector.IsBinary(path);
 
-        var headContent = string.Empty;
-        var baseContent = string.Empty;
+        string? headRead = null;
+        string? baseRead = null;
         if (!isBinary)
         {
             if (changeType != ChangeType.Delete)
             {
-                headContent =
-                    await this.TryReadFileAsync(context, host, repositoryId, path, revision.HeadSha, ct) ??
-                    string.Empty;
+                headRead = await this.TryReadFileAsync(context, host, repositoryId, path, revision.HeadSha, ct);
             }
 
             if (changeType != ChangeType.Add)
             {
                 var basePath = originalPath ?? path;
-                baseContent = await this.TryReadFileAsync(
-                    context,
-                    host,
-                    repositoryId,
-                    basePath,
-                    revision.BaseSha,
-                    ct) ?? string.Empty;
+                baseRead = await this.TryReadFileAsync(context, host, repositoryId, basePath, revision.BaseSha, ct);
             }
         }
+
+        var headContent = headRead ?? string.Empty;
+        var baseContent = baseRead ?? string.Empty;
 
         string diff;
         if (isBinary)
@@ -516,7 +511,16 @@ internal sealed class GitLabPullRequestFetcher(
             diff = change.Diff!;
         }
 
-        return new ChangedFile(path, changeType, headContent, diff, isBinary, originalPath);
+        // GitLab reports no line counts per file. A rename counts as unchanged content when the raw content of the
+        // original path at the merge base and of the new path at the head were both read and are equal. A read that
+        // found nothing never counts.
+        var contentUnchanged = changeType == ChangeType.Rename
+                               && originalPath is not null
+                               && headRead is not null
+                               && baseRead is not null
+                               && string.Equals(headRead, baseRead, StringComparison.Ordinal);
+
+        return new ChangedFile(path, changeType, headContent, diff, isBinary, originalPath, contentUnchanged);
     }
 
     private async Task<string?> TryReadFileAsync(

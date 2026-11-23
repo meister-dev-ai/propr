@@ -327,9 +327,16 @@ public sealed partial class RunnerJobDispatchPreparer(
             .Select(row => row.FilePath)
             .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
 
-        var toReview = changedPaths
+        var reviewed = changedPaths
             .Where(file => !exclusionRules.Matches(file.Path) && !adopted.Contains(file.Path))
-            .Select(file => file.Path)
+            .ToList();
+        var toReview = reviewed.Select(file => file.Path).ToList();
+
+        // The original paths of the renamed files let git pair each of them with the path it came from, as the
+        // review diff does, so a renamed file counts the lines it changed and a file that was only moved counts none.
+        var originalPaths = reviewed
+            .Where(file => file.ChangeType == ChangeType.Rename && file.OriginalPath is not null)
+            .Select(file => file.OriginalPath!)
             .ToList();
 
         // An empty set is measured as zero, not left unmeasured: the evaluator treats a null dimension as one
@@ -337,13 +344,13 @@ public sealed partial class RunnerJobDispatchPreparer(
         int? changedLines = null;
         if (policy.MaxChangedLines is not null)
         {
-            changedLines = toReview.Count == 0 ? 0 : await workspace.CountChangedLinesAsync(toReview, ct);
+            changedLines = toReview.Count == 0 ? 0 : await workspace.CountChangedLinesAsync(toReview, originalPaths, ct);
         }
 
         long? diffBytes = null;
         if (policy.MaxDiffBytes is not null)
         {
-            diffBytes = toReview.Count == 0 ? 0 : await workspace.CountDiffBytesAsync(toReview, ct);
+            diffBytes = toReview.Count == 0 ? 0 : await workspace.CountDiffBytesAsync(toReview, originalPaths, ct);
         }
 
         var decision = ReviewAdmissionEvaluator.Evaluate(
