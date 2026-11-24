@@ -440,11 +440,27 @@ public sealed class JobsController(
                 job.CompletedAt,
                 new ReviewResultDto(
                     job.Result.Summary,
-                    job.Result.Comments
-                        .Select(c => new ReviewCommentDto(
-                            c.FilePath, c.LineNumber, c.Severity, c.Message, c.OriginPassKind, c.ScopeRelation, c.OriginPassIndex, c.OriginPassLens,
-                            c.RiskAssessment))
-                        .ToArray())));
+                    job.Result.Comments.Select(ToReviewCommentDto).ToArray()),
+                job.Result.WithheldFindings
+                    .Select(withheld => new WithheldReviewFindingDto(withheld.ReasonCode, ToReviewCommentDto(withheld.Comment)))
+                    .ToArray()));
+    }
+
+    private static ReviewCommentDto ToReviewCommentDto(ReviewComment comment)
+    {
+        return new ReviewCommentDto(
+            comment.FilePath,
+            comment.LineNumber,
+            comment.Severity,
+            comment.Message,
+            comment.OriginPassKind,
+            comment.ScopeRelation,
+            comment.OriginPassIndex,
+            comment.OriginPassLens,
+            comment.RiskAssessment,
+            comment.FindingClassification,
+            comment.RelatedLocations,
+            comment.RootCauseGroupSize);
     }
 
     /// <summary>
@@ -741,11 +757,22 @@ public sealed class JobsController(
         ReviewJobCompletionReason CompletionReason = ReviewJobCompletionReason.None);
 
     /// <summary>Response for the job result endpoint, combining status metadata with the review result.</summary>
+    /// <param name="JobId">The review job identifier.</param>
+    /// <param name="ClientId">The client the review job belongs to.</param>
+    /// <param name="Status">The status of the review job.</param>
+    /// <param name="SubmittedAt">When the review job was submitted.</param>
+    /// <param name="CompletedAt">When the review job completed, or <see langword="null" /> while it runs.</param>
+    /// <param name="Result">The summary and the findings of the review, including findings that the post configuration of the client keeps off the pull request.</param>
+    /// <param name="WithheldFindings">
+    ///     The findings that verification, the final gate or the synthesis step held back from publication, each with
+    ///     the reason code of the step that held it back.
+    /// </param>
     public sealed record ReviewJobResultDto(
         Guid JobId,
         Guid ClientId,
         JobStatus Status,
         DateTimeOffset SubmittedAt,
         DateTimeOffset? CompletedAt,
-        ReviewResultDto Result);
+        ReviewResultDto Result,
+        IReadOnlyList<WithheldReviewFindingDto> WithheldFindings);
 }

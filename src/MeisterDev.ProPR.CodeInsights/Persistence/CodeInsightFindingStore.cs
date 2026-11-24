@@ -414,8 +414,14 @@ public sealed class CodeInsightFindingStore(
             ct);
     }
 
+    // A replay adds confidence to a recorded assessment only when both assessments use the same supported rubric, so
+    // that evidence rated under different rubrics is not combined. An assessment of an earlier supported rubric keeps
+    // its confidence, and without the comparison of the two versions that confidence would be added to an assessment
+    // of another rubric. A replay of a finding rated under an earlier rubric still adds its confidence, as it did
+    // while that rubric was the current one.
     private static bool CompatibleEvidence(FindingRiskAssessment recorded, FindingRiskAssessment incoming) =>
-        recorded.Source is not null && recorded.RubricVersion == FindingRiskAssessment.CurrentRubricVersion
+        recorded.Source is not null && FindingRiskAssessment.IsSupportedRubricVersion(recorded.RubricVersion)
+                                    && incoming.RubricVersion == recorded.RubricVersion
                                     && (incoming.Impact == FindingImpact.Unknown || recorded.Impact == FindingImpact.Unknown ||
                                         incoming.Impact == recorded.Impact)
                                     && (incoming.Likelihood == FindingLikelihood.Unknown || recorded.Likelihood == FindingLikelihood.Unknown ||

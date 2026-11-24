@@ -58,21 +58,66 @@
 
             <div class="inline-field-row review-publication-row">
                 <div class="form-field flex-1 review-publication-field">
-                    <span class="post-config-group-label">Finding types to post</span>
-                    <div class="finding-type-options">
-                        <label v-for="option in FINDING_TYPE_OPTIONS" :key="option.slug"
-                            class="checkbox-field" :for="`postFindingType-${option.slug}`">
-                            <input :id="`postFindingType-${option.slug}`"
-                                :checked="!editedWithheldFindingTypes.includes(option.slug)"
-                                :value="option.slug" name="postFindingTypes" type="checkbox"
-                                @change="toggleFindingType(option.slug, ($event.target as HTMLInputElement).checked)" />
-                            <strong>{{ option.label }}</strong>
-                        </label>
+                    <span id="findingTypeDestinationsLabel" class="post-config-group-label">
+                        Destination of finding types
+                    </span>
+                    <div class="finding-type-destinations" role="group"
+                        aria-labelledby="findingTypeDestinationsLabel" aria-describedby="findingTypeDestinationsHelp">
+                        <div v-for="row in FINDING_TYPE_DESTINATION_ROWS" :key="row.key"
+                            class="finding-type-destination">
+                            <label :for="destinationFieldId(row.key)">{{ row.label }}</label>
+                            <select :id="destinationFieldId(row.key)" :name="destinationFieldId(row.key)"
+                                :value="editedFindingTypeDestinations[row.key]"
+                                @change="setDestination(row.key, ($event.target as HTMLSelectElement).value)">
+                                <option v-for="option in FINDING_POST_DESTINATION_OPTIONS" :key="option.value"
+                                    :value="option.value">
+                                    {{ option.label }}
+                                </option>
+                            </select>
+                        </div>
                     </div>
-                    <p class="muted review-publication-copy">
-                        Findings of the cleared types are not posted to the pull request. They stay visible in the
-                        ProPR review. A finding with several types is posted when at least one of its types is
-                        selected. A finding without a type is posted.
+                    <div v-if="qualifiedNotes.length > 0" id="findingTypeQualifiedDestinations"
+                        class="finding-type-qualified-destinations">
+                        <p class="muted review-publication-copy">
+                            These destinations for findings with a qualifier were set through the API, and for those
+                            findings they take precedence over the row of their type.
+                        </p>
+                        <ul>
+                            <li v-for="note in qualifiedNotes" :key="note.key">
+                                {{ note.typeLabel }}, qualifier {{ note.qualifier }}: {{ note.destinationLabel }}
+                            </li>
+                        </ul>
+                    </div>
+                    <p id="findingTypeDestinationsHelp" class="muted review-publication-copy">
+                        A comment at the line is posted to the pull request. A finding listed in the summary is not
+                        posted as a comment, and the review summary on the pull request lists it. The summary lists up
+                        to 15 of these findings and gives the number of the others. A finding kept in
+                        the ProPR review only is neither posted nor listed, and the summary states how many were kept.
+                        Every finding stays visible in the ProPR review. A finding with several types takes the most
+                        visible destination of its types, and a finding without a type is posted as a comment.
+                        "Missing tests or documentation" applies to findings that only ask for a test or a document
+                        that does not exist yet. "Incorrect tests or documentation" applies to every other finding
+                        of the type Documentation and tests.
+                    </p>
+                </div>
+            </div>
+
+            <div class="inline-field-row review-publication-row">
+                <div class="form-field flex-1 review-publication-field">
+                    <label for="maximumFindingsToPost">Maximum findings to post</label>
+                    <input id="maximumFindingsToPost" v-model="editedMaximumFindingsToPost" name="maximumFindingsToPost"
+                        type="number" min="1" step="1" placeholder="No limit" class="maximum-findings-input"
+                        aria-describedby="maximumFindingsToPostHelp maximumFindingsToPostError" />
+                    <p id="maximumFindingsToPostHelp" class="muted review-publication-copy">
+                        ProPR posts at most this number of findings as comments on one pull request. When more
+                        findings remain after the settings above, ProPR posts the highest ranked ones and keeps the
+                        others in the ProPR review, and the summary states how many were held back. The rank compares
+                        the classification first, then the likelihood, then the number of places a comment stands for,
+                        and then the risk. Findings listed in the summary do not count towards the limit. Leave the
+                        field empty to post every finding.
+                    </p>
+                    <p v-if="maximumFindingsToPostError" id="maximumFindingsToPostError" class="error" role="alert">
+                        {{ maximumFindingsToPostError }}
                     </p>
                 </div>
             </div>
@@ -117,12 +162,18 @@
 </template>
 
 <script lang="ts" setup>
-import { inject } from "vue";
+import { computed, inject } from "vue";
 import {
     ClientDetailVmKey,
     type CommentSeverity,
+    type FindingPostDestination,
     type FindingRiskSeverity,
 } from "@/features/clients/view-models/useClientDetailViewModel";
+import {
+    FINDING_POST_DESTINATION_OPTIONS,
+    FINDING_TYPE_DESTINATION_ROWS,
+    qualifiedDestinationNotes,
+} from "@/features/clients/view-models/findingTypeDestinations";
 
 const vm = inject(ClientDetailVmKey)!;
 const {
@@ -133,7 +184,9 @@ const {
     editedAutoResolveSeverities,
     editedWithholdOutOfScopeFindings,
     editedMinimumRiskSeverityToPost,
-    editedWithheldFindingTypes,
+    editedFindingTypeDestinations,
+    editedMaximumFindingsToPost,
+    maximumFindingsToPostError,
     savePostConfiguration,
     isPostConfigButtonEnabled,
 } = vm;
@@ -154,26 +207,20 @@ const MIN_RISK_OPTIONS: { value: FindingRiskSeverity; label: string }[] = [
     { value: "critical", label: "Critical only" },
 ];
 
-// The core finding types of the review taxonomy, in the order the taxonomy lists them. The server accepts these
-// slugs only.
-const FINDING_TYPE_OPTIONS: { slug: string; label: string }[] = [
-    { slug: "logic-error", label: "Logic error" },
-    { slug: "data-validation", label: "Data validation" },
-    { slug: "resource-handling", label: "Resource handling" },
-    { slug: "concurrency", label: "Concurrency" },
-    { slug: "api-contract", label: "API contract" },
-    { slug: "security", label: "Security" },
-    { slug: "performance", label: "Performance" },
-    { slug: "error-handling-observability", label: "Error handling and observability" },
-    { slug: "design-structure", label: "Design and structure" },
-    { slug: "naming-clarity", label: "Naming and clarity" },
-    { slug: "documentation-tests", label: "Documentation and tests" },
-];
+// Keys with a qualifier that no row shows stay as they are when the rows are saved, so they are read from the stored map.
+const qualifiedNotes = computed(() => qualifiedDestinationNotes(client.value?.findingTypeDestinations));
 
-// The setting stores the types that are not posted, so a type added to the taxonomy later is posted by default.
-function toggleFindingType(slug: string, posted: boolean): void {
-    const withheld = editedWithheldFindingTypes.value.filter((value) => value !== slug);
-    editedWithheldFindingTypes.value = posted ? withheld : [...withheld, slug];
+// A colon in an element id has to be escaped in a CSS selector, so the id writes the colon of a key as a hyphen.
+function destinationFieldId(key: string): string {
+    return `findingTypeDestination-${key.replace(":", "-")}`;
+}
+
+// The edited map is replaced, not changed in place, so that code watching the reference sees every change.
+function setDestination(key: string, destination: string): void {
+    editedFindingTypeDestinations.value = {
+        ...editedFindingTypeDestinations.value,
+        [key]: destination as FindingPostDestination,
+    };
 }
 
 // Severities offered for auto-resolution, highest to lowest.
@@ -222,10 +269,30 @@ const SEVERITY_OPTIONS: { value: CommentSeverity; label: string }[] = [
     margin-top: 0.25rem;
 }
 
-.finding-type-options {
+.finding-type-destinations {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
-    gap: 0.35rem 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+    gap: 0.5rem 1.5rem;
+}
+
+.finding-type-destination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.finding-type-destination select {
+    flex: 0 0 12rem;
+}
+
+.finding-type-qualified-destinations ul {
+    margin: 0 1.25rem;
+    padding-left: 1.25rem;
+}
+
+.maximum-findings-input {
+    max-width: 12rem;
 }
 
 .muted {

@@ -722,6 +722,7 @@ judge model's supported completion limit.
 | `AI_CONFIDENCE_FLOOR_ERROR` | Inactive compatibility setting; file confidence does not change finding classification | `80` | 0–100 | yes |
 | `AI_CONFIDENCE_FLOOR_WARNING` | Inactive compatibility setting; file confidence does not change finding classification | `60` | 0–100 | yes |
 | `AI_QUALITY_FILTER_THRESHOLD` | Total comment count across all files below which the cross-file quality pass is skipped | `20` | 1–500 | yes |
+| `AI_ROOT_CAUSE_GROUPING` | Groups the findings of a pull request by root cause with one call on the Verification model and posts one comment for each cause. Set to `false` to post every finding as its own comment | `true` | `true`, `false` | no |
 
 A finding that clears these thresholds still goes through the publication gate - see
 [why a finding did not get posted](../concepts/reviews.md#why-a-finding-did-not-get-posted).

@@ -27,6 +27,24 @@ releases also publish `latest` for all three; pre-release tags do not move `late
 
 If the first start on the new tag does not come up, work from [troubleshooting](troubleshooting.md).
 
+### Requests for missing tests and documentation move to the review summary
+
+A client chooses a destination for each finding type: a comment at the line, a line in the review summary, or the
+ProPR review only - see [what you can tune](../concepts/reviews.md#what-you-can-tune). The first start gives every
+existing client the default: a finding whose only type is Documentation and tests and which asks for a test or a
+document that does not exist yet is listed in the review summary and no longer posted as a comment. Every other
+finding keeps its comment. A finding type that a client cleared under "Finding types to post" gets the destination
+ProPR review only, so its findings stay off the pull request as before. If the client cleared Documentation and
+tests, its requests for missing tests and documentation stay in the ProPR review as well.
+
+The client API field `findingTypeDestinations` holds the setting. The field `withheldFindingTypes` stays readable and
+writable: it lists the finding types with the destination `reviewOnly`, and a request that writes it sets the listed
+types to `reviewOnly`.
+
+The first start also gives every existing client a limit of 20 findings posted as comments on one pull request, so
+ProPR posts the 20 highest ranked findings and states the number of the others in the review summary, until an
+administrator empties "Maximum findings to post" or sets the client API field `maximumFindingsToPost` to null.
+
 ### A relative key-ring path now resolves against the service's own directory
 
 `MEISTER_DATA_PROTECTION_KEYS_PATH` resolved a relative path against the working directory and now resolves

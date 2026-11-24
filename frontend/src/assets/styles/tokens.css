@@ -29,6 +29,9 @@
   /* Escalation above --color-warning: a hard limit was reached and work stopped
    * (budget exceeded / run halted), as opposed to a warning that is merely held. */
   --color-budget-exceeded: #f97316;
+  /* Outcome badge of a memory record that an administrator dismissed. It is separate from
+   * --color-suggestion because the outcome is not a finding severity. */
+  --color-outcome-dismissed: #a78bfa;
 
   /* Semantic soft tints — translucent backgrounds for chips/badges/status pills.
    * Keep in lockstep with the base palette above. */

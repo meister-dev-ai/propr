@@ -143,13 +143,24 @@ public interface IClientRegistry
     Task<FindingRiskSeverity> GetMinimumRiskSeverityToPostAsync(Guid clientId, CancellationToken ct = default);
 
     /// <summary>
-    ///     Returns the core finding types whose findings are not published to the SCM provider. A finding is held back
-    ///     when every core type it carries is in the list. Defaults to an empty list (publish every type) if the
-    ///     client does not exist.
+    ///     Returns the destination per finding type of the client, keyed by core type slug or by core type slug with a
+    ///     qualifier. A finding of a type with the destination <see cref="FindingPostDestination.Summary" /> is listed in
+    ///     the published summary, and a finding of a type with the destination
+    ///     <see cref="FindingPostDestination.ReviewOnly" /> is neither posted nor listed. Defaults to
+    ///     <see cref="FindingPostDestinationMap.Default" /> if the client does not exist.
     /// </summary>
     /// <param name="clientId">Client identifier.</param>
     /// <param name="ct">Cancellation token.</param>
-    Task<IReadOnlyList<string>> GetWithheldFindingTypesAsync(Guid clientId, CancellationToken ct = default);
+    Task<IReadOnlyDictionary<string, FindingPostDestination>> GetFindingTypeDestinationsAsync(Guid clientId, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns the largest number of findings the client posts as comments on one pull request, or
+    ///     <see langword="null" /> when the client has no limit. Findings above the limit are retained in the persisted
+    ///     review result but not posted. Defaults to <see cref="FindingPostLimit.Default" /> if the client does not exist.
+    /// </summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<int?> GetMaximumFindingsToPostAsync(Guid clientId, CancellationToken ct = default);
 
     /// <summary>
     ///     Returns the ordered per-client review-pass list — each configured model (in ordinal order) with its optional

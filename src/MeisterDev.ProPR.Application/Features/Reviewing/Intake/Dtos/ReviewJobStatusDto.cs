@@ -56,9 +56,29 @@ public sealed record ReviewJobWorkspaceStatusDto(
 public sealed record ReviewJobResultDto(string Summary, IReadOnlyList<ReviewJobCommentDto> Comments);
 
 /// <summary>Application DTO for a single review comment.</summary>
+/// <param name="FilePath">The repository-relative path of the file, or <see langword="null" /> for the pull request.</param>
+/// <param name="LineNumber">The line within the file, or <see langword="null" /> when the comment names no line.</param>
+/// <param name="Severity">The classification of the finding.</param>
+/// <param name="Message">The comment text.</param>
+/// <param name="RiskAssessment">The assessed impact, likelihood and confidence, or <see langword="null" /> when unassessed.</param>
+/// <param name="FindingClassification">
+///     The finding types and analytics axes that the producing review assigned, or <see langword="null" /> for a finding
+///     without a classification.
+/// </param>
+/// <param name="RelatedLocations">
+///     The other places where the review reported the same root cause, or <see langword="null" /> for a comment that
+///     stands for one finding.
+/// </param>
+/// <param name="RootCauseGroupSize">
+///     The number of findings of the root-cause group this comment stands for, or <see langword="null" /> for a comment
+///     that stands for one finding.
+/// </param>
 public sealed record ReviewJobCommentDto(
     string? FilePath,
     int? LineNumber,
     CommentSeverity Severity,
     string Message,
-    FindingRiskAssessment? RiskAssessment = null);
+    FindingRiskAssessment? RiskAssessment = null,
+    FindingTypeClassification? FindingClassification = null,
+    IReadOnlyList<ReviewCommentLocation>? RelatedLocations = null,
+    int? RootCauseGroupSize = null);

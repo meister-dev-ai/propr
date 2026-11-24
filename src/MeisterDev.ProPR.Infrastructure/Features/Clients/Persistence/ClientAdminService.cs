@@ -125,7 +125,10 @@ public sealed class ClientAdminService(
         CancellationToken ct = default,
         FindingBadgeStyle? findingBadgeStyle = null,
         FindingRiskSeverity? minimumRiskSeverityToPost = null,
-        IReadOnlyList<string>? withheldFindingTypes = null)
+        IReadOnlyList<string>? withheldFindingTypes = null,
+        IReadOnlyDictionary<string, FindingPostDestination>? findingTypeDestinations = null,
+        int? maximumFindingsToPost = null,
+        bool updateMaximumFindingsToPost = false)
     {
         var multiTenancyAvailable = await this.IsMultiTenancyAvailableAsync(ct);
         var client = await dbContext.Clients
@@ -161,8 +164,19 @@ public sealed class ClientAdminService(
         ApplyIfHasValue(findingBadgeStyle, value => client.FindingBadgeStyle = value);
         ApplyIfHasValue(minimumRiskSeverityToPost, value => client.MinimumRiskSeverityToPost = value);
         ApplyIfNotNull(
+            findingTypeDestinations,
+            value => client.FindingTypeDestinations = FindingPostDestinationMap.Normalize(value));
+
+        // The list of finding types that are not posted is the form of the setting that API consumers wrote before a
+        // destination could be chosen per type. It changes only the entries that list stands for.
+        ApplyIfNotNull(
             withheldFindingTypes,
-            value => client.WithheldFindingTypes = value.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList());
+            value => client.FindingTypeDestinations = FindingPostDestinationMap.WithReviewOnlyTypes(client.FindingTypeDestinations, value));
+        if (updateMaximumFindingsToPost)
+        {
+            client.MaximumFindingsToPost = maximumFindingsToPost;
+        }
+
         ReplaceReviewPassesIfProvided(client, reviewPasses);
         ReplaceBudgetCapsIfProvided(client, budgetConfig);
         ReplaceAutoResolveSeveritiesIfProvided(client, autoResolveSeverities);
@@ -520,7 +534,8 @@ public sealed class ClientAdminService(
                 client.AdmissionMaxRepositoryMegabytes),
             client.FindingBadgeStyle,
             client.MinimumRiskSeverityToPost,
-            client.WithheldFindingTypes);
+            client.FindingTypeDestinations,
+            client.MaximumFindingsToPost);
     }
 
     // Without the licensing module there is no installation state to read, which a deployment with no

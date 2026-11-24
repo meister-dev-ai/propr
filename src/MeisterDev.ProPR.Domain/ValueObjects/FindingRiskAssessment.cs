@@ -12,10 +12,18 @@ namespace MeisterDev.ProPR.Domain.ValueObjects;
 public sealed record FindingRiskAssessment
 {
     /// <summary>Rubric used for newly generated assessments.</summary>
-    public const string CurrentRubricVersion = "finding-risk-v1";
+    public const string CurrentRubricVersion = "finding-risk-v2";
 
     /// <summary>Maximum retained length of each rationale.</summary>
     public const int MaxReasonLength = 1024;
+
+    /// <summary>
+    ///     Rubric versions whose assessments derive a risk severity and keep their confidence. Version 2 changed how the
+    ///     review model rates impact and likelihood, and kept the matrix of version 1. An assessment stored under version 1
+    ///     therefore keeps the risk severity and the confidence it had when it was rated.
+    /// </summary>
+    public static readonly IReadOnlySet<string> SupportedRubricVersions =
+        new HashSet<string>(StringComparer.Ordinal) { "finding-risk-v1", CurrentRubricVersion };
 
     /// <summary>Creates an immutable assessment. Unsupported or incomplete evidence remains unscored.</summary>
     public FindingRiskAssessment(
@@ -38,7 +46,7 @@ public sealed record FindingRiskAssessment
         this.ConfidenceReason = BoundedText(confidenceReason, MaxReasonLength);
         this.ConfidenceSource = confidenceSource is null ? this.Source : BoundedText(confidenceSource, 128);
         this.Confidence = Enum.IsDefined(confidence) && this.ConfidenceReason is not null && this.ConfidenceSource is not null &&
-                          this.RubricVersion == CurrentRubricVersion
+                          IsSupportedRubricVersion(this.RubricVersion)
             ? confidence
             : FindingConfidence.Unknown;
     }
@@ -72,7 +80,7 @@ public sealed record FindingRiskAssessment
 
     /// <summary>Derived risk severity; incomplete, unsupported, and inapplicable assessments are unknown.</summary>
     public FindingRiskSeverity Severity =>
-        this.RubricVersion != CurrentRubricVersion || this.ImpactReason is null || this.LikelihoodReason is null || this.Source is null
+        !IsSupportedRubricVersion(this.RubricVersion) || this.ImpactReason is null || this.LikelihoodReason is null || this.Source is null
             ? FindingRiskSeverity.Unknown
             : (this.Impact, this.Likelihood) switch
             {
@@ -85,6 +93,10 @@ public sealed record FindingRiskAssessment
                 (FindingImpact.Critical, FindingLikelihood.Likely) => FindingRiskSeverity.Critical,
                 _ => FindingRiskSeverity.Unknown,
             };
+
+    /// <summary>Returns whether assessments of <paramref name="rubricVersion" /> derive a risk severity and keep their confidence.</summary>
+    public static bool IsSupportedRubricVersion(string? rubricVersion) =>
+        rubricVersion is not null && SupportedRubricVersions.Contains(rubricVersion);
 
     private static string? BoundedText(string? value, int maximum) =>
         string.IsNullOrWhiteSpace(value) || value.Length > maximum ? null : value.Trim();

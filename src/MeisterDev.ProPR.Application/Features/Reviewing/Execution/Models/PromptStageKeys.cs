@@ -49,4 +49,7 @@ public static class PromptStageKeys
 
     /// <summary>Memory-augmented reconsideration user prompt stage key.</summary>
     public const string MemoryReconsiderationUser = "memory_reconsideration_user";
+
+    /// <summary>System prompt stage key of the call that groups the findings of a pull request by root cause.</summary>
+    public const string FindingRootCauseGroupingSystem = "finding_root_cause_grouping_system";
 }

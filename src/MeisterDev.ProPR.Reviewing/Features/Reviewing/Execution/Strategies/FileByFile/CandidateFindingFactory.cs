@@ -90,12 +90,21 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
             var signature = CreateCommentSignature(comment);
             if (findingsBySignature.TryGetValue(signature, out var queue) && queue.Count > 0)
             {
+                var original = queue.Dequeue();
                 finalFindings.Add(
-                    queue.Dequeue() with
+                    original with
                     {
                         RiskAssessment = comment.RiskAssessment, FindingClassification = comment.FindingClassification, SuggestedFix = comment.SuggestedFix,
                         ProducedWithRepositoryTools = comment.ProducedWithRepositoryTools,
+                        RelatedLocations = comment.RelatedLocations, RootCauseGroupSize = comment.RootCauseGroupSize,
+                        ScopeRelation = ClassifyGroupScopeRelation(original.ScopeRelation, comment.RelatedLocations, changedLineRangesByPath),
                     });
+                continue;
+            }
+
+            if (TakeRootCausePrimary(comment, findingsBySignature) is { } primary)
+            {
+                finalFindings.Add(RebaseOnRootCauseComment(primary, comment, changedLineRangesByPath));
                 continue;
             }
 
@@ -103,6 +112,81 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
         }
 
         return finalFindings;
+    }
+
+    // A root-cause consolidation keeps the anchor of its primary finding and extends its message with the other places,
+    // and can raise its classification, so the comment no longer matches the primary's signature. The primary is the
+    // original finding at the same anchor whose message the consolidated message starts with. The consolidation removes
+    // trailing whitespace from the primary's message before it appends the other places, so the comparison does as well.
+    // Matching it keeps the finding's identity and provenance, so the synthesis and the protocol refer to the finding the
+    // file review produced.
+    private static CandidateReviewFinding? TakeRootCausePrimary(
+        ReviewComment comment,
+        Dictionary<string, Queue<CandidateReviewFinding>> findingsBySignature)
+    {
+        if (comment.RootCauseGroupSize is not > 1)
+        {
+            return null;
+        }
+
+        var lineNumber = FileByFileReviewOrchestrator.NormalizeLineNumber(comment.LineNumber);
+        var queue = findingsBySignature.Values
+            .Where(candidates => candidates.Count > 0)
+            .Where(candidates => string.Equals(candidates.Peek().FilePath, comment.FilePath, StringComparison.Ordinal)
+                                 && candidates.Peek().LineNumber == lineNumber
+                                 && comment.Message.Length > candidates.Peek().Message.TrimEnd().Length
+                                 && comment.Message.StartsWith(candidates.Peek().Message.TrimEnd(), StringComparison.Ordinal))
+            .MaxBy(candidates => candidates.Peek().Message.TrimEnd().Length);
+        return queue?.Dequeue();
+    }
+
+    private static CandidateReviewFinding RebaseOnRootCauseComment(
+        CandidateReviewFinding primary,
+        ReviewComment comment,
+        IReadOnlyDictionary<string, IReadOnlyList<(int Start, int End)>>? changedLineRangesByPath)
+    {
+        return new CandidateReviewFinding(
+            primary.FindingId,
+            primary.Provenance,
+            comment.Severity,
+            comment.Message,
+            primary.Category,
+            primary.FilePath,
+            primary.LineNumber,
+            primary.Evidence,
+            primary.CandidateSummaryText,
+            primary.InvariantCheckContext,
+            primary.VerificationOutcome,
+            ClassifyGroupScopeRelation(primary.ScopeRelation, comment.RelatedLocations, changedLineRangesByPath))
+        {
+            RiskAssessment = comment.RiskAssessment, FindingClassification = comment.FindingClassification, SuggestedFix = comment.SuggestedFix,
+            ReadGrounding = primary.ReadGrounding,
+            ProducedWithRepositoryTools = comment.ProducedWithRepositoryTools,
+            RelatedLocations = comment.RelatedLocations, RootCauseGroupSize = comment.RootCauseGroupSize,
+        };
+    }
+
+    // A comment that stands for a root-cause group sits at the line of its primary finding, and the publication policy
+    // decides on the scope of that comment for every place of the group. The comment therefore keeps the scope of its
+    // anchor only when every other place of the group has the same scope, and is unclassified otherwise. An
+    // unclassified comment is posted, so a group is held back as outside the change only when all of its places lie
+    // outside the change, as for a consolidation of the deduplicator.
+    private static ChangedLineRelation? ClassifyGroupScopeRelation(
+        ChangedLineRelation? anchorScopeRelation,
+        IReadOnlyList<ReviewCommentLocation>? relatedLocations,
+        IReadOnlyDictionary<string, IReadOnlyList<(int Start, int End)>>? changedLineRangesByPath)
+    {
+        if (relatedLocations is not { Count: > 0 })
+        {
+            return anchorScopeRelation;
+        }
+
+        return relatedLocations.All(location => ClassifyScopeRelation(
+            location.FilePath,
+            FileByFileReviewOrchestrator.NormalizeLineNumber(location.LineNumber),
+            changedLineRangesByPath) == anchorScopeRelation)
+            ? anchorScopeRelation
+            : null;
     }
 
     /// <summary>
@@ -193,25 +277,28 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
         {
             var findingId = $"finding-dedup-{ordinal:D3}";
             return new CandidateReviewFinding(
-                    findingId,
-                    new CandidateFindingProvenance(
-                        CandidateFindingProvenance.PerFileCommentOrigin,
-                        "finding_deduplication",
-                        reviewPassKind: passKind,
-                        findingProvenanceKind: provenanceKind,
-                        originModelId: comment.OriginModelId,
-                        originLogicalModelName: comment.OriginLogicalModelName,
-                        originSymbolName: comment.OriginSymbolName,
-                        originSymbolKind: comment.OriginSymbolKind),
-                    comment.Severity,
-                    comment.Message,
-                    CandidateReviewFinding.CrossCuttingCategory,
-                    null,
-                    null,
-                    evidence,
-                    null,
-                    this.BuildInvariantCheckContext(findingId, comment, CandidateReviewFinding.CrossCuttingCategory, null, null, evidence))
-                { RiskAssessment = comment.RiskAssessment, FindingClassification = comment.FindingClassification, SuggestedFix = comment.SuggestedFix };
+                findingId,
+                new CandidateFindingProvenance(
+                    CandidateFindingProvenance.PerFileCommentOrigin,
+                    "finding_deduplication",
+                    reviewPassKind: passKind,
+                    findingProvenanceKind: provenanceKind,
+                    originModelId: comment.OriginModelId,
+                    originLogicalModelName: comment.OriginLogicalModelName,
+                    originSymbolName: comment.OriginSymbolName,
+                    originSymbolKind: comment.OriginSymbolKind),
+                comment.Severity,
+                comment.Message,
+                CandidateReviewFinding.CrossCuttingCategory,
+                null,
+                null,
+                evidence,
+                null,
+                this.BuildInvariantCheckContext(findingId, comment, CandidateReviewFinding.CrossCuttingCategory, null, null, evidence))
+            {
+                RiskAssessment = comment.RiskAssessment, FindingClassification = comment.FindingClassification, SuggestedFix = comment.SuggestedFix,
+                RelatedLocations = comment.RelatedLocations, RootCauseGroupSize = comment.RootCauseGroupSize,
+            };
         }
 
         var derivedFindingId = $"finding-derived-{ordinal:D3}";
@@ -240,11 +327,15 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
                 comment.FilePath,
                 normalizedLineNumber,
                 null),
-            scopeRelation: ClassifyScopeRelation(comment.FilePath, normalizedLineNumber, changedLineRangesByPath))
+            scopeRelation: ClassifyGroupScopeRelation(
+                ClassifyScopeRelation(comment.FilePath, normalizedLineNumber, changedLineRangesByPath),
+                comment.RelatedLocations,
+                changedLineRangesByPath))
         {
             RiskAssessment = comment.RiskAssessment, FindingClassification = comment.FindingClassification, SuggestedFix = comment.SuggestedFix,
             ReadGrounding = comment.SourceReadGrounding,
             ProducedWithRepositoryTools = comment.ProducedWithRepositoryTools,
+            RelatedLocations = comment.RelatedLocations, RootCauseGroupSize = comment.RootCauseGroupSize,
         };
     }
 

@@ -103,4 +103,11 @@ public static class ReviewFindingGateReasonCodes
     ///     absent from the source (read successfully but the line lies beyond the file's content).
     /// </summary>
     public const string ErrorFindingRereadContradicted = "error_finding_reread_contradicted";
+
+    /// <summary>
+    ///     Reason code used when a synthesized cross-cutting finding is held back because it names supporting findings and
+    ///     every one of them is published. The pull request already shows those comments, so the synthesized one would
+    ///     repeat them.
+    /// </summary>
+    public const string RestatesPublishedFindings = "restates_published_findings";
 }

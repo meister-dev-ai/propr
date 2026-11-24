@@ -183,7 +183,7 @@ function rowKey(row: CodeInsightConcentrationRow, index: number): string {
 .share-bar {
   display: inline-block;
   height: 0.45rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--color-accent);
   opacity: 0.55;
   vertical-align: middle;

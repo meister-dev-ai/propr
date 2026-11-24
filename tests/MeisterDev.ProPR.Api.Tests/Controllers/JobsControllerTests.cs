@@ -638,6 +638,99 @@ public sealed class JobsJwtTests(JobsJwtTests.JobsJwtApiFactory factory)
     }
 
     [Fact]
+    public async Task JobResult_ReturnsTheClassificationAndRootCauseGroupOfEachCommentAndTheHeldBackFindings()
+    {
+        using var scope = factory.Services.CreateScope();
+        var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+        var job = new ReviewJob(Guid.NewGuid(), factory.AssignedClientId, "https://dev.azure.com/org", "proj", "repo", 1241, 1);
+        await jobRepo.AddAsync(job);
+        await jobRepo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing);
+        var customTag = new FindingCustomTypeAssignment(Guid.NewGuid(), "team-convention", "Team convention");
+        var grouped = new ReviewComment("src/Helper.cs", 12, CommentSeverity.Error, "The helper drops the last element.")
+        {
+            OriginPassKind = "Baseline",
+            ScopeRelation = ReviewCommentScopeRelation.OnChangedLine,
+            FindingClassification = new FindingTypeClassification(
+                [FindingTypeTaxonomy.LogicError],
+                [customTag],
+                CodeInsightFindingLevel.Member,
+                CodeInsightFindingQualifier.Incorrect,
+                0.75,
+                FindingTypeTaxonomy.Version,
+                FindingTypeClassification.ReviewSource),
+            RelatedLocations = [new ReviewCommentLocation("src/Caller.cs", 40), new ReviewCommentLocation("src/Other.cs", null)],
+            RootCauseGroupSize = 3,
+        };
+        var heldBack = new ReviewComment("src/Caller.cs", 41, CommentSeverity.Warning, "The caller may pass an empty list.");
+        await jobRepo.SetResultAsync(
+            job.Id,
+            new ReviewResult("summary", [grouped]) { WithheldFindings = [new WithheldReviewFinding(heldBack, "not_confirmed")] });
+
+        using var body = await this.GetJobResultAsync(job.Id);
+
+        var comment = Assert.Single(body.RootElement.GetProperty("result").GetProperty("comments").EnumerateArray());
+        Assert.Equal("error", comment.GetProperty("severity").GetString());
+        Assert.Equal("Baseline", comment.GetProperty("originPassKind").GetString());
+        Assert.Equal("onChangedLine", comment.GetProperty("changedLineRelation").GetString());
+        var classification = comment.GetProperty("findingClassification");
+        Assert.Equal([FindingTypeTaxonomy.LogicError], classification.GetProperty("coreSlugs").EnumerateArray().Select(slug => slug.GetString()));
+        var tag = Assert.Single(classification.GetProperty("customTags").EnumerateArray());
+        Assert.Equal(customTag.Id, tag.GetProperty("id").GetGuid());
+        Assert.Equal("team-convention", tag.GetProperty("slug").GetString());
+        Assert.Equal("member", classification.GetProperty("level").GetString());
+        Assert.Equal("incorrect", classification.GetProperty("qualifier").GetString());
+        Assert.Equal(0.75, classification.GetProperty("confidence").GetDouble());
+        var locations = comment.GetProperty("relatedLocations").EnumerateArray().ToList();
+        Assert.Equal(2, locations.Count);
+        Assert.Equal("src/Caller.cs", locations[0].GetProperty("filePath").GetString());
+        Assert.Equal(40, locations[0].GetProperty("lineNumber").GetInt32());
+        Assert.Equal(JsonValueKind.Null, locations[1].GetProperty("lineNumber").ValueKind);
+        Assert.Equal(3, comment.GetProperty("rootCauseGroupSize").GetInt32());
+
+        var withheld = Assert.Single(body.RootElement.GetProperty("withheldFindings").EnumerateArray());
+        Assert.Equal("not_confirmed", withheld.GetProperty("reasonCode").GetString());
+        var withheldComment = withheld.GetProperty("comment");
+        Assert.Equal("src/Caller.cs", withheldComment.GetProperty("filePath").GetString());
+        Assert.Equal(41, withheldComment.GetProperty("lineNumber").GetInt32());
+        Assert.Equal("warning", withheldComment.GetProperty("severity").GetString());
+        Assert.Equal("The caller may pass an empty list.", withheldComment.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task JobResult_WithoutHeldBackFindingsOrGroups_ReturnsAnEmptyListAndNoGroupFields()
+    {
+        using var scope = factory.Services.CreateScope();
+        var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+        var job = new ReviewJob(Guid.NewGuid(), factory.AssignedClientId, "https://dev.azure.com/org", "proj", "repo", 1242, 1);
+        await jobRepo.AddAsync(job);
+        await jobRepo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing);
+        await jobRepo.SetResultAsync(
+            job.Id,
+            new ReviewResult("summary", [new ReviewComment("src/A.cs", 3, CommentSeverity.Suggestion, "A single finding.")]));
+
+        using var body = await this.GetJobResultAsync(job.Id);
+
+        Assert.Empty(body.RootElement.GetProperty("withheldFindings").EnumerateArray());
+        var comment = Assert.Single(body.RootElement.GetProperty("result").GetProperty("comments").EnumerateArray());
+        Assert.Equal(JsonValueKind.Null, comment.GetProperty("findingClassification").ValueKind);
+        Assert.Equal(JsonValueKind.Null, comment.GetProperty("relatedLocations").ValueKind);
+        Assert.Equal(JsonValueKind.Null, comment.GetProperty("rootCauseGroupSize").ValueKind);
+    }
+
+    private async Task<JsonDocument> GetJobResultAsync(Guid jobId)
+    {
+        var token = factory.GenerateClientUserToken(factory.TestUserId, factory.AssignedClientId);
+        var http = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/jobs/{jobId}/result");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        using var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task ClientUser_CanAccess_JobProtocol_ForAssignedClient_Returns200()
     {
         using var scope = factory.Services.CreateScope();

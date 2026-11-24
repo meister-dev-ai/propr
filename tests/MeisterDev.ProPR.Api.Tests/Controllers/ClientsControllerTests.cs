@@ -80,6 +80,169 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
             (await db.Clients.SingleAsync(record => record.Id == first.Id)).FindingBadgeStyle);
     }
 
+    [Fact]
+    public async Task FindingTypeDestinations_OfANewClientListMissingTestsAndDocumentationInTheSummary()
+    {
+        var created = await this.AddClientAsync("Default destinations");
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        using var loaded = JsonDocument.Parse(await client.GetStringAsync($"/clients/{created.Id}"));
+
+        Assert.Equal(
+            new Dictionary<string, string> { ["documentation-tests:missing"] = "summary" },
+            ReadDestinations(loaded.RootElement));
+        Assert.Empty(ReadWithheldTypes(loaded.RootElement));
+    }
+
+    // API consumers that write the list of finding types that are not posted keep working: the list is read back
+    // through the same field and as reviewOnly entries of the destination map.
+    [Fact]
+    public async Task WithheldFindingTypes_WrittenThroughTheEarlierField_ReadBackThroughBothFields()
+    {
+        var created = await this.AddClientAsync("Earlier type field");
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        using var withheld = await client.PatchAsJsonAsync($"/clients/{created.Id}", new { withheldFindingTypes = new[] { "naming-clarity" } });
+        Assert.Equal(HttpStatusCode.OK, withheld.StatusCode);
+        using var afterWithheld = JsonDocument.Parse(await client.GetStringAsync($"/clients/{created.Id}"));
+        Assert.Equal(["naming-clarity"], ReadWithheldTypes(afterWithheld.RootElement));
+        Assert.Equal(
+            new Dictionary<string, string> { ["documentation-tests:missing"] = "summary", ["naming-clarity"] = "reviewOnly" },
+            ReadDestinations(afterWithheld.RootElement));
+
+        using var replaced = await client.PatchAsJsonAsync(
+            $"/clients/{created.Id}",
+            new { findingTypeDestinations = new Dictionary<string, string> { ["security"] = "summary", ["design-structure"] = "reviewOnly" } });
+        Assert.Equal(HttpStatusCode.OK, replaced.StatusCode);
+        using var afterReplace = JsonDocument.Parse(await replaced.Content.ReadAsStringAsync());
+        Assert.Equal(["design-structure"], ReadWithheldTypes(afterReplace.RootElement));
+        Assert.Equal(
+            new Dictionary<string, string> { ["design-structure"] = "reviewOnly", ["security"] = "summary" },
+            ReadDestinations(afterReplace.RootElement));
+
+        // Clearing the list through the earlier field posts the reviewOnly types as comments again and leaves the
+        // other destinations as they are.
+        using var cleared = await client.PatchAsJsonAsync($"/clients/{created.Id}", new { withheldFindingTypes = Array.Empty<string>() });
+        Assert.Equal(HttpStatusCode.OK, cleared.StatusCode);
+        using var afterClear = JsonDocument.Parse(await cleared.Content.ReadAsStringAsync());
+        Assert.Empty(ReadWithheldTypes(afterClear.RootElement));
+        Assert.Equal(new Dictionary<string, string> { ["security"] = "summary" }, ReadDestinations(afterClear.RootElement));
+    }
+
+    // A consumer that reads the list of finding types that are not posted and writes it back unchanged keeps the
+    // destinations with a qualifier that the list cannot express.
+    [Fact]
+    public async Task WithheldFindingTypes_WrittenBackUnchanged_KeepTheDestinationsWithAQualifier()
+    {
+        var created = await this.AddClientAsync("Earlier type field written back");
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        var destinations = new Dictionary<string, string> { ["documentation-tests"] = "reviewOnly", ["documentation-tests:missing"] = "summary" };
+
+        using var set = await client.PatchAsJsonAsync($"/clients/{created.Id}", new { findingTypeDestinations = destinations });
+        Assert.Equal(HttpStatusCode.OK, set.StatusCode);
+        using var afterSet = JsonDocument.Parse(await set.Content.ReadAsStringAsync());
+        var withheld = ReadWithheldTypes(afterSet.RootElement);
+        Assert.Equal(["documentation-tests"], withheld);
+
+        using var written = await client.PatchAsJsonAsync($"/clients/{created.Id}", new { withheldFindingTypes = withheld });
+        Assert.Equal(HttpStatusCode.OK, written.StatusCode);
+        using var afterWrite = JsonDocument.Parse(await written.Content.ReadAsStringAsync());
+        Assert.Equal(destinations, ReadDestinations(afterWrite.RootElement));
+    }
+
+    [Fact]
+    public async Task FindingTypeDestinations_TogetherWithTheEarlierField_AreRefused()
+    {
+        var created = await this.AddClientAsync("Both type fields");
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        using var response = await client.PatchAsJsonAsync(
+            $"/clients/{created.Id}",
+            new
+            {
+                withheldFindingTypes = new[] { "naming-clarity" },
+                findingTypeDestinations = new Dictionary<string, string> { ["security"] = "summary" },
+            });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    // A request that omits the limit leaves it unchanged, and an explicit null removes it.
+    [Fact]
+    public async Task MaximumFindingsToPost_StartsAtTwentyAndIsSetLeftAndClearedThroughPatch()
+    {
+        var created = await this.AddClientAsync("Findings limit");
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        using var initial = JsonDocument.Parse(await client.GetStringAsync($"/clients/{created.Id}"));
+        Assert.Equal(20, initial.RootElement.GetProperty("maximumFindingsToPost").GetInt32());
+
+        using var set = await client.PatchAsJsonAsync($"/clients/{created.Id}", new { maximumFindingsToPost = 10 });
+        Assert.Equal(HttpStatusCode.OK, set.StatusCode);
+        using var afterSet = JsonDocument.Parse(await set.Content.ReadAsStringAsync());
+        Assert.Equal(10, afterSet.RootElement.GetProperty("maximumFindingsToPost").GetInt32());
+
+        using var omitted = await client.PatchAsJsonAsync($"/clients/{created.Id}", new { displayName = "Findings limit renamed" });
+        Assert.Equal(HttpStatusCode.OK, omitted.StatusCode);
+        using var afterOmitted = JsonDocument.Parse(await client.GetStringAsync($"/clients/{created.Id}"));
+        Assert.Equal(10, afterOmitted.RootElement.GetProperty("maximumFindingsToPost").GetInt32());
+
+        using var clearContent = new StringContent("{\"maximumFindingsToPost\":null}", Encoding.UTF8, "application/json");
+        using var cleared = await client.PatchAsync($"/clients/{created.Id}", clearContent);
+        Assert.Equal(HttpStatusCode.OK, cleared.StatusCode);
+        using var afterClear = JsonDocument.Parse(await client.GetStringAsync($"/clients/{created.Id}"));
+        Assert.Equal(JsonValueKind.Null, afterClear.RootElement.GetProperty("maximumFindingsToPost").ValueKind);
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        Assert.Null((await db.Clients.AsNoTracking().SingleAsync(record => record.Id == created.Id)).MaximumFindingsToPost);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-5)]
+    public async Task MaximumFindingsToPost_BelowOne_IsRefused(int limit)
+    {
+        var created = await this.AddClientAsync($"Findings limit {limit}");
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        using var response = await client.PatchAsJsonAsync($"/clients/{created.Id}", new { maximumFindingsToPost = limit });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var loaded = JsonDocument.Parse(await client.GetStringAsync($"/clients/{created.Id}"));
+        Assert.Equal(20, loaded.RootElement.GetProperty("maximumFindingsToPost").GetInt32());
+    }
+
+    private async Task<ClientRecord> AddClientAsync(string displayName)
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var owner = await db.Clients.AsNoTracking().SingleAsync(record => record.Id == factory.ClientId);
+        var record = new ClientRecord
+            { Id = Guid.NewGuid(), TenantId = owner.TenantId, DisplayName = displayName, IsActive = true, CreatedAt = DateTimeOffset.UtcNow };
+        db.Clients.Add(record);
+        await db.SaveChangesAsync();
+        return record;
+    }
+
+    private static Dictionary<string, string> ReadDestinations(JsonElement client)
+    {
+        return client.GetProperty("findingTypeDestinations")
+            .EnumerateObject()
+            .ToDictionary(entry => entry.Name, entry => entry.Value.GetString()!);
+    }
+
+    private static List<string> ReadWithheldTypes(JsonElement client)
+    {
+        return client.GetProperty("withheldFindingTypes").EnumerateArray().Select(type => type.GetString()!).ToList();
+    }
+
     [Theory]
     [InlineData("{\"findingBadgeStyle\":99}")]
     [InlineData("{\"findingBadgeStyle\":\"unsupported\"}")]

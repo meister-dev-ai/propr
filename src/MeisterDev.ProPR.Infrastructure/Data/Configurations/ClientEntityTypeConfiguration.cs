@@ -2,6 +2,8 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
@@ -27,16 +29,26 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
             severities => SeverityKey(severities).GetHashCode(StringComparison.Ordinal),
             severities => severities.ToList());
 
-    // The withheld finding types are stored like the auto-resolve severities: a canonical comma-separated list of
-    // core type slugs, sorted and without duplicates, and an empty string when every type is published.
-    private static readonly ValueConverter<IReadOnlyList<string>, string> FindingTypesConverter =
-        new(types => SerializeFindingTypes(types), value => DeserializeFindingTypes(value));
+    // The destination per finding type is stored as a JSON object from key to destination name, in the canonical
+    // form of FindingPostDestinationMap: canonical keys in ordinal order, and no entry that only repeats the default
+    // destination of a type. Equal maps therefore share one stored text, and change tracking compares that text.
+    private static readonly JsonSerializerOptions FindingTypeDestinationsJsonOptions = new()
+    {
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
+    };
 
-    private static readonly ValueComparer<IReadOnlyList<string>> FindingTypesComparer =
+    private static readonly ValueConverter<IReadOnlyDictionary<string, FindingPostDestination>, string> FindingTypeDestinationsConverter =
+        new(destinations => SerializeFindingTypeDestinations(destinations), value => DeserializeFindingTypeDestinations(value));
+
+    private static readonly ValueComparer<IReadOnlyDictionary<string, FindingPostDestination>> FindingTypeDestinationsComparer =
         new(
-            (left, right) => SerializeFindingTypes(left) == SerializeFindingTypes(right),
-            types => SerializeFindingTypes(types).GetHashCode(StringComparison.Ordinal),
-            types => types.ToList());
+            (left, right) => SerializeFindingTypeDestinations(left) == SerializeFindingTypeDestinations(right),
+            destinations => SerializeFindingTypeDestinations(destinations).GetHashCode(StringComparison.Ordinal),
+            destinations => FindingPostDestinationMap.Normalize(destinations));
+
+    // The column default is the default map, so that a client row written without the column starts with it as well.
+    private static readonly string FindingTypeDestinationsDefaultSql =
+        $"'{SerializeFindingTypeDestinations(FindingPostDestinationMap.Default)}'::jsonb";
 
     public void Configure(EntityTypeBuilder<ClientRecord> builder)
     {
@@ -149,11 +161,19 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
             .HasDefaultValue(FindingRiskSeverity.Low)
             .HasSentinel(FindingRiskSeverity.Low);
 
-        builder.Property(c => c.WithheldFindingTypes)
-            .HasColumnName("withheld_finding_types")
-            .HasConversion(FindingTypesConverter, FindingTypesComparer)
-            .HasColumnType("text")
-            .HasDefaultValueSql("''");
+        builder.Property(c => c.FindingTypeDestinations)
+            .HasColumnName("finding_type_destinations")
+            .HasConversion(FindingTypeDestinationsConverter, FindingTypeDestinationsComparer)
+            .HasColumnType("jsonb")
+            .HasDefaultValueSql(FindingTypeDestinationsDefaultSql)
+            .IsRequired();
+
+        // The column default fills the limit of every existing client when the column is added. A client clears the
+        // limit with an update, which writes the null that an insert would replace with the default.
+        builder.Property(c => c.MaximumFindingsToPost)
+            .HasColumnName("maximum_findings_to_post")
+            .HasDefaultValue(FindingPostLimit.Default)
+            .IsRequired(false);
 
         builder.Property(c => c.RequiredRunnerTags)
             .HasColumnName("required_runner_tags")
@@ -257,20 +277,35 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
         return SerializeSeverities(severities);
     }
 
-    private static string SerializeFindingTypes(IReadOnlyList<string> types)
+    private static string SerializeFindingTypeDestinations(IReadOnlyDictionary<string, FindingPostDestination>? destinations)
     {
-        return string.Join(',', NormalizeFindingTypes(types));
+        return JsonSerializer.Serialize(FindingPostDestinationMap.Normalize(destinations), FindingTypeDestinationsJsonOptions);
     }
 
-    private static IReadOnlyList<string> DeserializeFindingTypes(string value)
+    // A stored entry with a key or a destination this version does not know is dropped, so that a hand-edited or
+    // newer value cannot fail the read of the client.
+    private static IReadOnlyDictionary<string, FindingPostDestination> DeserializeFindingTypeDestinations(string value)
     {
-        return string.IsNullOrWhiteSpace(value)
-            ? []
-            : NormalizeFindingTypes(value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return FindingPostDestinationMap.Empty;
+        }
+
+        var stored = JsonSerializer.Deserialize<Dictionary<string, string>>(value) ?? [];
+        return FindingPostDestinationMap.Normalize(
+            stored
+                .Select(entry => (entry.Key, Destination: ParseFindingPostDestination(entry.Value)))
+                .Where(entry => entry.Destination.HasValue)
+                .Select(entry => new KeyValuePair<string, FindingPostDestination>(entry.Key, entry.Destination!.Value)));
     }
 
-    private static IReadOnlyList<string> NormalizeFindingTypes(IEnumerable<string> types)
+    private static FindingPostDestination? ParseFindingPostDestination(string? value)
     {
-        return types.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
+        return Enum.GetValues<FindingPostDestination>()
+            .Select(destination => (FindingPostDestination?)destination)
+            .FirstOrDefault(destination => string.Equals(
+                JsonNamingPolicy.CamelCase.ConvertName(destination!.Value.ToString()),
+                value?.Trim(),
+                StringComparison.OrdinalIgnoreCase));
     }
 }

@@ -26,6 +26,12 @@ export function riskLabel(value: string | null | undefined): string {
   return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase()
 }
 
+/**
+ * Rubric versions whose assessments show a risk severity and a confidence. Version 2 changed how the review model rates
+ * impact and likelihood and kept the matrix of version 1, so findings rated under version 1 keep their levels.
+ */
+const SUPPORTED_RUBRIC_VERSIONS: ReadonlySet<string> = new Set(['finding-risk-v1', 'finding-risk-v2'])
+
 function enumValue<T extends string>(value: unknown, options: readonly T[]): T | 'unknown' {
   return options.find(option => option === value) ?? 'unknown'
 }
@@ -42,9 +48,10 @@ export function findingRisk(assessment: FindingRiskAssessment | null | undefined
   const confidenceReason = text(assessment?.confidenceReason)
   // Assessments without separate confidence provenance retain their original producer.
   const confidenceSource = assessment?.confidenceSource ?? assessment?.source
-  const trusted = authoritative && assessment?.rubricVersion === 'finding-risk-v1' && text(confidenceSource, 128)
+  const supportedRubric = authoritative && SUPPORTED_RUBRIC_VERSIONS.has(assessment?.rubricVersion ?? '')
+  const trusted = supportedRubric && text(confidenceSource, 128)
   const confidence = trusted && confidenceReason ? enumValue(assessment?.confidence, RISK_OPTIONS.confidence) : 'unknown'
-  const supported = authoritative && assessment?.rubricVersion === 'finding-risk-v1' && text(assessment?.source, 128)
+  const supported = supportedRubric && text(assessment?.source, 128)
     && impactReason && likelihoodReason && impact !== 'unknown'
     && likelihood !== 'unknown' && likelihood !== 'notApplicable'
   return {

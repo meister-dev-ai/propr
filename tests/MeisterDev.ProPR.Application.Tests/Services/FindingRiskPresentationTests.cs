@@ -222,7 +222,7 @@ public sealed class FindingRiskPresentationTests
         Assert.Contains("Deletes tenant data.", body);
         Assert.Contains("Every delete uses this query.", body);
         Assert.DoesNotContain("review_model", body);
-        Assert.DoesNotContain("finding-risk-v1", body);
+        Assert.DoesNotContain(FindingRiskAssessment.CurrentRubricVersion, body);
         Assert.Equal("ERROR: " + comment.Message, ReviewFindingTextFormatter.StripAssessment(body));
         Assert.Equal("Unscoped delete.", comment.Message);
     }

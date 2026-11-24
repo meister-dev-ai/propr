@@ -176,11 +176,11 @@ function formatTimestamp(value: string): string {
 }
 
 .licensing-history-stale {
-  color: var(--color-warning, #b45309);
+  color: var(--color-warning);
   font-size: 0.85rem;
   margin: 0 1.25rem 1rem;
   padding: 0.75rem;
-  background: var(--color-warning-bg, #fef3c7);
+  background: var(--color-warning-soft);
   border-radius: 0.25rem;
 }
 </style>

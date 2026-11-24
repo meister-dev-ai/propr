@@ -45,6 +45,8 @@ internal static class WithheldReviewFindingMapper
                     OriginSymbolKind = finding.Provenance.OriginSymbolKind,
                     ScopeRelation = ReviewCommentScopeRelationMapper.Map(finding.ScopeRelation),
                     SourceReadGrounding = finding.ReadGrounding,
+                    RelatedLocations = finding.RelatedLocations,
+                    RootCauseGroupSize = finding.RootCauseGroupSize,
                 }, Reason(finding.VerificationOutcome, byId[finding.FindingId])))
             .ToList();
     }

@@ -214,6 +214,108 @@ public partial class ReviewOrchestrationServicePostConfigurationTests
     }
 
     [Fact]
+    public async Task FindingsAboveTheLimit_AreHeldBackAndCountedOnTheJobProtocol()
+    {
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
+        var clientRegistry = CreateClientRegistry(out var job);
+        clientRegistry.GetMaximumFindingsToPostAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<int?>(1));
+
+        var protocolRecorder = Substitute.For<IProtocolRecorder>();
+        var protocolId = Guid.NewGuid();
+        protocolRecorder.BeginAsync(default, default).ReturnsForAnyArgs(protocolId);
+
+        var commentPoster = CreatePublicationService();
+        var (service, _) = CreateService(
+            jobs,
+            clientRegistry,
+            BuildResultWithOneFindingOfEachScope(),
+            commentPoster,
+            protocolRecorder: protocolRecorder);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        // Both findings have the same rank, so the earlier one is posted.
+        await commentPoster.Received(1).PublishReviewAsync(
+            job.ClientId,
+            job.CodeReviewReference,
+            Arg.Any<ReviewRevision>(),
+            Arg.Is<ReviewResult>(result =>
+                result.Comments.Count == 1
+                && result.Comments[0].FilePath == WarningFile
+                && result.Summary.Contains("- 1 above the limit of 1 finding for one pull request", StringComparison.Ordinal)),
+            Arg.Any<ReviewerIdentity>(),
+            Arg.Any<CancellationToken>(),
+            Arg.Any<ReviewPublicationContext?>());
+        await protocolRecorder.Received(1).RecordPublicationEventAsync(
+            protocolId,
+            Arg.Is<string>(name => name == "publication_withheld_findings"),
+            Arg.Is<string?>(details =>
+                details!.Contains("\"withheldCount\":1", StringComparison.Ordinal)
+                && details.Contains("\"aboveLimit\":1", StringComparison.Ordinal)),
+            Arg.Is<string?>(error => error == null),
+            Arg.Any<CancellationToken>());
+        await jobs.Received(1).SetResultAsync(
+            job.Id,
+            Arg.Is<ReviewResult>(result => result.Comments.Count == 2),
+            Arg.Any<CancellationToken>());
+    }
+
+    // A synthesized concern whose supporting findings are all posted is left out of the pull request. The review record
+    // keeps it as a withheld finding with its reason, and the job protocol counts it apart from the held-back findings.
+    [Fact]
+    public async Task SynthesizedConcern_WhoseSupportingFindingsArePosted_IsKeptInTheRecordAsAWithheldFinding()
+    {
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
+        var clientRegistry = CreateClientRegistry(out var job);
+        var protocolRecorder = Substitute.For<IProtocolRecorder>();
+        var protocolId = Guid.NewGuid();
+        protocolRecorder.BeginAsync(default, default).ReturnsForAnyArgs(protocolId);
+        const string concernMessage = "Tenant isolation is missing in the cache layer.";
+        var orchestratorResult = new ReviewResult(
+            "Summary.",
+            new List<ReviewComment>
+            {
+                new(WarningFile, 1, CommentSeverity.Warning, "The cache key omits the tenant id.") { FindingId = "finding-a" },
+                new(SuggestionFile, 2, CommentSeverity.Warning, "Orders read the cache entry of another tenant.") { FindingId = "finding-b" },
+                new(null, null, CommentSeverity.Warning, concernMessage) { SupportingFindingIds = ["finding-a", "finding-b"] },
+            }.AsReadOnly());
+
+        var commentPoster = CreatePublicationService();
+        var (service, _) = CreateService(jobs, clientRegistry, orchestratorResult, commentPoster, protocolRecorder: protocolRecorder);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await commentPoster.Received(1).PublishReviewAsync(
+            job.ClientId,
+            job.CodeReviewReference,
+            Arg.Any<ReviewRevision>(),
+            Arg.Is<ReviewResult>(result =>
+                result.Comments.Count == 2
+                && result.Comments.All(comment => comment.Message != concernMessage)
+                && result.Summary == "Summary."),
+            Arg.Any<ReviewerIdentity>(),
+            Arg.Any<CancellationToken>(),
+            Arg.Any<ReviewPublicationContext?>());
+        await jobs.Received(1).SetResultAsync(
+            job.Id,
+            Arg.Is<ReviewResult>(result =>
+                result.Comments.Count == 2
+                && result.WithheldFindings.Count == 1
+                && result.WithheldFindings[0].Comment.Message == concernMessage
+                && result.WithheldFindings[0].ReasonCode == ReviewFindingGateReasonCodes.RestatesPublishedFindings),
+            Arg.Any<CancellationToken>());
+        await protocolRecorder.Received(1).RecordPublicationEventAsync(
+            protocolId,
+            Arg.Is<string>(name => name == "publication_withheld_findings"),
+            Arg.Is<string?>(details =>
+                details!.Contains("\"withheldCount\":0", StringComparison.Ordinal)
+                && details.Contains("\"restatementsNotPosted\":1", StringComparison.Ordinal)),
+            Arg.Is<string?>(error => error == null),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task WithheldFindings_WhenScmPostingIsDisabled_AreNotRecordedAsWithheld()
     {
         var jobs = Substitute.For<IReviewJobExecutionStore>();

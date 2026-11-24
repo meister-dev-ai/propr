@@ -556,6 +556,69 @@ public sealed class ClientsValidatorTests
         Assert.False(PatchClientValidator.Validate(new PatchClientRequest(WithheldFindingTypes: ["style"])).IsValid);
     }
 
+    [Fact]
+    public void PatchClient_FindingTypeDestinations_AcceptsTypeKeysAndQualifierKeys()
+    {
+        var request = new PatchClientRequest(
+            FindingTypeDestinations: new Dictionary<string, FindingPostDestination>
+            {
+                ["security"] = FindingPostDestination.Comment,
+                ["documentation-tests:missing"] = FindingPostDestination.Summary,
+                ["naming-clarity"] = FindingPostDestination.ReviewOnly,
+                ["logic-error:incorrect"] = FindingPostDestination.Comment,
+            });
+
+        Assert.True(PatchClientValidator.Validate(request).IsValid);
+        Assert.True(PatchClientValidator.Validate(new PatchClientRequest(FindingTypeDestinations: new Dictionary<string, FindingPostDestination>())).IsValid);
+    }
+
+    [Theory]
+    [InlineData("style")]
+    [InlineData("documentation-tests:absent")]
+    [InlineData("documentation-tests:1")]
+    [InlineData("documentation-tests:missing:extra")]
+    [InlineData("")]
+    public void PatchClient_FindingTypeDestinations_RejectsAKeyThatNamesNoCoreTypeOrQualifier(string key)
+    {
+        var request = new PatchClientRequest(
+            FindingTypeDestinations: new Dictionary<string, FindingPostDestination> { [key] = FindingPostDestination.Summary });
+
+        Assert.False(PatchClientValidator.Validate(request).IsValid);
+    }
+
+    [Fact]
+    public void PatchClient_FindingTypeDestinations_RejectsAnUndefinedDestination()
+    {
+        var request = new PatchClientRequest(
+            FindingTypeDestinations: new Dictionary<string, FindingPostDestination> { ["security"] = (FindingPostDestination)7 });
+
+        Assert.False(PatchClientValidator.Validate(request).IsValid);
+    }
+
+    // Keys that differ only in case name the same entry, and a request with both would leave the destination open.
+    [Fact]
+    public void PatchClient_FindingTypeDestinations_RejectsTwoKeysForTheSameEntry()
+    {
+        var request = new PatchClientRequest(
+            FindingTypeDestinations: new Dictionary<string, FindingPostDestination>
+            {
+                ["security"] = FindingPostDestination.Comment,
+                ["Security"] = FindingPostDestination.ReviewOnly,
+            });
+
+        Assert.False(PatchClientValidator.Validate(request).IsValid);
+    }
+
+    [Fact]
+    public void PatchClient_FindingTypeDestinationsAndWithheldFindingTypes_AreRefusedTogether()
+    {
+        var request = new PatchClientRequest(
+            WithheldFindingTypes: ["naming-clarity"],
+            FindingTypeDestinations: new Dictionary<string, FindingPostDestination> { ["security"] = FindingPostDestination.Summary });
+
+        Assert.False(PatchClientValidator.Validate(request).IsValid);
+    }
+
     // An empty value clears the baseline level; any other value is a level name, also one the shared order lacks.
     [Theory]
     [InlineData("none")]

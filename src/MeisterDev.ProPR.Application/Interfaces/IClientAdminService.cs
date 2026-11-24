@@ -83,8 +83,23 @@ public interface IClientAdminService
     ///     When non-null, sets the lowest assessed risk a finding needs to be posted to the pull request.
     /// </param>
     /// <param name="withheldFindingTypes">
-    ///     When non-null, replaces the core finding types that are not posted to the pull request. An empty list posts
-    ///     every type.
+    ///     When non-null, sets the listed core finding types to <see cref="FindingPostDestination.ReviewOnly" />, and
+    ///     posts every other type that had that destination as a comment again. A listed type that did not have that
+    ///     destination before loses its keys with a qualifier, and a listed type that had it keeps them, so writing back
+    ///     the list that was read changes nothing. Other entries of the destination map stay as they are. The parameter
+    ///     serves API consumers that write the list of finding types that are not posted.
+    /// </param>
+    /// <param name="findingTypeDestinations">
+    ///     When non-null, replaces the destination per finding type. Keys are core type slugs or core type slugs with
+    ///     a qualifier. An empty map posts every finding as a comment.
+    /// </param>
+    /// <param name="maximumFindingsToPost">
+    ///     The largest number of findings posted as comments on one pull request, or <see langword="null" /> for no limit.
+    ///     Applied only when <paramref name="updateMaximumFindingsToPost" /> is <see langword="true" />.
+    /// </param>
+    /// <param name="updateMaximumFindingsToPost">
+    ///     Whether <paramref name="maximumFindingsToPost" /> replaces the stored limit. A <see langword="null" /> limit
+    ///     cannot mean "unchanged" here, because it clears the limit.
     /// </param>
     Task<ClientDto?> PatchAsync(
         Guid clientId,
@@ -109,7 +124,10 @@ public interface IClientAdminService
         CancellationToken ct = default,
         FindingBadgeStyle? findingBadgeStyle = null,
         FindingRiskSeverity? minimumRiskSeverityToPost = null,
-        IReadOnlyList<string>? withheldFindingTypes = null);
+        IReadOnlyList<string>? withheldFindingTypes = null,
+        IReadOnlyDictionary<string, FindingPostDestination>? findingTypeDestinations = null,
+        int? maximumFindingsToPost = null,
+        bool updateMaximumFindingsToPost = false);
 
     /// <summary>Returns <c>true</c> when a client with <paramref name="clientId" /> exists.</summary>
     /// <param name="clientId">Client identifier.</param>

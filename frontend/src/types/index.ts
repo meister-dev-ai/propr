@@ -24990,6 +24990,11 @@ export interface components {
             findingBadgeStyle?: components["schemas"]["FindingBadgeStyle"];
             minimumRiskSeverityToPost?: components["schemas"]["FindingRiskSeverity"];
             withheldFindingTypes?: string[] | null;
+            findingTypeDestinations?: {
+                [key: string]: components["schemas"]["FindingPostDestination"];
+            } | null;
+            /** Format: int32 */
+            maximumFindingsToPost?: number | null;
         };
         /** @description Client-scoped review profile response. */
         ClientReviewProfileResponse: {
@@ -26604,6 +26609,13 @@ export interface components {
          * @enum {string}
          */
         FindingLikelihood: "unknown" | "unlikely" | "possible" | "likely" | "notApplicable";
+        /**
+         * @description The place a finding of one finding type takes on the pull request. The values are ordered from the most visible
+         *     destination to the least visible one, because a finding with several types takes the most visible destination
+         *     among its types.
+         * @enum {string}
+         */
+        FindingPostDestination: "comment" | "summary" | "reviewOnly";
         /** @description Evidence-based impact, occurrence likelihood and correctness confidence with versioned risk derivation. */
         FindingRiskAssessment: {
             impact?: components["schemas"]["FindingImpact"];
@@ -27473,8 +27485,18 @@ export interface components {
          *     Set MeisterDev.ProPR.Api.Controllers.PatchClientRequest.CustomSystemMessage to `""` (empty string) to clear an existing value.
          *     Set MeisterDev.ProPR.Api.Controllers.PatchClientRequest.AutoResolveSeverities to an empty array to clear the auto-resolve set.
          *     MeisterDev.ProPR.Api.Controllers.PatchClientRequest.MinimumRiskSeverityToPost is low, medium, high or critical; low posts every finding.
-         *     MeisterDev.ProPR.Api.Controllers.PatchClientRequest.WithheldFindingTypes lists the core finding types that are not posted; an empty array posts
-         *     every type.
+         *     MeisterDev.ProPR.Api.Controllers.PatchClientRequest.FindingTypeDestinations replaces the destination per finding type. A key is a core finding type,
+         *     for example `security`, or a core finding type with a qualifier (`missing`, `incorrect` or
+         *     `extraneous`), for example `documentation-tests:missing`. A destination is `comment`,
+         *     `summary` or `reviewOnly`. For a finding, the key with its qualifier is looked up before the key of
+         *     its type, a type without an entry is posted as a comment, and a finding with several types takes the most
+         *     visible destination. An empty object posts every finding as a comment.
+         *     MeisterDev.ProPR.Api.Controllers.PatchClientRequest.WithheldFindingTypes lists the core finding types that are neither posted nor listed: each listed
+         *     type gets the destination `reviewOnly`, and every other type that had it is posted as a comment again. A
+         *     listed type that did not have `reviewOnly` before loses its keys with a qualifier, and a listed type that had
+         *     it keeps them, so writing back the list read from the client changes nothing.
+         *     A request sets one of the two fields, not both.
+         *     MeisterDev.ProPR.Api.Controllers.PatchClientRequest.MaximumFindingsToPost is at least 1; an explicit null removes the limit.
          *     MeisterDev.ProPR.Api.Controllers.PatchClientRequest.OutputLanguage is an IETF BCP 47 language tag; a blank value resets it to the default.
          *     MeisterDev.ProPR.Api.Controllers.PatchClientRequest.EnableEvidenceBackedVerification and MeisterDev.ProPR.Api.Controllers.PatchClientRequest.EnableLanguageRobustScreening are removed settings:
          *     a request that sets either of them is refused with 400 Bad Request, which states why the setting was removed.
@@ -27502,6 +27524,17 @@ export interface components {
             findingBadgeStyle?: components["schemas"]["FindingBadgeStyle"];
             minimumRiskSeverityToPost?: components["schemas"]["FindingRiskSeverity"];
             withheldFindingTypes?: string[] | null;
+            findingTypeDestinations?: {
+                [key: string]: components["schemas"]["FindingPostDestination"];
+            } | null;
+            /**
+             * Format: int32
+             * @description The largest number of findings posted as comments on one pull request. When more findings remain after the
+             *     other publication settings, the highest ranked ones are posted and the others stay in the ProPR review.
+             *     Findings listed in the review summary do not count towards the limit. Set this property explicitly to
+             *     null to remove the limit, and omit it to leave the limit unchanged.
+             */
+            maximumFindingsToPost?: number | null;
         };
         /** @description Patch payload for the installation's premium capability overrides. */
         PatchLicensingOverridesRequest: {
@@ -29187,20 +29220,79 @@ export interface components {
              *     structural analyzer classified it. null whenever the name is.
              */
             originSymbolKind?: string | null;
+            /**
+             * @description The other places where the review reported the same root cause, when this comment stands for a group of
+             *     findings. The message lists the same places, so a reader of the pull request sees them as well.
+             *     null for a comment that stands for one finding.
+             */
+            relatedLocations?: components["schemas"]["ReviewCommentLocation"][] | null;
+            /**
+             * Format: int32
+             * @description The number of findings of the root-cause group this comment stands for, including the finding at its own
+             *     location. null for a comment that stands for one finding.
+             */
+            rootCauseGroupSize?: number | null;
+            /**
+             * @description The identifier the review gave the finding that this comment publishes, when a synthesized cross-cutting
+             *     concern of the same review rests on that finding. The publication policy compares it with
+             *     MeisterDev.ProPR.Domain.ValueObjects.ReviewComment.SupportingFindingIds. null for every other comment.
+             */
+            findingId?: string | null;
+            /**
+             * @description The identifiers of the findings that a synthesized cross-cutting concern rests on. The publication policy
+             *     does not post the concern when every one of these findings is posted as a comment or listed in the summary,
+             *     because those comments already state the concern. null for every other comment.
+             */
+            supportingFindingIds?: string[] | null;
         };
         /** @description DTO for a single review comment. */
         ReviewCommentDto: {
+            /** @description The repository-relative path of the file, or null for the pull request. */
             filePath?: string | null;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description The line within the file, or null when the comment names no line.
+             */
             lineNumber?: number | null;
             severity?: components["schemas"]["CommentSeverity"];
+            /** @description The comment text. */
             message?: string | null;
+            /** @description The kind of review pass that produced the finding, when recorded. */
             originPassKind?: string | null;
             changedLineRelation?: components["schemas"]["ReviewCommentScopeRelation"];
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description The 1-based index of the numbered review pass that produced the finding, when recorded.
+             */
             originPassIndex?: number | null;
+            /** @description The specialist lens of the review pass that produced the finding, when it had one. */
             originPassLens?: string | null;
             riskAssessment?: components["schemas"]["FindingRiskAssessment"];
+            findingClassification?: components["schemas"]["FindingTypeClassification"];
+            /**
+             * @description The other places where the review reported the same root cause, when this comment stands for a group of
+             *     findings. null for a comment that stands for one finding.
+             */
+            relatedLocations?: components["schemas"]["ReviewCommentLocation"][] | null;
+            /**
+             * Format: int32
+             * @description The number of findings of the root-cause group this comment stands for, including the finding at its own
+             *     location. null for a comment that stands for one finding.
+             */
+            rootCauseGroupSize?: number | null;
+        };
+        /**
+         * @description A place in the pull request where a review reported a finding: a file and a line, a file without a line, or the
+         *     pull request as a whole when both are null.
+         */
+        ReviewCommentLocation: {
+            /** @description The repository-relative path of the file, or null for the pull request. */
+            filePath?: string | null;
+            /**
+             * Format: int32
+             * @description The line within the file, or null when the finding names no line.
+             */
+            lineNumber?: number | null;
         };
         /**
          * @description Whether the reviewer read the actual source at a finding's cited location while producing it.
@@ -29371,16 +29463,33 @@ export interface components {
         };
         /** @description Response for the job result endpoint, combining status metadata with the review result. */
         ReviewJobResultDto: {
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description The review job identifier.
+             */
             jobId?: string;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description The client the review job belongs to.
+             */
             clientId?: string;
             status?: components["schemas"]["JobStatus"];
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When the review job was submitted.
+             */
             submittedAt?: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When the review job completed, or null while it runs.
+             */
             completedAt?: string | null;
             result?: components["schemas"]["ReviewResultDto"];
+            /**
+             * @description The findings that verification, the final gate or the synthesis step held back from publication, each with
+             *     the reason code of the step that held it back.
+             */
+            withheldFindings?: components["schemas"]["WithheldReviewFindingDto"][] | null;
         };
         /** @description Response returned when a running or queued review job is stopped. */
         ReviewJobStopResponse: {
@@ -32171,6 +32280,15 @@ export interface components {
             comment: components["schemas"]["ReviewComment"];
             /** @description The verification or final-gate reason that withheld the finding. */
             reasonCode: string;
+        };
+        /** @description A finding that the review produced and held back from publication, with the reason it was held back. */
+        WithheldReviewFindingDto: {
+            /**
+             * @description The reason code of the step that held the finding back, for example `not_confirmed` from verification or
+             *     `restates_published_findings` for a synthesized finding whose supporting findings are all published.
+             */
+            reasonCode?: string | null;
+            comment?: components["schemas"]["ReviewCommentDto"];
         };
     };
     responses: never;

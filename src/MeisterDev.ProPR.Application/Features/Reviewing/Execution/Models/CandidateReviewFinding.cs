@@ -273,6 +273,19 @@ public sealed record CandidateReviewFinding
     public ReviewCommentReadGrounding? ReadGrounding { get; init; }
 
     /// <summary>
+    ///     Gets the other places where the review reported the same root cause, carried from the comment that stands
+    ///     for the group, so the published comment keeps them. <see langword="null" /> for a finding that stands for
+    ///     itself only.
+    /// </summary>
+    public IReadOnlyList<ReviewCommentLocation>? RelatedLocations { get; init; }
+
+    /// <summary>
+    ///     Gets the number of findings of the root-cause group this finding stands for, or <see langword="null" /> for a
+    ///     finding that stands for itself only.
+    /// </summary>
+    public int? RootCauseGroupSize { get; init; }
+
+    /// <summary>
     ///     Gets merged-candidate metadata when the finding has been through late-steering merge.
     /// </summary>
     public MergedCandidateFinding? MergedFinding { get; init; }

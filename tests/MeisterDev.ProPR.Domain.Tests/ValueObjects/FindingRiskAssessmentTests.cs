@@ -151,6 +151,53 @@ public sealed class FindingRiskAssessmentTests
         Assert.Equal(FindingImpact.Critical, assessment.Impact);
     }
 
+    [Theory]
+    [InlineData("finding-risk-v1")]
+    [InlineData("finding-risk-v2")]
+    public void StoredAssessmentOfASupportedRubric_KeepsItsRiskAndConfidence(string version)
+    {
+        var assessment = JsonSerializer.Deserialize<FindingRiskAssessment>(
+            """{"Impact":"high","Likelihood":"possible","ImpactReason":"Data loss.","LikelihoodReason":"A supported option reaches it.","Source":"review_model","RubricVersion":""" +
+            JsonSerializer.Serialize(version) +
+            ""","Confidence":"medium","ConfidenceReason":"The caller is visible.","ConfidenceSource":"evidence_verification"}""");
+
+        var restored = JsonSerializer.Deserialize<FindingRiskAssessment>(JsonSerializer.Serialize(assessment));
+
+        Assert.Equal(FindingRiskSeverity.High, restored!.Severity);
+        Assert.Equal(FindingConfidence.Medium, restored.Confidence);
+        Assert.Equal("evidence_verification", restored.ConfidenceSource);
+        Assert.Equal(version, restored.RubricVersion);
+    }
+
+    [Theory]
+    [InlineData("finding-risk-v3")]
+    [InlineData("finding-risk")]
+    [InlineData("FINDING-RISK-V2")]
+    [InlineData(null)]
+    public void AssessmentOfAnUnknownRubric_RemainsUnassessed(string? version)
+    {
+        var assessment = new FindingRiskAssessment(
+            FindingImpact.High, FindingLikelihood.Possible, "Data loss.", "A supported option reaches it.", "review_model", version,
+            FindingConfidence.High, "The caller is visible.");
+
+        Assert.Equal(FindingRiskSeverity.Unknown, assessment.Severity);
+        Assert.Equal(FindingConfidence.Unknown, assessment.Confidence);
+        Assert.Equal(FindingImpact.High, assessment.Impact);
+        Assert.Equal(FindingLikelihood.Possible, assessment.Likelihood);
+    }
+
+    [Fact]
+    public void BothSupportedRubrics_DeriveTheSameRiskSeverity()
+    {
+        foreach (var impact in Enum.GetValues<FindingImpact>())
+        {
+            foreach (var likelihood in Enum.GetValues<FindingLikelihood>())
+            {
+                Assert.Equal(Assess(impact, likelihood, "finding-risk-v2").Severity, Assess(impact, likelihood, "finding-risk-v1").Severity);
+            }
+        }
+    }
+
     [Fact]
     public void Assessment_LegacyJsonKeepsAssessmentAbsent()
     {
@@ -179,6 +226,7 @@ public sealed class FindingRiskAssessmentTests
         Assert.True(comment.RiskAssessment is null || comment.RiskAssessment.Severity == FindingRiskSeverity.Unknown);
     }
 
-    private static FindingRiskAssessment Assess(FindingImpact impact, FindingLikelihood likelihood) =>
-        new(impact, likelihood, "Deletes tenant data.", "Scenario occurs in routine use.", "review_model", FindingRiskAssessment.CurrentRubricVersion);
+    private static FindingRiskAssessment Assess(
+        FindingImpact impact, FindingLikelihood likelihood, string rubricVersion = FindingRiskAssessment.CurrentRubricVersion) =>
+        new(impact, likelihood, "Deletes tenant data.", "Scenario occurs in routine use.", "review_model", rubricVersion);
 }

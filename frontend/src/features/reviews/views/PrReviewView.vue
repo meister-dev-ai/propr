@@ -819,9 +819,8 @@ async function restartThreadPass(threadPassId: string): Promise<void> {
     margin-top: 0.75rem;
     padding: 0.65rem 0.9rem;
     border: 1px solid var(--color-border);
-    border-left: 3px solid var(--color-accent, #6366f1);
     border-radius: var(--radius-xs);
-    background: var(--color-surface-raised, rgba(99, 102, 241, 0.06));
+    background: var(--color-accent-soft);
 }
 
 .pending-review__text {
@@ -853,7 +852,7 @@ async function restartThreadPass(threadPassId: string): Promise<void> {
 }
 
 .pending-review__action:hover:not(:disabled) {
-    border-color: var(--color-accent, #6366f1);
+    border-color: var(--color-accent);
 }
 
 .pending-review__action:disabled {
@@ -1137,12 +1136,12 @@ async function restartThreadPass(threadPassId: string): Promise<void> {
 
 .outcome-dismissed {
     background: rgba(139, 92, 246, 0.15);
-    color: #a78bfa;
+    color: var(--color-outcome-dismissed);
 }
 
 .outcome-unknown {
     background: rgba(148, 163, 184, 0.15);
-    color: var(--color-text-muted, #94a3b8);
+    color: var(--color-text-muted);
 }
 
 .error {

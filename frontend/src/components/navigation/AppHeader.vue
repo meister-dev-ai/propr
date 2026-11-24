@@ -390,7 +390,7 @@ async function logout() {
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--color-text-muted, #8b949e);
+  color: var(--color-text-muted);
 }
 
 .dropdown-menu {

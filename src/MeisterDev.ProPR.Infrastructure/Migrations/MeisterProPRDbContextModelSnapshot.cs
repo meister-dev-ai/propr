@@ -5069,6 +5069,13 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasDefaultValue(0)
                         .HasColumnName("finding_badge_style");
 
+                    b.Property<string>("FindingTypeDestinations")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("finding_type_destinations")
+                        .HasDefaultValueSql("'{\"documentation-tests:missing\":\"summary\"}'::jsonb");
+
                     b.Property<bool>("IncludeLinkedItemsInContext")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -5090,6 +5097,12 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
+
+                    b.Property<int?>("MaximumFindingsToPost")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(20)
+                        .HasColumnName("maximum_findings_to_post");
 
                     b.Property<int>("MinimumRiskSeverityToPost")
                         .ValueGeneratedOnAdd()
@@ -5153,13 +5166,6 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
-
-                    b.Property<string>("WithheldFindingTypes")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("text")
-                        .HasColumnName("withheld_finding_types")
-                        .HasDefaultValueSql("''");
 
                     b.Property<bool>("WithholdOutOfScopeFindings")
                         .ValueGeneratedOnAdd()

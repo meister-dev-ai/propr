@@ -886,7 +886,7 @@ public sealed partial class ReviewOrchestrationService(
 
         try
         {
-            var publicationResult = this.PrepareResultForPublication(job, pr, result);
+            var preparedResult = this.PrepareResultForPublication(job, pr, result);
 
             // The client's post configuration governs SCM PUBLICATION only. The persisted result below keeps
             // every finding, so a withheld one is still visible in the review record ("no comment posted" is
@@ -896,12 +896,17 @@ public sealed partial class ReviewOrchestrationService(
                 await clientRegistry.GetMinimumSeverityToPostAsync(job.ClientId, ct),
                 await clientRegistry.GetWithholdOutOfScopeFindingsAsync(job.ClientId, ct),
                 await clientRegistry.GetMinimumRiskSeverityToPostAsync(job.ClientId, ct),
-                await clientRegistry.GetWithheldFindingTypesAsync(job.ClientId, ct) ?? []);
+                await clientRegistry.GetFindingTypeDestinationsAsync(job.ClientId, ct) ?? FindingPostDestinationMap.Default,
+                await clientRegistry.GetMaximumFindingsToPostAsync(job.ClientId, ct));
             var publicationPolicy = ReviewPublicationPolicy.Apply(
-                publicationResult,
+                preparedResult,
                 publicationSettings,
                 this.TryBuildReviewRecordLink(job.Id));
             var publishResult = publicationPolicy.PublishResult;
+
+            // The persisted result differs from the prepared one only in a synthesized concern that the policy left out
+            // because it restates posted findings: the record keeps it as a withheld finding with that reason.
+            var publicationResult = publicationPolicy.RecordResult;
 
             IReadOnlySet<string> autoResolvedThreadIds = new HashSet<string>(StringComparer.Ordinal);
             var scmCommentPostingEnabled = await clientRegistry.GetScmCommentPostingEnabledAsync(job.ClientId, ct);
@@ -1796,7 +1801,8 @@ public sealed partial class ReviewOrchestrationService(
         // Also recorded when nothing was withheld but findings reached publication unclassified. That case is
         // how the out-of-scope rule would fail silently: it holds nothing back, which is indistinguishable from
         // a pull request that had nothing out of scope unless the unjudged findings are counted somewhere.
-        if (!policy.AnythingWithheld && policy.PublishedWithoutScopeClassification == 0)
+        if (!policy.AnythingWithheld && policy.ListedInSummary == 0 && policy.PublishedWithoutScopeClassification == 0
+            && policy.RestatementsNotPosted == 0)
         {
             return;
         }
@@ -1809,7 +1815,10 @@ public sealed partial class ReviewOrchestrationService(
                 belowMinimumRisk = policy.WithheldBelowMinimumRisk,
                 findingType = policy.WithheldFindingType,
                 outsideChangedLines = policy.WithheldOutsideChangedLines,
+                aboveLimit = policy.WithheldAboveLimit,
+                listedInSummary = policy.ListedInSummary,
                 publishedWithoutScopeClassification = policy.PublishedWithoutScopeClassification,
+                restatementsNotPosted = policy.RestatementsNotPosted,
             });
 
         await protocolRecorder.RecordPublicationEventAsync(

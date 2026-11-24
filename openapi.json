@@ -36612,6 +36612,18 @@
               "type": "string"
             },
             "nullable": true
+          },
+          "findingTypeDestinations": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FindingPostDestination"
+            },
+            "nullable": true
+          },
+          "maximumFindingsToPost": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -39753,6 +39765,15 @@
         "type": "string",
         "description": "Occurrence likelihood of a finding's scenario, independent of correctness confidence."
       },
+      "FindingPostDestination": {
+        "enum": [
+          "comment",
+          "summary",
+          "reviewOnly"
+        ],
+        "type": "string",
+        "description": "The place a finding of one finding type takes on the pull request. The values are ordered from the most visible\ndestination to the least visible one, because a finding with several types takes the most visible destination\namong its types."
+      },
       "FindingRiskAssessment": {
         "type": "object",
         "properties": {
@@ -41686,10 +41707,23 @@
               "type": "string"
             },
             "nullable": true
+          },
+          "findingTypeDestinations": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FindingPostDestination"
+            },
+            "nullable": true
+          },
+          "maximumFindingsToPost": {
+            "type": "integer",
+            "description": "The largest number of findings posted as comments on one pull request. When more findings remain after the\nother publication settings, the highest ranked ones are posted and the others stay in the ProPR review.\nFindings listed in the review summary do not count towards the limit. Set this property explicitly to\nnull to remove the limit, and omit it to leave the limit unchanged.",
+            "format": "int32",
+            "nullable": true
           }
         },
         "additionalProperties": false,
-        "description": "Request body for patching a client. All fields are optional; omitted fields are left unchanged.\nSet MeisterDev.ProPR.Api.Controllers.PatchClientRequest.CustomSystemMessage to `\"\"` (empty string) to clear an existing value.\nSet MeisterDev.ProPR.Api.Controllers.PatchClientRequest.AutoResolveSeverities to an empty array to clear the auto-resolve set.\nMeisterDev.ProPR.Api.Controllers.PatchClientRequest.MinimumRiskSeverityToPost is low, medium, high or critical; low posts every finding.\nMeisterDev.ProPR.Api.Controllers.PatchClientRequest.WithheldFindingTypes lists the core finding types that are not posted; an empty array posts\nevery type.\nMeisterDev.ProPR.Api.Controllers.PatchClientRequest.OutputLanguage is an IETF BCP 47 language tag; a blank value resets it to the default.\nMeisterDev.ProPR.Api.Controllers.PatchClientRequest.EnableEvidenceBackedVerification and MeisterDev.ProPR.Api.Controllers.PatchClientRequest.EnableLanguageRobustScreening are removed settings:\na request that sets either of them is refused with 400 Bad Request, which states why the setting was removed."
+        "description": "Request body for patching a client. All fields are optional; omitted fields are left unchanged.\nSet MeisterDev.ProPR.Api.Controllers.PatchClientRequest.CustomSystemMessage to `\"\"` (empty string) to clear an existing value.\nSet MeisterDev.ProPR.Api.Controllers.PatchClientRequest.AutoResolveSeverities to an empty array to clear the auto-resolve set.\nMeisterDev.ProPR.Api.Controllers.PatchClientRequest.MinimumRiskSeverityToPost is low, medium, high or critical; low posts every finding.\nMeisterDev.ProPR.Api.Controllers.PatchClientRequest.FindingTypeDestinations replaces the destination per finding type. A key is a core finding type,\nfor example `security`, or a core finding type with a qualifier (`missing`, `incorrect` or\n`extraneous`), for example `documentation-tests:missing`. A destination is `comment`,\n`summary` or `reviewOnly`. For a finding, the key with its qualifier is looked up before the key of\nits type, a type without an entry is posted as a comment, and a finding with several types takes the most\nvisible destination. An empty object posts every finding as a comment.\nMeisterDev.ProPR.Api.Controllers.PatchClientRequest.WithheldFindingTypes lists the core finding types that are neither posted nor listed: each listed\ntype gets the destination `reviewOnly`, and every other type that had it is posted as a comment again. A\nlisted type that did not have `reviewOnly` before loses its keys with a qualifier, and a listed type that had\nit keeps them, so writing back the list read from the client changes nothing.\nA request sets one of the two fields, not both.\nMeisterDev.ProPR.Api.Controllers.PatchClientRequest.MaximumFindingsToPost is at least 1; an explicit null removes the limit.\nMeisterDev.ProPR.Api.Controllers.PatchClientRequest.OutputLanguage is an IETF BCP 47 language tag; a blank value resets it to the default.\nMeisterDev.ProPR.Api.Controllers.PatchClientRequest.EnableEvidenceBackedVerification and MeisterDev.ProPR.Api.Controllers.PatchClientRequest.EnableLanguageRobustScreening are removed settings:\na request that sets either of them is refused with 400 Bad Request, which states why the setting was removed."
       },
       "PatchLicensingOverridesRequest": {
         "type": "object",
@@ -45290,6 +45324,33 @@
             "type": "string",
             "description": "What kind of definition MeisterDev.ProPR.Domain.ValueObjects.ReviewComment.OriginSymbolName is (method, class, function, …), as the\nstructural analyzer classified it. null whenever the name is.",
             "nullable": true
+          },
+          "relatedLocations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewCommentLocation"
+            },
+            "description": "The other places where the review reported the same root cause, when this comment stands for a group of\nfindings. The message lists the same places, so a reader of the pull request sees them as well.\nnull for a comment that stands for one finding.",
+            "nullable": true
+          },
+          "rootCauseGroupSize": {
+            "type": "integer",
+            "description": "The number of findings of the root-cause group this comment stands for, including the finding at its own\nlocation. null for a comment that stands for one finding.",
+            "format": "int32",
+            "nullable": true
+          },
+          "findingId": {
+            "type": "string",
+            "description": "The identifier the review gave the finding that this comment publishes, when a synthesized cross-cutting\nconcern of the same review rests on that finding. The publication policy compares it with\nMeisterDev.ProPR.Domain.ValueObjects.ReviewComment.SupportingFindingIds. null for every other comment.",
+            "nullable": true
+          },
+          "supportingFindingIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The identifiers of the findings that a synthesized cross-cutting concern rests on. The publication policy\ndoes not post the concern when every one of these findings is posted as a comment or listed in the summary,\nbecause those comments already state the concern. null for every other comment.",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -45300,10 +45361,12 @@
         "properties": {
           "filePath": {
             "type": "string",
+            "description": "The repository-relative path of the file, or null for the pull request.",
             "nullable": true
           },
           "lineNumber": {
             "type": "integer",
+            "description": "The line within the file, or null when the comment names no line.",
             "format": "int32",
             "nullable": true
           },
@@ -45312,10 +45375,12 @@
           },
           "message": {
             "type": "string",
+            "description": "The comment text.",
             "nullable": true
           },
           "originPassKind": {
             "type": "string",
+            "description": "The kind of review pass that produced the finding, when recorded.",
             "nullable": true
           },
           "changedLineRelation": {
@@ -45323,19 +45388,56 @@
           },
           "originPassIndex": {
             "type": "integer",
+            "description": "The 1-based index of the numbered review pass that produced the finding, when recorded.",
             "format": "int32",
             "nullable": true
           },
           "originPassLens": {
             "type": "string",
+            "description": "The specialist lens of the review pass that produced the finding, when it had one.",
             "nullable": true
           },
           "riskAssessment": {
             "$ref": "#/components/schemas/FindingRiskAssessment"
+          },
+          "findingClassification": {
+            "$ref": "#/components/schemas/FindingTypeClassification"
+          },
+          "relatedLocations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewCommentLocation"
+            },
+            "description": "The other places where the review reported the same root cause, when this comment stands for a group of\nfindings. null for a comment that stands for one finding.",
+            "nullable": true
+          },
+          "rootCauseGroupSize": {
+            "type": "integer",
+            "description": "The number of findings of the root-cause group this comment stands for, including the finding at its own\nlocation. null for a comment that stands for one finding.",
+            "format": "int32",
+            "nullable": true
           }
         },
         "additionalProperties": false,
         "description": "DTO for a single review comment."
+      },
+      "ReviewCommentLocation": {
+        "type": "object",
+        "properties": {
+          "filePath": {
+            "type": "string",
+            "description": "The repository-relative path of the file, or null for the pull request.",
+            "nullable": true
+          },
+          "lineNumber": {
+            "type": "integer",
+            "description": "The line within the file, or null when the finding names no line.",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A place in the pull request where a review reported a finding: a file and a line, a file without a line, or the\npull request as a whole when both are null."
       },
       "ReviewCommentReadGrounding": {
         "enum": [
@@ -45608,10 +45710,12 @@
         "properties": {
           "jobId": {
             "type": "string",
+            "description": "The review job identifier.",
             "format": "uuid"
           },
           "clientId": {
             "type": "string",
+            "description": "The client the review job belongs to.",
             "format": "uuid"
           },
           "status": {
@@ -45619,15 +45723,25 @@
           },
           "submittedAt": {
             "type": "string",
+            "description": "When the review job was submitted.",
             "format": "date-time"
           },
           "completedAt": {
             "type": "string",
+            "description": "When the review job completed, or null while it runs.",
             "format": "date-time",
             "nullable": true
           },
           "result": {
             "$ref": "#/components/schemas/ReviewResultDto"
+          },
+          "withheldFindings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WithheldReviewFindingDto"
+            },
+            "description": "The findings that verification, the final gate or the synthesis step held back from publication, each with\nthe reason code of the step that held it back.",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -51001,6 +51115,21 @@
         },
         "additionalProperties": false,
         "description": "Generated finding retained as evidence without allowing SCM publication."
+      },
+      "WithheldReviewFindingDto": {
+        "type": "object",
+        "properties": {
+          "reasonCode": {
+            "type": "string",
+            "description": "The reason code of the step that held the finding back, for example `not_confirmed` from verification or\n`restates_published_findings` for a synthesized finding whose supporting findings are all published.",
+            "nullable": true
+          },
+          "comment": {
+            "$ref": "#/components/schemas/ReviewCommentDto"
+          }
+        },
+        "additionalProperties": false,
+        "description": "A finding that the review produced and held back from publication, with the reason it was held back."
       }
     }
   },

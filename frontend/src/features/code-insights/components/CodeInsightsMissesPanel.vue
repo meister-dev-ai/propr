@@ -112,13 +112,12 @@ const visible = computed(() =>
 .miss-item {
   padding: 0.75rem;
   border: 1px solid var(--color-border);
-  border-left: 3px solid rgba(148, 163, 184, 0.4);
   border-radius: 0.6rem;
   background: rgba(148, 163, 184, 0.05);
 }
 
 .miss-item--counts {
-  border-left-color: var(--color-danger);
+  background: var(--color-danger-soft);
 }
 
 .miss-head {
@@ -142,7 +141,7 @@ const visible = computed(() =>
 .miss-verdict {
   margin-left: auto;
   padding: 0.15rem 0.5rem;
-  border-radius: var(--radius-pill, 999px);
+  border-radius: var(--radius-pill);
   font-weight: 700;
   font-size: 0.72rem;
 }
@@ -220,7 +219,7 @@ const visible = computed(() =>
 
 .judgement-list li {
   padding: 0.15rem 0.5rem;
-  border-radius: var(--radius-pill, 999px);
+  border-radius: var(--radius-pill);
   font-size: 0.72rem;
   font-weight: 600;
 }

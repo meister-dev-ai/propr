@@ -92,6 +92,10 @@ public sealed class ReviewCommentTests
                 ["concurrency"], [], CodeInsightFindingLevel.Member, CodeInsightFindingQualifier.Incorrect, 0.9,
                 FindingTypeTaxonomy.Version, FindingTypeClassification.ReviewSource),
             SuggestedFix = new ReviewSuggestedFix(244, 244, "Delete();", "await DeleteAsync();"),
+            RelatedLocations = [new ReviewCommentLocation("src/Legacy/Archive.cs", 31)],
+            RootCauseGroupSize = 2,
+            FindingId = "finding-pf-001",
+            SupportingFindingIds = ["finding-pf-002", "finding-pf-003"],
         };
     }
 }

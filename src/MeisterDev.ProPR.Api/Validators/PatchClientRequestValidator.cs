@@ -84,6 +84,29 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
             .WithMessage("WithheldFindingTypes must contain only core finding types: " + string.Join(", ", FindingTypeTaxonomy.AllSlugs) + ".")
             .When(r => r.WithheldFindingTypes is not null);
 
+        this.RuleFor(r => r.FindingTypeDestinations)
+            .Must(destinations => destinations!.Keys.All(key => FindingPostDestinationMap.TryNormalizeKey(key, out _)))
+            .WithMessage(
+                "FindingTypeDestinations keys must be core finding types, optionally followed by a colon and one of the qualifiers missing, incorrect, extraneous: "
+                + string.Join(", ", FindingTypeTaxonomy.AllSlugs) + ".")
+            .Must(destinations => destinations!.Values.All(destination => Enum.IsDefined(destination)))
+            .WithMessage("FindingTypeDestinations values must be one of comment, summary, reviewOnly.")
+            .Must(HaveDistinctKeys)
+            .WithMessage("FindingTypeDestinations must name each finding type key once.")
+            .When(r => r.FindingTypeDestinations is not null);
+
+        // Both fields write the same setting, and a request that sets both would leave the result to the order in
+        // which the server applies them.
+        this.RuleFor(r => r.WithheldFindingTypes)
+            .Null()
+            .WithMessage("Set either FindingTypeDestinations or WithheldFindingTypes, not both.")
+            .When(r => r.FindingTypeDestinations is not null);
+
+        this.RuleFor(r => r.MaximumFindingsToPost)
+            .GreaterThanOrEqualTo(FindingPostLimit.Minimum)
+            .WithMessage("MaximumFindingsToPost must be at least 1, or null for no limit.")
+            .When(r => r.MaximumFindingsToPost is not null);
+
         this.RuleFor(r => r.AutoResolveSeverities)
             .Must(severities => severities!.All(severity => Enum.IsDefined(severity)))
             .WithMessage("AutoResolveSeverities must contain only info, warning, error, or suggestion values.")
@@ -253,5 +276,15 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
         }
 
         return true;
+    }
+
+    // Keys that differ only in case or whitespace name the same entry, and the request would leave it open which
+    // destination applies.
+    private static bool HaveDistinctKeys(IReadOnlyDictionary<string, FindingPostDestination>? destinations)
+    {
+        var canonical = destinations!.Keys
+            .Select(key => FindingPostDestinationMap.TryNormalizeKey(key, out var normalized) ? normalized : key)
+            .ToList();
+        return canonical.Distinct(StringComparer.Ordinal).Count() == canonical.Count;
     }
 }

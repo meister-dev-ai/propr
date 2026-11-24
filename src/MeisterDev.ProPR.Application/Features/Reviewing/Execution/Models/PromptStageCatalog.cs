@@ -41,6 +41,9 @@ public static class PromptStageCatalog
             [PromptStageKeys.MemoryReconsiderationUser] = new(
                 PromptStageKeys.MemoryReconsiderationUser, "Memory reconsideration user prompt", "shared-downstream", PromptStageRole.User,
                 "ReviewPrompts.BuildMemoryReconsiderationUserMessage"),
+            [PromptStageKeys.FindingRootCauseGroupingSystem] = new(
+                PromptStageKeys.FindingRootCauseGroupingSystem, "Root-cause grouping system prompt", "shared-downstream", PromptStageRole.System,
+                "ReviewPrompts.BuildFindingRootCauseGroupingSystemPrompt"),
             ["pr_wide_planning_system"] = new(
                 "pr_wide_planning_system", "PR-wide planning system prompt", "pr-wide-agentic", PromptStageRole.System,
                 "ReviewPrompts.BuildPrWidePlanningSystemPrompt"),

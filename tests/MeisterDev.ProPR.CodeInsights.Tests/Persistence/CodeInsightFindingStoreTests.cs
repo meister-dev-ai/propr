@@ -283,6 +283,52 @@ public sealed class CodeInsightFindingStoreTests : IDisposable
     }
 
     [Theory]
+    [InlineData("finding-risk-v1", "finding-risk-v2")]
+    [InlineData("finding-risk-v2", "finding-risk-v1")]
+    public async Task ReplayDoesNotAddConfidenceAcrossRubricVersions(string recordedVersion, string suppliedVersion)
+    {
+        var key = NewKey();
+        var risk = new FindingRiskAssessment(
+            FindingImpact.High, FindingLikelihood.Unlikely, "A record is lost.", "Rare input.", "review_model", recordedVersion);
+        var snapshot = NewFindings()[0] with { RiskAssessment = risk };
+        await this._store.MaterialiseFindingsAsync(key, JobId, "revision", DateTimeOffset.UtcNow, [snapshot]);
+        var stored = await this._dbContext.CodeInsightFindings.SingleAsync();
+        var supplied = new FindingRiskAssessment(
+            risk.Impact, risk.Likelihood, risk.ImpactReason, risk.LikelihoodReason, "review_model", suppliedVersion,
+            FindingConfidence.Certain, "The complete path proves the claim.", "evidence_verification");
+        Assert.Equal(FindingConfidence.Certain, supplied.Confidence);
+
+        await this._store.MaterialiseFindingsAsync(key, JobId, "revision", DateTimeOffset.UtcNow, [snapshot with { RiskAssessment = supplied }]);
+
+        Assert.Equal(FindingConfidence.Unknown, stored.Confidence);
+        var retained = Assert.Single(await this._store.GetFindingsForPullRequestAsync(key)).RiskAssessment!;
+        Assert.Equal(risk, retained);
+        Assert.Equal(FindingRiskSeverity.Medium, retained.Severity);
+        Assert.Equal(FindingRiskSeverity.Medium, stored.RiskSeverity);
+    }
+
+    [Theory]
+    [InlineData("finding-risk-v1")]
+    [InlineData("finding-risk-v2")]
+    public async Task ReplayAddsConfidenceWhenBothAssessmentsUseTheSameSupportedRubric(string version)
+    {
+        var key = NewKey();
+        var risk = new FindingRiskAssessment(FindingImpact.High, FindingLikelihood.Unlikely, "A record is lost.", "Rare input.", "review_model", version);
+        var snapshot = NewFindings()[0] with { RiskAssessment = risk };
+        await this._store.MaterialiseFindingsAsync(key, JobId, "revision", DateTimeOffset.UtcNow, [snapshot]);
+        var supplied = new FindingRiskAssessment(
+            risk.Impact, risk.Likelihood, risk.ImpactReason, risk.LikelihoodReason, "review_model", version,
+            FindingConfidence.Certain, "The complete path proves the claim.", "evidence_verification");
+
+        await this._store.MaterialiseFindingsAsync(key, JobId, "revision", DateTimeOffset.UtcNow, [snapshot with { RiskAssessment = supplied }]);
+
+        var retained = Assert.Single(await this._store.GetFindingsForPullRequestAsync(key)).RiskAssessment!;
+        Assert.Equal(FindingConfidence.Certain, retained.Confidence);
+        Assert.Equal(version, retained.RubricVersion);
+        Assert.Equal(FindingRiskSeverity.Medium, retained.Severity);
+    }
+
+    [Theory]
     [InlineData(false, true)]
     [InlineData(false, false)]
     [InlineData(true, true)]

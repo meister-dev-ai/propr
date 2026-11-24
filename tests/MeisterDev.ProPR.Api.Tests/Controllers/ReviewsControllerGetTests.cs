@@ -56,6 +56,30 @@ public sealed class ReviewsControllerGetTests(ReviewsControllerGetTests.GetRevie
         Assert.True(resultEl.TryGetProperty("summary", out _));
     }
 
+    // The status endpoints return the same fields of a comment as the job result, so a consumer that reads the status
+    // sees the type of a finding and the other places of a root-cause group.
+    [Fact]
+    public async Task GetReview_CompletedJobWithAGroupComment_ReturnsTheClassificationAndTheRootCauseGroup()
+    {
+        await factory.ClearJobsAsync();
+        var client = factory.CreateClient();
+        var jobId = await factory.InsertCompletedJobWithAGroupCommentAsync();
+
+        using var request = CreateGetRequest(jobId, factory.GenerateUserToken(factory.ClientUserUserId));
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var comment = Assert.Single(body.RootElement.GetProperty("result").GetProperty("comments").EnumerateArray());
+        Assert.Equal(
+            [FindingTypeTaxonomy.LogicError],
+            comment.GetProperty("findingClassification").GetProperty("coreSlugs").EnumerateArray().Select(slug => slug.GetString()));
+        var location = Assert.Single(comment.GetProperty("relatedLocations").EnumerateArray());
+        Assert.Equal("src/Caller.cs", location.GetProperty("filePath").GetString());
+        Assert.Equal(40, location.GetProperty("lineNumber").GetInt32());
+        Assert.Equal(2, comment.GetProperty("rootCauseGroupSize").GetInt32());
+    }
+
     [Fact]
     public async Task GetReview_FailedJob_Returns200WithError()
     {
@@ -165,6 +189,36 @@ public sealed class ReviewsControllerGetTests(ReviewsControllerGetTests.GetRevie
                 1);
             await repository.AddAsync(job);
             await repository.SetResultAsync(job.Id, new ReviewResult("AI completed", Array.Empty<ReviewComment>()));
+            return job.Id;
+        }
+
+        public async Task<Guid> InsertCompletedJobWithAGroupCommentAsync()
+        {
+            using var scope = this.Services.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+            var job = new ReviewJob(
+                Guid.NewGuid(),
+                this.ClientId,
+                "https://dev.azure.com/org",
+                "proj",
+                "repo",
+                250,
+                1);
+            await repository.AddAsync(job);
+            var comment = new ReviewComment("src/Helper.cs", 12, CommentSeverity.Error, "The helper drops the last element.")
+            {
+                FindingClassification = new FindingTypeClassification(
+                    [FindingTypeTaxonomy.LogicError],
+                    [],
+                    CodeInsightFindingLevel.Member,
+                    CodeInsightFindingQualifier.Incorrect,
+                    0.75,
+                    FindingTypeTaxonomy.Version,
+                    FindingTypeClassification.ReviewSource),
+                RelatedLocations = [new ReviewCommentLocation("src/Caller.cs", 40)],
+                RootCauseGroupSize = 2,
+            };
+            await repository.SetResultAsync(job.Id, new ReviewResult("AI completed", [comment]));
             return job.Id;
         }
 

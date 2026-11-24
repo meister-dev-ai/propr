@@ -373,7 +373,7 @@ function formatShare(part: number, whole: number): string {
 }
 
 .blind {
-  color: #f59e0b;
+  color: var(--color-warning);
   font-weight: 700;
 }
 
@@ -391,7 +391,7 @@ function formatShare(part: number, whole: number): string {
 .import-form {
   margin-top: 1.25rem;
   padding-top: 1rem;
-  border-top: 1px solid var(--color-border, #d0d7de);
+  border-top: 1px solid var(--color-border);
 }
 
 .import-title {
@@ -402,7 +402,7 @@ function formatShare(part: number, whole: number): string {
 .import-hint {
   margin: 0 0 0.75rem;
   max-width: 62ch;
-  color: var(--color-text-muted, #57606a);
+  color: var(--color-text-muted);
   font-size: 0.85rem;
 }
 
@@ -443,11 +443,11 @@ function formatShare(part: number, whole: number): string {
 }
 
 .import-error {
-  color: var(--color-danger, #b42318);
+  color: var(--color-danger);
 }
 
 .import-result {
-  color: var(--color-text-muted, #57606a);
+  color: var(--color-text-muted);
 }
 
 </style>

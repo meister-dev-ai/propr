@@ -241,13 +241,27 @@ public sealed class DbClientRegistry(
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<string>> GetWithheldFindingTypesAsync(Guid clientId, CancellationToken ct = default)
+    public async Task<IReadOnlyDictionary<string, FindingPostDestination>> GetFindingTypeDestinationsAsync(
+        Guid clientId,
+        CancellationToken ct = default)
     {
         return await dbContext.Clients
                    .Where(c => c.Id == clientId)
-                   .Select(c => c.WithheldFindingTypes)
+                   .Select(c => c.FindingTypeDestinations)
                    .FirstOrDefaultAsync(ct)
-               ?? [];
+               ?? FindingPostDestinationMap.Default;
+    }
+
+    /// <inheritdoc />
+    public async Task<int?> GetMaximumFindingsToPostAsync(Guid clientId, CancellationToken ct = default)
+    {
+        // The limit is read inside a row, because a null limit is the setting "no limit" and has to stay apart from a
+        // client that does not exist.
+        var client = await dbContext.Clients
+            .Where(c => c.Id == clientId)
+            .Select(c => new { c.MaximumFindingsToPost })
+            .FirstOrDefaultAsync(ct);
+        return client is null ? FindingPostLimit.Default : client.MaximumFindingsToPost;
     }
 
     /// <inheritdoc />

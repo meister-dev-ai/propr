@@ -250,6 +250,19 @@ internal static partial class ReviewPrompts
     }
 
     /// <summary>
+    ///     System prompt of the call that groups the findings of a pull request by root cause. A prompt experiment can
+    ///     replace or extend it under its stage key.
+    /// </summary>
+    internal static string BuildFindingRootCauseGroupingSystemPrompt(ReviewSystemContext? context)
+    {
+        return ComposePrompt(
+            context,
+            PromptStageKeys.FindingRootCauseGroupingSystem,
+            PromptStageRole.System,
+            PromptTemplateRuntime.RenderStage(PromptStageKeys.FindingRootCauseGroupingSystem));
+    }
+
+    /// <summary>
     ///     System prompt for the memory-augmented reconsideration step.
     ///     Instructs the AI to review draft findings in light of historical resolved threads.
     /// </summary>

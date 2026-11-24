@@ -72,6 +72,8 @@ public static class AiReviewOptionsBinder
             TryGetBool(configuration, "AI_ENABLE_RETAINED_TOOL_EVIDENCE") ?? opts.EnableRetainedToolEvidence;
         opts.EnableAcceptanceForecast =
             TryGetBool(configuration, "AI_ACCEPTANCE_FORECAST") ?? opts.EnableAcceptanceForecast;
+        opts.EnableRootCauseGrouping =
+            TryGetBool(configuration, "AI_ROOT_CAUSE_GROUPING") ?? opts.EnableRootCauseGrouping;
 
         // Reasoning capture into recorded assistant-turn output (on by default; data-retention gate). A tenant
         // can override this per job; see the reasoning-capture policy on the tenant.

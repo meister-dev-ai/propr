@@ -616,7 +616,11 @@ function buildMockClient(id: string, displayName = `Mocked Client ${id}`, overri
     reviewEveryIncrementEnabled: false,
     withholdOutOfScopeFindings: false,
     minimumRiskSeverityToPost: 'low',
+    // The default of every client: requests for missing tests and documentation are listed in the summary.
+    findingTypeDestinations: { 'documentation-tests:missing': 'summary' },
     withheldFindingTypes: [],
+    // The default limit of every client. A patch with null removes it.
+    maximumFindingsToPost: 20,
     outputLanguage: 'en',
     baselineReasoningLevel: null,
     // Client "3" (Umbrella) is intentionally uncapped to exercise the no-budget state; others carry caps.
@@ -3433,6 +3437,14 @@ export const handlers = [
     if (body.baselineReasoningLevel === '') {
       body.baselineReasoningLevel = null
     }
+    // The API reports the types whose key alone has the destination reviewOnly as the earlier list of types that are
+    // not posted, so the mock derives that list from a saved map.
+    if (body.findingTypeDestinations) {
+      body.withheldFindingTypes = Object.entries(body.findingTypeDestinations as Record<string, string>)
+        .filter(([key, destination]) => !key.includes(':') && destination === 'reviewOnly')
+        .map(([key]) => key)
+        .sort()
+    }
     patchedClientFields[id] = { ...(patchedClientFields[id] ?? {}), ...body }
     return HttpResponse.json(buildMockClient(id, body.displayName ?? `Mocked Client ${id}`, body))
   }),
@@ -4862,7 +4874,8 @@ export const handlers = [
         result: {
           summary: "Partial summary: The review is ongoing...",
           comments: []
-        }
+        },
+        withheldFindings: [],
       })
     }
 
@@ -4879,7 +4892,8 @@ export const handlers = [
             { filePath: 'src/composables/useAuth.ts', lineNumber: 18, severity: 'warning', message: 'No token refresh logic — sessions will expire silently.' },
             { filePath: 'backend/api/controllers/AuthController.cs', lineNumber: 87, severity: 'suggestion', message: 'Consider adding rate limiting to the login endpoint.' },
           ]
-        }
+        },
+        withheldFindings: [],
       })
     }
 
@@ -4914,7 +4928,19 @@ export const handlers = [
             message: "Using `Microsoft.App/managedEnvironments@2025-10-02-preview` introduces preview API risk (breaking changes/region support drift). For production IaC, prefer the latest stable API version unless a required feature is preview-only."
           }
         ]
-      }
+      },
+      // Findings that verification held back, each with the reason code of the step that held it back.
+      withheldFindings: [
+        {
+          reasonCode: 'not_confirmed',
+          comment: {
+            filePath: "/.azure/modules/network.bicep",
+            lineNumber: 22,
+            severity: "warning",
+            message: "The subnet delegation may conflict with an existing delegation in the same virtual network."
+          }
+        }
+      ],
     })
   }),
 

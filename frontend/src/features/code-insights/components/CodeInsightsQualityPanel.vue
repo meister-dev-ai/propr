@@ -248,7 +248,7 @@ const recallSubCopy = computed(() => {
   gap: 0.4rem;
   margin: 0;
   padding: 0.35rem 0.7rem;
-  border-radius: var(--radius-pill, 999px);
+  border-radius: var(--radius-pill);
   font-size: 0.8rem;
   font-weight: 700;
   background: rgba(148, 163, 184, 0.16);
@@ -321,7 +321,7 @@ const recallSubCopy = computed(() => {
 }
 
 .insufficient-note i {
-  color: #f59e0b;
+  color: var(--color-warning);
   margin-top: 0.1rem;
 }
 

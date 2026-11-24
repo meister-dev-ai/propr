@@ -17,6 +17,9 @@ public static class FileByFileReviewStepIds
     /// <summary>Local verification step identifier.</summary>
     public const string LocalVerification = "local_verification";
 
+    /// <summary>Identifier of the step that groups the findings of a pull request by root cause.</summary>
+    public const string RootCauseGrouping = "root_cause_grouping";
+
     /// <summary>Quality filter step identifier.</summary>
     public const string QualityFilter = "quality_filter";
 

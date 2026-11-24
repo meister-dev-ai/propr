@@ -68,7 +68,9 @@ public sealed class ClientsController(
             client.AdmissionPolicyOrEmpty,
             client.FindingBadgeStyle,
             client.MinimumRiskSeverityToPost,
-            client.WithheldFindingTypesOrEmpty);
+            client.WithheldFindingTypesOrEmpty,
+            client.FindingTypeDestinationsOrDefault,
+            client.MaximumFindingsToPost);
     }
 
     private IActionResult? ValidateRequest(ValidationResult result)
@@ -467,7 +469,10 @@ public sealed class ClientsController(
             ct,
             request.FindingBadgeStyle,
             request.MinimumRiskSeverityToPost,
-            request.WithheldFindingTypes);
+            request.WithheldFindingTypes,
+            request.FindingTypeDestinations,
+            request.MaximumFindingsToPost,
+            request.ShouldUpdateMaximumFindingsToPost);
         return client is null ? this.NotFound() : this.Ok(ToClientResponse(client));
     }
 }
@@ -484,6 +489,15 @@ public sealed record ClientDeletionWaitResponse(
     IReadOnlyDictionary<string, int> Running);
 
 /// <summary>Client response — key, ADO secret, and credential metadata are never included.</summary>
+/// <remarks>
+///     <see cref="FindingTypeDestinations" /> maps a finding type key to its destination on the pull request:
+///     <c>comment</c>, <c>summary</c> or <c>reviewOnly</c>. A key is a core finding type, for example <c>security</c>,
+///     or a core finding type with a qualifier, for example <c>documentation-tests:missing</c>, and a type without an
+///     entry is posted as a comment. <see cref="WithheldFindingTypes" /> lists the core finding types whose key alone has
+///     the destination <c>reviewOnly</c>, for API consumers that read the setting in that form.
+///     <see cref="MaximumFindingsToPost" /> is the largest number of findings posted as comments on one pull request, or
+///     null when the client has no limit.
+/// </remarks>
 public sealed record ClientResponse(
     Guid Id,
     string DisplayName,
@@ -512,7 +526,9 @@ public sealed record ClientResponse(
     ReviewAdmissionPolicyDto? AdmissionPolicy = null,
     FindingBadgeStyle FindingBadgeStyle = FindingBadgeStyle.ShieldsIo,
     FindingRiskSeverity MinimumRiskSeverityToPost = FindingRiskSeverity.Low,
-    IReadOnlyList<string>? WithheldFindingTypes = null);
+    IReadOnlyList<string>? WithheldFindingTypes = null,
+    IReadOnlyDictionary<string, FindingPostDestination>? FindingTypeDestinations = null,
+    int? MaximumFindingsToPost = null);
 
 /// <summary>One entry in a client's ordered review-pass list: an additional multi-pass union pass bound to a model.</summary>
 /// <param name="Ordinal">Zero-based position of this pass after the implicit tier baseline pass.</param>
@@ -577,8 +593,18 @@ public sealed record CreateClientRequest(string DisplayName, [property: JsonRequ
 ///     Set <see cref="CustomSystemMessage" /> to <c>""</c> (empty string) to clear an existing value.
 ///     Set <see cref="AutoResolveSeverities" /> to an empty array to clear the auto-resolve set.
 ///     <see cref="MinimumRiskSeverityToPost" /> is low, medium, high or critical; low posts every finding.
-///     <see cref="WithheldFindingTypes" /> lists the core finding types that are not posted; an empty array posts
-///     every type.
+///     <see cref="FindingTypeDestinations" /> replaces the destination per finding type. A key is a core finding type,
+///     for example <c>security</c>, or a core finding type with a qualifier (<c>missing</c>, <c>incorrect</c> or
+///     <c>extraneous</c>), for example <c>documentation-tests:missing</c>. A destination is <c>comment</c>,
+///     <c>summary</c> or <c>reviewOnly</c>. For a finding, the key with its qualifier is looked up before the key of
+///     its type, a type without an entry is posted as a comment, and a finding with several types takes the most
+///     visible destination. An empty object posts every finding as a comment.
+///     <see cref="WithheldFindingTypes" /> lists the core finding types that are neither posted nor listed: each listed
+///     type gets the destination <c>reviewOnly</c>, and every other type that had it is posted as a comment again. A
+///     listed type that did not have <c>reviewOnly</c> before loses its keys with a qualifier, and a listed type that had
+///     it keeps them, so writing back the list read from the client changes nothing.
+///     A request sets one of the two fields, not both.
+///     <see cref="MaximumFindingsToPost" /> is at least 1; an explicit null removes the limit.
 ///     <see cref="OutputLanguage" /> is an IETF BCP 47 language tag; a blank value resets it to the default.
 ///     <see cref="EnableEvidenceBackedVerification" /> and <see cref="EnableLanguageRobustScreening" /> are removed settings:
 ///     a request that sets either of them is refused with 400 Bad Request, which states why the setting was removed.
@@ -605,4 +631,28 @@ public sealed record PatchClientRequest(
     bool? EnableLanguageRobustScreening = null,
     FindingBadgeStyle? FindingBadgeStyle = null,
     FindingRiskSeverity? MinimumRiskSeverityToPost = null,
-    IReadOnlyList<string>? WithheldFindingTypes = null);
+    IReadOnlyList<string>? WithheldFindingTypes = null,
+    IReadOnlyDictionary<string, FindingPostDestination>? FindingTypeDestinations = null)
+{
+    private readonly int? _maximumFindingsToPost;
+
+    /// <summary>
+    ///     The largest number of findings posted as comments on one pull request. When more findings remain after the
+    ///     other publication settings, the highest ranked ones are posted and the others stay in the ProPR review.
+    ///     Findings listed in the review summary do not count towards the limit. Set this property explicitly to
+    ///     <see langword="null" /> to remove the limit, and omit it to leave the limit unchanged.
+    /// </summary>
+    public int? MaximumFindingsToPost
+    {
+        get => this._maximumFindingsToPost;
+        init
+        {
+            this._maximumFindingsToPost = value;
+            this.ShouldUpdateMaximumFindingsToPost = true;
+        }
+    }
+
+    /// <summary>Whether the request replaces the limit, including removing it with null.</summary>
+    [JsonIgnore]
+    public bool ShouldUpdateMaximumFindingsToPost { get; private set; }
+}

@@ -427,7 +427,11 @@ public sealed partial class ReviewJobsController(
                             comment.FilePath,
                             comment.LineNumber,
                             comment.Severity,
-                            comment.Message, RiskAssessment: comment.RiskAssessment))
+                            comment.Message,
+                            RiskAssessment: comment.RiskAssessment,
+                            FindingClassification: comment.FindingClassification,
+                            RelatedLocations: comment.RelatedLocations,
+                            RootCauseGroupSize: comment.RootCauseGroupSize))
                         .ToArray()),
             status.Error)
         {

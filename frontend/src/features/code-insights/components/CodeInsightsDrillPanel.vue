@@ -120,7 +120,7 @@ const emit = defineEmits<{ close: [] }>()
 
 .finding-severity {
   padding: 0.12rem 0.45rem;
-  border-radius: var(--radius-pill, 999px);
+  border-radius: var(--radius-pill);
   font-weight: 700;
   font-size: 0.7rem;
   text-transform: uppercase;
@@ -135,7 +135,7 @@ const emit = defineEmits<{ close: [] }>()
 
 .severity-warning {
   background: rgba(245, 158, 11, 0.16);
-  color: #f59e0b;
+  color: var(--color-warning);
 }
 
 .finding-location {
@@ -151,7 +151,7 @@ const emit = defineEmits<{ close: [] }>()
 .finding-outcome {
   margin-left: auto;
   padding: 0.12rem 0.5rem;
-  border-radius: var(--radius-pill, 999px);
+  border-radius: var(--radius-pill);
   background: rgba(34, 211, 238, 0.12);
   color: var(--color-accent);
   font-size: 0.72rem;
@@ -225,7 +225,7 @@ const emit = defineEmits<{ close: [] }>()
 .finding-tag {
   padding: 0.12rem 0.5rem;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill, 999px);
+  border-radius: var(--radius-pill);
   font-size: 0.72rem;
   color: var(--color-text-muted);
 }

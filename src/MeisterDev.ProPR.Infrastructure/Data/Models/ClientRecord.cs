@@ -136,12 +136,20 @@ public sealed class ClientRecord
     public FindingRiskSeverity MinimumRiskSeverityToPost { get; set; } = FindingRiskSeverity.Low;
 
     /// <summary>
-    ///     Core finding types whose findings are not published to the SCM provider. A finding is held back when every
-    ///     core type it carries is in this list, and a finding without a core type is published. Empty by default, so
-    ///     every type is published, including a type the taxonomy adds later. The findings stay in the persisted
-    ///     review result either way.
+    ///     Destination per finding type on the pull request, keyed by core type slug or by core type slug with a
+    ///     qualifier, for example <c>documentation-tests:missing</c>. A finding is posted as a comment, listed in the
+    ///     review summary, or kept in the ProPR review only. A type without an entry is posted as a comment, which
+    ///     includes a type the taxonomy adds later. A new client starts with
+    ///     <see cref="FindingPostDestinationMap.Default" />. The findings stay in the persisted review result either way.
     /// </summary>
-    public IReadOnlyList<string> WithheldFindingTypes { get; set; } = [];
+    public IReadOnlyDictionary<string, FindingPostDestination> FindingTypeDestinations { get; set; } = FindingPostDestinationMap.Default;
+
+    /// <summary>
+    ///     Largest number of findings posted as comments on one pull request, or <see langword="null" /> for no limit.
+    ///     When more findings remain for comments, the highest ranked ones are posted and the others stay in the
+    ///     persisted review result. A new client starts with <see cref="FindingPostLimit.Default" />.
+    /// </summary>
+    public int? MaximumFindingsToPost { get; set; } = FindingPostLimit.Default;
 
     /// <summary>
     ///     Tags a runner must declare before this client's reviews may be offered to it, comma-separated.

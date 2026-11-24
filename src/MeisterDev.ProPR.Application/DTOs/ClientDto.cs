@@ -37,10 +37,23 @@ public sealed record ClientDto(
     ReviewAdmissionPolicyDto? AdmissionPolicy = null,
     FindingBadgeStyle FindingBadgeStyle = FindingBadgeStyle.ShieldsIo,
     FindingRiskSeverity MinimumRiskSeverityToPost = FindingRiskSeverity.Low,
-    IReadOnlyList<string>? WithheldFindingTypes = null)
+    IReadOnlyDictionary<string, FindingPostDestination>? FindingTypeDestinations = null,
+    int? MaximumFindingsToPost = FindingPostLimit.Default)
 {
-    /// <summary>The core finding types that are not posted, or an empty list when every type is posted.</summary>
-    public IReadOnlyList<string> WithheldFindingTypesOrEmpty => this.WithheldFindingTypes ?? [];
+    /// <summary>
+    ///     The destination per finding type, keyed by core type slug or by core type slug with a qualifier. A client
+    ///     without a stored map has the default map, which lists requests for missing tests and documentation in the
+    ///     review summary and posts every other finding as a comment.
+    /// </summary>
+    public IReadOnlyDictionary<string, FindingPostDestination> FindingTypeDestinationsOrDefault =>
+        this.FindingTypeDestinations ?? FindingPostDestinationMap.Default;
+
+    /// <summary>
+    ///     The core finding types whose findings are neither posted nor listed, which is every type whose key alone has
+    ///     the destination <see cref="FindingPostDestination.ReviewOnly" />. Empty when no type has it.
+    /// </summary>
+    public IReadOnlyList<string> WithheldFindingTypesOrEmpty =>
+        FindingPostDestinationMap.ReviewOnlyTypes(this.FindingTypeDestinationsOrDefault);
 
     /// <summary>The ordered review-pass list, or an empty list when none are configured.</summary>
     public IReadOnlyList<ReviewPassDto> ReviewPassesOrEmpty => this.ReviewPasses ?? [];

@@ -57,16 +57,21 @@ Each assessed finding carries three independent judgments and their reasons:
 
 | Dimension | Values and meaning |
 |---|---|
-| Impact | Low: local inconvenience or maintenance cost. Moderate: bounded disruption. High: substantial service, security, data or maintenance harm. Critical: catastrophic service, security or data harm. |
-| Likelihood | Unlikely: exceptional conditions. Possible: plausible conditions. Likely: routine conditions. The reason identifies the trigger or exposure. |
+| Impact | Low: limited local inconvenience, or a maintenance cost without wrong behaviour of the current code. Moderate: bounded user or operational disruption. High: substantial service, security or data harm. Critical: catastrophic service, security or data harm. |
+| Likelihood | Likely: ordinary use of the changed feature with its default configuration reaches the scenario. Possible: a supported input, configuration or sequence of steps that is not the default reaches it. Unlikely: the scenario needs a fault of another system (a network, an external provider or a database), a malformed or hand-built request that the clients of the reviewed product do not send, or a timing coincidence between concurrent operations. The reason contains the trigger. |
 | Confidence | Low: limited evidence with substantial assumptions. Medium: supporting evidence with relevant assumptions. High: strong evidence with minor uncertainty. Certain: direct deterministic evidence without relevant unresolved assumptions. The reason identifies evidence and remaining assumptions. |
 
-Likelihood describes the occurrence scenario. Finding confidence describes the strength of evidence that the finding is
-correct. It is independent of the numeric investigation, verification and classification confidence values. A confirmed Error can have Low risk when its consequence and exposure are limited. Maintenance
-findings use a concrete editing or operational scenario. Unknown means evidence is insufficient;
-Not applicable means there is no meaningful occurrence scenario.
+ProPR asks the reviewing model to rate likelihood from the trigger that the code shows, without assumptions about
+environment, traffic, deployment or usage. A finding that reports no wrong behaviour of the current code, such as a
+missing test, missing documentation, naming or a structural preference, has Low impact and the likelihood Possible, so
+its risk is Low. The harm of a regression that a later change might introduce does not count towards impact. A confirmed Error can have Low risk when its consequence and
+exposure are limited.
 
-The `finding-risk-v1` rubric derives risk severity from impact and likelihood:
+Likelihood describes the occurrence scenario. Unknown means evidence is insufficient; Not applicable means there is no
+meaningful occurrence scenario. Finding confidence describes the strength of evidence that the finding is correct. It
+is independent of the numeric investigation, verification and classification confidence values.
+
+The `finding-risk-v2` rubric derives risk severity from impact and likelihood:
 
 | Impact | Unlikely | Possible | Likely |
 |---|---|---|---|
@@ -75,9 +80,18 @@ The `finding-risk-v1` rubric derives risk severity from impact and likelihood:
 | High | Medium | High | High |
 | Critical | High | High | Critical |
 
+Findings rated under the earlier `finding-risk-v1` rubric keep their risk severity and their confidence. ProPR derives
+their risk severity from the same matrix. The earlier rubric rated likelihood by how routine the conditions of the
+scenario were and counted substantial maintenance harm as High impact. Risk filters and reviewer performance views
+count the findings of both versions together.
+
 Missing dimensions, reasons or provenance, unsupported rubric versions and Not applicable likelihood
 produce Unassessed risk. Known dimensions remain visible. Historical findings and output from custom
 prompts that omit assessments remain Unassessed; ProPR does not infer their risk from classification.
+ProPR records `finding-risk-v2` on every assessment that a review produces, including assessments produced under a
+[prompt override](#customising-the-review-prompt). If an override contains a copy of the earlier rubric text, the
+reviewing model rates findings by the earlier definitions, and ProPR still records their assessments as
+`finding-risk-v2`.
 
 ProPR resolves fresh correctness confidence from independent verification evidence. The generating model's assessment
 is provisional: verification can confirm or lower its confidence, not raise it. The verifier provides a reachable input
@@ -244,6 +258,17 @@ collection includes it in withheld counts without assigning publication or preci
 After verification, ProPR merges findings that describe the same defect at nearly the same line. The job
 protocol records each merge in a `finding_deduplication` event with the kept finding and the removed ones.
 
+ProPR then posts one comment for a cause that the file reviews found in several places, for example a faulty helper
+and each of its callers. The same mistake made independently in several places, such as a setting missing from three
+deployment files, keeps one comment per place, because each place needs its own edit. One call on the model of the
+Verification purpose groups the findings of the pull request by root cause. The comment of a group sits at the line where the cause is and keeps the suggested fix of the finding there.
+Below its message, the comment lists the other places under `Also reported at:` with the first sentence of each finding.
+The comment carries the highest classification of the group and the risk of its riskiest finding. It counts as
+outside the changed lines only when all places of the group lie outside them. If the call fails or
+its answer does not pass the checks, ProPR posts every finding as its own comment. The `finding_deduplication` event
+records each group with the reason `root_cause`. The installation setting `AI_ROOT_CAUSE_GROUPING` turns the grouping
+off.
+
 On a runner, the judge runs on the default model the job manifest names, because a runner has no low-effort
 binding, and its tokens are reported against the default model.
 
@@ -276,11 +301,22 @@ lists it when the pass that produced the finding wrote a summary line for it.
 | Summary-only | Anything whose verification was degraded or inconclusive |
 | Published | Everything else |
 
-Five per-client filters run after the gate, all of them in [what you can tune](#what-you-can-tune): the
-**minimum classification to post**, the **minimum risk to post**, the **finding types to post**, whether
-findings outside the changed lines are posted, and whether outbound SCM commenting is enabled at all. A finding
-the first four hold back stays in the ProPR review, and the published summary reports how many were held back
-and why. ProPR counts a finding that several filters hold back once, under the first of them in this order. The summary links to the review once
+Six per-client filters run after the gate, all of them in [what you can tune](#what-you-can-tune): the
+**minimum classification to post**, the **minimum risk to post**, the **destination of finding types**, whether
+findings outside the changed lines are posted, the **maximum findings to post**, and whether outbound SCM commenting
+is enabled at all. A finding the first five hold back stays in the ProPR review, and the published summary reports
+how many were held back and why. ProPR counts a finding that several filters hold back once, under the first of them
+in this order.
+A finding whose types have the destination summary is not posted as a comment. The published summary lists it
+under "Findings listed here and not posted as comments" with its file and line, the name of its type and the
+first sentence of its message. For a comment of a root-cause group, the line also names up to three other places of
+the group and the number of the remaining ones. The list holds at most 15 findings and gives the number of the
+remaining ones. A finding that another filter holds back is not listed.
+After the filters, ProPR does not post a cross-file finding of the synthesis step when every finding it rests on is
+posted as a comment or listed in the summary, because those comments already state it. Its place under the maximum
+findings to post goes to the next finding. The ProPR review keeps the cross-file finding with the reason
+`restates_published_findings`, and the published summary does not count it as held back. If a filter holds back one
+of the findings it rests on, ProPR posts the cross-file finding like any other finding. The summary links to the review once
 `MEISTER_PUBLIC_BASE_URL` gives the installation its address - see
 [public URL and browser origins](../operate/configuration.md#public-url-and-browser-origins).
 
@@ -318,7 +354,8 @@ Everything below is set in the management UI. Unless noted, the scope is one cli
 | Maximum review duration | Per tenant | How long one review of the tenant runs before it ends with the files it has reviewed. A platform administrator sets it - see [tenant review limits](#tenant-review-limits) |
 | Minimum classification to post | Per client | Findings below it stay out of the pull request but remain visible in the ProPR review, and the published summary reports how many were held back. Order, high to low: error, warning, suggestion, info |
 | Minimum risk to post | Per client | Findings whose assessed risk is below it stay out of the pull request but remain visible in the ProPR review. Order, high to low: critical, high, medium, low. A finding without a complete risk assessment is posted. Low by default, which posts every finding |
-| Finding types to post | Per client | Findings whose types are all cleared stay out of the pull request but remain visible in the ProPR review. A finding with several types is posted when one of its types is selected, and a finding without a type is posted. Every type is selected by default |
+| Destination of finding types | Per client | For each finding type, findings are posted as comments, listed in the review summary, or kept in the ProPR review. A finding with several types takes the most visible destination. Requests for missing tests and documentation are listed in the summary by default; every other type is posted as a comment |
+| Maximum findings to post | Per client | The largest number of findings posted as comments on one pull request. When more findings remain after the other settings, ProPR posts the highest ranked ones and keeps the others in the ProPR review, and the published summary reports how many were held back. The rank compares the classification, then the likelihood, then the number of places that one comment stands for, and then the risk. A finding without a risk assessment ranks with the likelihood Possible and the risk Medium. Findings listed in the summary do not count. 20 by default; an empty value posts every finding |
 | Auto-resolve severities | Per client | Comments of the chosen severities are posted and then immediately resolved with a note. Azure DevOps, GitHub and GitLab; on Forgejo the setting is a no-op |
 | Do not post findings outside the changed lines | Per client | Keeps findings in pre-existing code away from the diff out of the pull request. They stay visible in the ProPR review. Off by default - see [findings outside your changes](#findings-outside-your-changes) |
 | Resolving comment threads | Per client | What ProPR does with its own threads once a finding is acted on: resolve quietly (default), resolve with an explanation, or leave them alone. On the first two a question you ask is answered; leaving them alone switches the pass off, so nothing is answered - see [how a review gets triggered](how-it-works.md#how-a-review-gets-triggered) |
@@ -540,7 +577,7 @@ override replaces one named segment in full. The model sees what you enter in pl
 One override per client per key. Saving a second for the same key is refused. Delete an override to
 return that segment to the built-in text.
 
-An override has two consequences:
+An override has three consequences:
 
 - Overriding `SystemPrompt` replaces the whole assembled brief, so the repository instruction files, the
   dismissed-finding patterns and the client's own system message are no longer injected into it. If you
@@ -548,6 +585,9 @@ An override has two consequences:
 - Every key except `SynthesisSystemPrompt` and `MemoryReconsiderationSystemPrompt` carries the client's
   review-aggressiveness setting. An override is fixed text, so aggressiveness stops affecting the stage
   you overrode.
+- An override keeps the text it was saved with. When a ProPR release changes the built-in text of a segment,
+  for example the definitions of the [finding risk rubric](#finding-risk), the segment you overrode keeps
+  your text.
 
 A poor override degrades every review the client runs. For team conventions - "we do not use exceptions
 for control flow", "be strict about migrations" - use

@@ -147,6 +147,27 @@ public sealed record ReviewWorkspaceStatusDto(
 public sealed record ReviewResultDto(string Summary, ReviewCommentDto[] Comments);
 
 /// <summary>DTO for a single review comment.</summary>
+/// <param name="FilePath">The repository-relative path of the file, or <see langword="null" /> for the pull request.</param>
+/// <param name="LineNumber">The line within the file, or <see langword="null" /> when the comment names no line.</param>
+/// <param name="Severity">The classification of the finding: error, warning, suggestion or info.</param>
+/// <param name="Message">The comment text.</param>
+/// <param name="OriginPassKind">The kind of review pass that produced the finding, when recorded.</param>
+/// <param name="ChangedLineRelation">Where the line of the comment lies relative to the changed lines, when classified.</param>
+/// <param name="OriginPassIndex">The 1-based index of the numbered review pass that produced the finding, when recorded.</param>
+/// <param name="OriginPassLens">The specialist lens of the review pass that produced the finding, when it had one.</param>
+/// <param name="RiskAssessment">The assessed impact, likelihood and confidence, or <see langword="null" /> when unassessed.</param>
+/// <param name="FindingClassification">
+///     The finding types and analytics axes that the producing review assigned: core types, custom tags, level,
+///     qualifier and confidence. <see langword="null" /> for a finding without a classification.
+/// </param>
+/// <param name="RelatedLocations">
+///     The other places where the review reported the same root cause, when this comment stands for a group of
+///     findings. <see langword="null" /> for a comment that stands for one finding.
+/// </param>
+/// <param name="RootCauseGroupSize">
+///     The number of findings of the root-cause group this comment stands for, including the finding at its own
+///     location. <see langword="null" /> for a comment that stands for one finding.
+/// </param>
 public sealed record ReviewCommentDto(
     string? FilePath,
     int? LineNumber,
@@ -156,4 +177,15 @@ public sealed record ReviewCommentDto(
     ReviewCommentScopeRelation? ChangedLineRelation = null,
     int? OriginPassIndex = null,
     string? OriginPassLens = null,
-    FindingRiskAssessment? RiskAssessment = null);
+    FindingRiskAssessment? RiskAssessment = null,
+    FindingTypeClassification? FindingClassification = null,
+    IReadOnlyList<ReviewCommentLocation>? RelatedLocations = null,
+    int? RootCauseGroupSize = null);
+
+/// <summary>A finding that the review produced and held back from publication, with the reason it was held back.</summary>
+/// <param name="ReasonCode">
+///     The reason code of the step that held the finding back, for example <c>not_confirmed</c> from verification or
+///     <c>restates_published_findings</c> for a synthesized finding whose supporting findings are all published.
+/// </param>
+/// <param name="Comment">The held-back finding.</param>
+public sealed record WithheldReviewFindingDto(string ReasonCode, ReviewCommentDto Comment);

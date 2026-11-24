@@ -569,7 +569,7 @@ function formatDateShort(iso: string): string {
 
 .keyword-pill {
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-pill, 999px);
+    border-radius: var(--radius-pill);
     background: transparent;
     color: var(--color-text);
     cursor: pointer;
@@ -1041,35 +1041,35 @@ function formatDateShort(iso: string): string {
   display: inline-flex;
   align-items: center;
   padding: 0.2rem 0.5rem;
-  border-radius: var(--radius-pill, 999px);
+  border-radius: var(--radius-pill);
   font-size: 0.78rem;
   white-space: nowrap;
 }
 
 .outcome-rejected {
   background: var(--color-warning-soft, rgba(245, 158, 11, 0.15));
-  color: var(--color-warning, #f59e0b);
+  color: var(--color-warning);
 }
 
 .outcome-fixed {
   background: rgba(34, 197, 94, 0.15);
-  color: var(--color-success, #22c55e);
+  color: var(--color-success);
 }
 
 .outcome-dismissed {
   background: rgba(139, 92, 246, 0.15);
-  color: #a78bfa;
+  color: var(--color-outcome-dismissed);
 }
 
 .outcome-unknown {
   background: rgba(148, 163, 184, 0.15);
-  color: #94a3b8;
+  color: var(--color-text-muted);
 }
 
 .detail-note {
   margin: 0.35rem 0 0;
   font-size: 0.8rem;
   line-height: 1.4;
-  color: #94a3b8;
+  color: var(--color-text-muted);
 }
 </style>

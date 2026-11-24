@@ -78,6 +78,10 @@ public sealed record ReviewComment
             RiskAssessment = this.RiskAssessment, FindingClassification = this.FindingClassification,
             ProducedWithRepositoryTools = this.ProducedWithRepositoryTools,
             SuggestedFix = this.SuggestedFix,
+            RelatedLocations = this.RelatedLocations,
+            RootCauseGroupSize = this.RootCauseGroupSize,
+            FindingId = this.FindingId,
+            SupportingFindingIds = this.SupportingFindingIds,
         };
     }
 
@@ -205,4 +209,31 @@ public sealed record ReviewComment
     ///     structural analyzer classified it. <see langword="null" /> whenever the name is.
     /// </summary>
     public string? OriginSymbolKind { get; init; }
+
+    /// <summary>
+    ///     The other places where the review reported the same root cause, when this comment stands for a group of
+    ///     findings. The message lists the same places, so a reader of the pull request sees them as well.
+    ///     <see langword="null" /> for a comment that stands for one finding.
+    /// </summary>
+    public IReadOnlyList<ReviewCommentLocation>? RelatedLocations { get; init; }
+
+    /// <summary>
+    ///     The number of findings of the root-cause group this comment stands for, including the finding at its own
+    ///     location. <see langword="null" /> for a comment that stands for one finding.
+    /// </summary>
+    public int? RootCauseGroupSize { get; init; }
+
+    /// <summary>
+    ///     The identifier the review gave the finding that this comment publishes, when a synthesized cross-cutting
+    ///     concern of the same review rests on that finding. The publication policy compares it with
+    ///     <see cref="SupportingFindingIds" />. <see langword="null" /> for every other comment.
+    /// </summary>
+    public string? FindingId { get; init; }
+
+    /// <summary>
+    ///     The identifiers of the findings that a synthesized cross-cutting concern rests on. The publication policy
+    ///     does not post the concern when every one of these findings is posted as a comment or listed in the summary,
+    ///     because those comments already state the concern. <see langword="null" /> for every other comment.
+    /// </summary>
+    public IReadOnlyList<string>? SupportingFindingIds { get; init; }
 }

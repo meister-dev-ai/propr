@@ -439,34 +439,141 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
         autoResolveSeverities: [],
         withholdOutOfScopeFindings: true,
         minimumRiskSeverityToPost: 'low',
-        withheldFindingTypes: [],
+        findingTypeDestinations: { 'documentation-tests:missing': 'comment' },
       },
     })
   })
 
-  it('saves the minimum risk and the withheld finding types', async () => {
+  it('saves the minimum risk and the destination of finding types', async () => {
     mockPatch.mockResolvedValue({
-      data: { ...sampleClient, minimumRiskSeverityToPost: 'high', withheldFindingTypes: ['naming-clarity'] },
+      data: {
+        ...sampleClient,
+        minimumRiskSeverityToPost: 'high',
+        findingTypeDestinations: { 'documentation-tests:missing': 'comment', 'naming-clarity': 'reviewOnly' },
+      },
       response: { ok: true },
     })
     const vm = useClientDetailViewModel({ autoLoad: false })
     await vm.loadClient()
 
-    // A client saved before these settings existed carries neither field, and that reads as posting everything.
+    // A client read without these fields posts everything as a comment.
     expect(vm.editedMinimumRiskSeverityToPost.value).toBe('low')
-    expect(vm.editedWithheldFindingTypes.value).toEqual([])
+    expect(vm.editedFindingTypeDestinations.value['naming-clarity']).toBe('comment')
     expect(vm.isPostConfigButtonEnabled()).toBe(false)
 
     vm.editedMinimumRiskSeverityToPost.value = 'high'
-    vm.editedWithheldFindingTypes.value = ['naming-clarity']
+    vm.editedFindingTypeDestinations.value = { ...vm.editedFindingTypeDestinations.value, 'naming-clarity': 'reviewOnly' }
     expect(vm.isPostConfigButtonEnabled()).toBe(true)
 
     await vm.savePostConfiguration()
 
+    // A type row set to a comment has no entry, and the row with a qualifier is written so that it does not follow
+    // the row of its type.
     expect(mockPatch).toHaveBeenCalledWith('/clients/{clientId}', expect.objectContaining({
-      body: expect.objectContaining({ minimumRiskSeverityToPost: 'high', withheldFindingTypes: ['naming-clarity'] }),
+      body: expect.objectContaining({
+        minimumRiskSeverityToPost: 'high',
+        findingTypeDestinations: { 'documentation-tests:missing': 'comment', 'naming-clarity': 'reviewOnly' },
+      }),
     }))
     expect(vm.isPostConfigButtonEnabled()).toBe(false)
+  })
+
+  it('reads the default destinations and keeps keys that no row shows', async () => {
+    mockGet.mockReset()
+    mockGet
+      .mockResolvedValueOnce({
+        data: {
+          ...sampleClient,
+          findingTypeDestinations: { 'documentation-tests:missing': 'summary', 'security:missing': 'summary' },
+        },
+        response: { status: 200, ok: true },
+      })
+      .mockResolvedValueOnce({ data: sampleReviewProfiles, response: { status: 200, ok: true } })
+      .mockResolvedValueOnce({ data: sampleClientReviewProfile, response: { status: 200, ok: true } })
+    mockPatch.mockResolvedValue({ data: sampleClient, response: { ok: true } })
+    const vm = useClientDetailViewModel({ autoLoad: false })
+    await vm.loadClient()
+
+    expect(vm.editedFindingTypeDestinations.value['documentation-tests:missing']).toBe('summary')
+    expect(vm.editedFindingTypeDestinations.value['documentation-tests']).toBe('comment')
+    expect(vm.isPostConfigButtonEnabled()).toBe(false)
+
+    vm.editedFindingTypeDestinations.value = { ...vm.editedFindingTypeDestinations.value, 'documentation-tests': 'reviewOnly' }
+    await vm.savePostConfiguration()
+
+    expect(mockPatch).toHaveBeenCalledWith('/clients/{clientId}', expect.objectContaining({
+      body: expect.objectContaining({
+        findingTypeDestinations: {
+          'documentation-tests:missing': 'summary',
+          'documentation-tests': 'reviewOnly',
+          'security:missing': 'summary',
+        },
+      }),
+    }))
+  })
+
+  describe('maximum findings to post', () => {
+    async function loadClientWithLimit(maximumFindingsToPost: number | null) {
+      mockGet.mockReset()
+      mockGet
+        .mockResolvedValueOnce({ data: { ...sampleClient, maximumFindingsToPost }, response: { status: 200, ok: true } })
+        .mockResolvedValueOnce({ data: sampleReviewProfiles, response: { status: 200, ok: true } })
+        .mockResolvedValueOnce({ data: sampleClientReviewProfile, response: { status: 200, ok: true } })
+      const vm = useClientDetailViewModel({ autoLoad: false })
+      await vm.loadClient()
+      return vm
+    }
+
+    it('saves a changed limit', async () => {
+      mockPatch.mockResolvedValue({ data: { ...sampleClient, maximumFindingsToPost: 10 }, response: { ok: true } })
+      const vm = await loadClientWithLimit(20)
+
+      expect(vm.editedMaximumFindingsToPost.value).toBe('20')
+      expect(vm.isPostConfigButtonEnabled()).toBe(false)
+
+      vm.editedMaximumFindingsToPost.value = '10'
+      expect(vm.isPostConfigButtonEnabled()).toBe(true)
+      await vm.savePostConfiguration()
+
+      expect(mockPatch).toHaveBeenCalledWith('/clients/{clientId}', expect.objectContaining({
+        body: expect.objectContaining({ maximumFindingsToPost: 10 }),
+      }))
+      expect(vm.editedMaximumFindingsToPost.value).toBe('10')
+      expect(vm.isPostConfigButtonEnabled()).toBe(false)
+    })
+
+    it('removes the limit when the field is emptied', async () => {
+      mockPatch.mockResolvedValue({ data: { ...sampleClient, maximumFindingsToPost: null }, response: { ok: true } })
+      const vm = await loadClientWithLimit(20)
+
+      vm.editedMaximumFindingsToPost.value = ''
+      await vm.savePostConfiguration()
+
+      expect(mockPatch).toHaveBeenCalledWith('/clients/{clientId}', expect.objectContaining({
+        body: expect.objectContaining({ maximumFindingsToPost: null }),
+      }))
+      expect(vm.editedMaximumFindingsToPost.value).toBe('')
+    })
+
+    it('leaves an unchanged limit out of the request', async () => {
+      mockPatch.mockResolvedValue({ data: { ...sampleClient, maximumFindingsToPost: 20 }, response: { ok: true } })
+      const vm = await loadClientWithLimit(20)
+
+      vm.editedMinimumRiskSeverityToPost.value = 'high'
+      await vm.savePostConfiguration()
+
+      const body = mockPatch.mock.calls[0]?.[1]?.body as Record<string, unknown>
+      expect(body).not.toHaveProperty('maximumFindingsToPost')
+    })
+
+    it.each(['0', '-3', '2.5'])('refuses the limit %s and keeps Save disabled', async (value) => {
+      const vm = await loadClientWithLimit(20)
+
+      vm.editedMaximumFindingsToPost.value = value
+
+      expect(vm.maximumFindingsToPostError.value).toContain('Maximum findings to post must be a whole number')
+      expect(vm.isPostConfigButtonEnabled()).toBe(false)
+    })
   })
 
   it('activates the post-configuration Save when only out-of-scope withholding changed', async () => {

@@ -38,6 +38,10 @@ internal static class PromptTemplateCatalog
                 PromptStageKeys.AcceptanceForecastSystem,
                 PromptStageRole.System,
                 "shared/acceptance-forecast-system.hbs"),
+            [PromptStageKeys.FindingRootCauseGroupingSystem] = new(
+                PromptStageKeys.FindingRootCauseGroupingSystem,
+                PromptStageRole.System,
+                "shared/finding-root-cause-grouping-system.hbs"),
             [PromptStageKeys.PerFileUser] = new(PromptStageKeys.PerFileUser, PromptStageRole.User, "file-by-file/per-file-user.hbs"),
             [PromptStageKeys.AgenticFilePlanningSystem] = new(
                 PromptStageKeys.AgenticFilePlanningSystem,

@@ -8,6 +8,13 @@ import { createAdminClient } from '@/services/api'
 import { useSession } from '@/composables/useSession'
 import { RoleLevel } from '@/composables/roles'
 import type { components } from '@/services/generated/openapi'
+import {
+  applyRowDestinations,
+  rowDestinations,
+  rowDestinationsChanged,
+  type FindingPostDestination,
+  type FindingTypeDestinations,
+} from './findingTypeDestinations'
 
 const detailTabs = [
   'config',
@@ -38,6 +45,7 @@ export type ReviewAdmissionPolicy = components['schemas']['ReviewAdmissionPolicy
 export type CommentSeverity = components['schemas']['CommentSeverity']
 export type FindingRiskSeverity = components['schemas']['FindingRiskSeverity']
 export type FindingBadgeStyle = components['schemas']['FindingBadgeStyle']
+export type { FindingPostDestination, FindingTypeDestinations } from './findingTypeDestinations'
 
 export interface ClientDetailDto {
   id: string
@@ -63,7 +71,14 @@ export interface ClientDetailDto {
   withholdOutOfScopeFindings?: boolean | null
   /** The lowest assessed risk a finding needs to be posted. Findings without a risk assessment are posted. */
   minimumRiskSeverityToPost?: FindingRiskSeverity | null
-  /** Core finding types that are not posted. A finding is held back when every type it carries is listed. */
+  /**
+   * The destination per finding type, keyed by core type slug or by core type slug with a qualifier. A type without an
+   * entry is posted as a comment.
+   */
+  findingTypeDestinations?: FindingTypeDestinations | null
+  /** The largest number of findings posted as comments on one pull request, or null when the client has no limit. */
+  maximumFindingsToPost?: number | null
+  /** Core finding types whose key alone has the destination `reviewOnly`. Read only; the view writes the map. */
   withheldFindingTypes?: string[] | null
   codeInsightsCollectionEnabled?: boolean | null
   /** The tenant of the client; a platform administrator reads its content only during an elevation. */
@@ -114,7 +129,12 @@ export interface ClientDetailViewModel {
   editedAutoResolveSeverities: Ref<CommentSeverity[]>
   editedWithholdOutOfScopeFindings: Ref<boolean>
   editedMinimumRiskSeverityToPost: Ref<FindingRiskSeverity>
-  editedWithheldFindingTypes: Ref<string[]>
+  /** The edited destination of each row of the destination setting, keyed by the key the row writes. */
+  editedFindingTypeDestinations: Ref<Record<string, FindingPostDestination>>
+  /** The edited maximum number of findings to post. An empty field means no limit. */
+  editedMaximumFindingsToPost: Ref<string>
+  /** Why the edited maximum number of findings to post cannot be saved, or an empty string. */
+  maximumFindingsToPostError: ComputedRef<string>
   editedCodeInsightsCollectionEnabled: Ref<boolean>
   editedMonthlyBudgetSoftCapUsd: Ref<string>
   editedMonthlyBudgetHardCapUsd: Ref<string>
@@ -373,6 +393,20 @@ export function admissionBoundsError(bounds: readonly (readonly [string, string]
     : `${invalid[0]} must be a whole number between 1 and ${MAX_ADMISSION_BOUND}, or blank for no bound.`
 }
 
+/** The largest maximum number of findings to post that the backend can store: the column is a nullable 32-bit integer. */
+export const MAX_FINDINGS_TO_POST = 2_147_483_647
+
+/**
+ * The message when the edited maximum number of findings to post is a value the backend refuses, or an empty string
+ * when it can be saved. The limit is a whole number of at least 1, and an empty field means no limit.
+ */
+export function maximumFindingsToPostError(value: string | number | null | undefined): string {
+  const limit = capFromInput(value)
+  return limit !== null && (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_FINDINGS_TO_POST)
+    ? `Maximum findings to post must be a whole number between 1 and ${MAX_FINDINGS_TO_POST}, or empty for no limit.`
+    : ''
+}
+
 /** Two pass lists are equal when they carry the same ordered (configured-model id, logical model, lens, scope,
  * shadow, reasoning level) tuples. */
 export function reviewPassesEqual(left: ReviewPassEntry[], right: ReviewPassEntry[]): boolean {
@@ -471,7 +505,8 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const editedAutoResolveSeverities = ref<CommentSeverity[]>([])
   const editedWithholdOutOfScopeFindings = ref(false)
   const editedMinimumRiskSeverityToPost = ref<FindingRiskSeverity>('low')
-  const editedWithheldFindingTypes = ref<string[]>([])
+  const editedFindingTypeDestinations = ref<Record<string, FindingPostDestination>>(rowDestinations({}))
+  const editedMaximumFindingsToPost = ref('20')
   const editedCodeInsightsCollectionEnabled = ref(false)
   const editedMonthlyBudgetSoftCapUsd = ref('')
   const editedMonthlyBudgetHardCapUsd = ref('')
@@ -551,7 +586,8 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedAutoResolveSeverities.value = [...(nextClient.autoResolveSeverities ?? [])]
     editedWithholdOutOfScopeFindings.value = Boolean(nextClient.withholdOutOfScopeFindings)
     editedMinimumRiskSeverityToPost.value = nextClient.minimumRiskSeverityToPost ?? 'low'
-    editedWithheldFindingTypes.value = [...(nextClient.withheldFindingTypes ?? [])]
+    editedFindingTypeDestinations.value = rowDestinations(nextClient.findingTypeDestinations)
+    editedMaximumFindingsToPost.value = capToInput(nextClient.maximumFindingsToPost)
     editedCodeInsightsCollectionEnabled.value = Boolean(nextClient.codeInsightsCollectionEnabled)
     editedMonthlyBudgetSoftCapUsd.value = capToInput(nextClient.budgetConfig?.monthlySoftCapUsd)
     editedMonthlyBudgetHardCapUsd.value = capToInput(nextClient.budgetConfig?.monthlyHardCapUsd)
@@ -879,7 +915,15 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
         autoResolveSeverities: editedAutoResolveSeverities.value,
         withholdOutOfScopeFindings: editedWithholdOutOfScopeFindings.value,
         minimumRiskSeverityToPost: editedMinimumRiskSeverityToPost.value,
-        withheldFindingTypes: editedWithheldFindingTypes.value,
+        findingTypeDestinations: applyRowDestinations(
+          client.value.findingTypeDestinations,
+          editedFindingTypeDestinations.value,
+        ),
+        // The limit is sent only when it changed, because the value null removes the limit and a client read without
+        // the field would otherwise lose its limit on every save. An empty field is sent as null.
+        ...(maximumFindingsToPostChanged(client.value)
+          ? { maximumFindingsToPost: capFromInput(editedMaximumFindingsToPost.value) }
+          : {}),
       })
       if (isFailedPatch(result)) {
         saveError.value = extractValidationMessage(result.error, 'Failed to save post configuration.')
@@ -981,17 +1025,25 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     )
   }
 
+  const maximumFindingsToPostErrorMessage = computed(() => maximumFindingsToPostError(editedMaximumFindingsToPost.value))
+
+  function maximumFindingsToPostChanged(stored: ClientDetailDto): boolean {
+    return capFromInput(editedMaximumFindingsToPost.value) !== (stored.maximumFindingsToPost ?? null)
+  }
+
   function isPostConfigButtonEnabled(): boolean {
     return (
       !saving.value &&
       client.value !== null &&
+      maximumFindingsToPostErrorMessage.value === '' &&
       (
         editedFindingBadgeStyle.value !== (client.value.findingBadgeStyle ?? 'shieldsIo') ||
         editedMinimumSeverityToPost.value !== (client.value.minimumSeverityToPost ?? 'info') ||
         !severitySetsEqual(editedAutoResolveSeverities.value, client.value.autoResolveSeverities ?? []) ||
         editedWithholdOutOfScopeFindings.value !== Boolean(client.value.withholdOutOfScopeFindings) ||
         editedMinimumRiskSeverityToPost.value !== (client.value.minimumRiskSeverityToPost ?? 'low') ||
-        !stringSetsEqual(editedWithheldFindingTypes.value, client.value.withheldFindingTypes ?? [])
+        rowDestinationsChanged(client.value.findingTypeDestinations, editedFindingTypeDestinations.value) ||
+        maximumFindingsToPostChanged(client.value)
       )
     )
   }
@@ -1058,7 +1110,9 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedAutoResolveSeverities,
     editedWithholdOutOfScopeFindings,
     editedMinimumRiskSeverityToPost,
-    editedWithheldFindingTypes,
+    editedFindingTypeDestinations,
+    editedMaximumFindingsToPost,
+    maximumFindingsToPostError: maximumFindingsToPostErrorMessage,
     editedCodeInsightsCollectionEnabled,
     editedMonthlyBudgetSoftCapUsd,
     editedMonthlyBudgetHardCapUsd,

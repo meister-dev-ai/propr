@@ -188,7 +188,7 @@ defineProps<{
     align-items: center;
     font-size: 0.68rem;
     padding: 0.1rem 0.45rem;
-    border-radius: var(--radius-pill, 999px);
+    border-radius: var(--radius-pill);
     border: 1px solid var(--color-border);
     color: var(--color-text-muted);
 }

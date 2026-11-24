@@ -25,10 +25,10 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Strategie
 
 /// <summary>
 ///     Synthesizes the final PR-level review result from completed per-file results. This executor gathers fresh
-///     file summaries and comments, resolves the synthesis model/runtime, deduplicates the comments, applies the
-///     quality filter only when the run skipped local verification, performs the synthesis and optional JSON repair
-///     pass on the remaining findings, then combines synthesized cross-file findings with final-gate evaluation to
-///     produce the final review summary and publishable comments.
+///     file summaries and comments, resolves the synthesis model/runtime, deduplicates the comments, groups them by root
+///     cause, applies the quality filter only when the run skipped local verification, performs the synthesis and
+///     optional JSON repair pass on the remaining findings, then combines synthesized cross-file findings with final-gate
+///     evaluation to produce the final review summary and publishable comments.
 /// </summary>
 internal sealed class ReviewSynthesisExecutor(
     IReviewFileResultStore jobRepository,
@@ -45,7 +45,8 @@ internal sealed class ReviewSynthesisExecutor(
     IChatClient? defaultChatClient = null,
     IFindingDeduplicator? findingDeduplicator = null,
     IReviewFindingFinalizationPipeline? reviewFindingFinalizationPipeline = null,
-    AcceptanceForecastExecutor? acceptanceForecastExecutor = null)
+    AcceptanceForecastExecutor? acceptanceForecastExecutor = null,
+    IFindingRootCauseGrouper? findingRootCauseGrouper = null)
 {
     private const int MaxRecordedMessageChars = 280;
 
@@ -141,9 +142,9 @@ internal sealed class ReviewSynthesisExecutor(
 
         var protocolId = await this.BeginSynthesisProtocolAsync(job, synthesisRuntime.ModelId, synthesisRuntime.LogicalModelName, ct);
 
-        // Deduplication and the quality filter run before the synthesis call. The synthesis model then receives only
-        // the findings that reach the gate, so its summary and its supporting finding ids cannot name a finding that
-        // one of these steps removed.
+        // Deduplication, the root-cause grouping and the quality filter run before the synthesis call. The synthesis model
+        // then receives only the findings that reach the gate, so its summary and its supporting finding ids cannot name a
+        // finding that one of these steps removed.
         var deduped = await this.DeduplicateAsync(job, baseContext, allComments, protocolId, ct);
         deduped = await this.ApplyQualityFilterAsync(job, baseContext, effectiveClient, deduped, fileFindingsJudged, protocolId, ct);
 
@@ -850,7 +851,42 @@ internal sealed class ReviewSynthesisExecutor(
             allComments.Count,
             deduplication,
             ct);
-        return deduplication.Comments.ToList();
+        return await this.GroupByRootCauseAsync(job, baseContext, deduplication.Comments, protocolId, ct);
+    }
+
+    // A file-by-file review reports a cause in every file where it shows. One model call groups the remaining findings by
+    // root cause, and each group becomes one comment at the line of its primary finding that lists the other places. The
+    // step runs for every review, independent of the deduplicator, and before the quality filter and the synthesis call,
+    // so the synthesis model receives each cause once. A grouping that fails keeps every finding.
+    private async Task<List<ReviewComment>> GroupByRootCauseAsync(
+        ReviewJob job,
+        ReviewSystemContext baseContext,
+        IReadOnlyList<ReviewComment> comments,
+        Guid? protocolId,
+        CancellationToken ct)
+    {
+        if (!options.EnableRootCauseGrouping || findingRootCauseGrouper is null || comments.Count < 2)
+        {
+            return comments.ToList();
+        }
+
+        if (await this.TryRecordSkippedStepAsync(protocolId, baseContext, FileByFileReviewStepIds.RootCauseGrouping, ct))
+        {
+            return comments.ToList();
+        }
+
+        var grouping = await findingRootCauseGrouper.GroupAsync(comments, job.ClientId, baseContext, ct);
+        await this.AddOutOfLoopSpendAsync(protocolId, grouping.Spend, ct);
+        var consolidation = RootCauseFindingConsolidator.Consolidate(comments, grouping.Groups);
+        await this.RecordCommentRemovalAsync(
+            protocolId,
+            ReviewProtocolEventNames.FindingDeduplication,
+            "root_cause",
+            comments.Count,
+            consolidation,
+            ct,
+            grouping.FallbackReason);
+        return consolidation.Comments.ToList();
     }
 
     // The quality filter judges comment text alone, without the code. When local verification decided the fresh file
@@ -948,7 +984,8 @@ internal sealed class ReviewSynthesisExecutor(
         string stage,
         int inputCount,
         FindingDeduplicationResult result,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? error = null)
     {
         if (!protocolId.HasValue)
         {
@@ -968,20 +1005,25 @@ internal sealed class ReviewSynthesisExecutor(
             details.stage,
             details.inputCount,
             details.outputCount,
-            merges = result.Merges.Select(merge => new
-            {
-                merge.Reason,
-                kept = merge.Kept.Select(DescribeComment).ToList(),
-                removed = merge.Removed.Select(DescribeComment).ToList(),
-            }).ToList(),
+            merges = result.Merges.Select(DescribeMerge).ToList(),
         };
         await protocolRecorder.RecordVerificationEventAsync(
             protocolId.Value,
             eventName,
             JsonSerializer.Serialize(details, FinalGateJsonOptions),
             JsonSerializer.Serialize(output, FinalGateJsonOptions),
-            null,
+            error,
             ct);
+    }
+
+    // A merge that names its cause records it next to the reason. The other merges keep their recorded shape.
+    private static object DescribeMerge(FindingMergeRecord merge)
+    {
+        var kept = merge.Kept.Select(DescribeComment).ToList();
+        var removed = merge.Removed.Select(DescribeComment).ToList();
+        return merge.Cause is null
+            ? new { merge.Reason, kept, removed }
+            : new { merge.Reason, merge.Cause, kept, removed };
     }
 
     // The identity of a comment in the trace: its anchor, severity, producing pass and the head of its message.
@@ -1004,6 +1046,9 @@ internal sealed class ReviewSynthesisExecutor(
         IReadOnlyList<FinalGateDecision> decisions)
     {
         var decisionsById = decisions.ToDictionary(decision => decision.FindingId, StringComparer.Ordinal);
+        var supportingFindingIds = candidateFindings
+            .SelectMany(finding => SupportingFindingIdsOf(finding) ?? [])
+            .ToHashSet(StringComparer.Ordinal);
         return candidateFindings
             .Where(finding => decisionsById.TryGetValue(finding.FindingId, out var decision)
                               && string.Equals(decision.Disposition, FinalGateDecision.PublishDisposition, StringComparison.Ordinal))
@@ -1032,8 +1077,32 @@ internal sealed class ReviewSynthesisExecutor(
                     // record can count findings per part of the codebase without re-parsing anything.
                     OriginSymbolName = finding.Provenance.OriginSymbolName,
                     OriginSymbolKind = finding.Provenance.OriginSymbolKind,
+
+                    // A comment that stands for a root-cause group keeps the other places and the size of the group.
+                    RelatedLocations = finding.RelatedLocations,
+                    RootCauseGroupSize = finding.RootCauseGroupSize,
+
+                    // A synthesized concern names the findings it rests on, and each of those findings keeps its
+                    // identifier. The publication policy leaves out a concern whose findings are all posted or listed
+                    // after the client's settings, because their comments already state it.
+                    FindingId = supportingFindingIds.Contains(finding.FindingId) ? finding.FindingId : null,
+                    SupportingFindingIds = SupportingFindingIdsOf(finding),
                 })
             .ToList();
+    }
+
+    // The findings a synthesized cross-cutting concern rests on. A concern that names itself as a supporting finding
+    // has none, so it is always posted.
+    private static IReadOnlyList<string>? SupportingFindingIdsOf(CandidateReviewFinding finding)
+    {
+        if (!string.Equals(finding.Provenance.OriginKind, CandidateFindingProvenance.SynthesizedCrossCuttingOrigin, StringComparison.Ordinal)
+            || finding.Evidence?.SupportingFindingIds is not { Count: > 0 } supporting
+            || supporting.Contains(finding.FindingId, StringComparer.Ordinal))
+        {
+            return null;
+        }
+
+        return supporting.Distinct(StringComparer.Ordinal).ToList().AsReadOnly();
     }
 
     // Appends a finalization-check note (e.g. an unverified-ERROR notice) to the published comment body as a

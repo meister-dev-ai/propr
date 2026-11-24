@@ -485,7 +485,8 @@ internal sealed partial class FileByFileReviewOrchestrator(
             aiRuntimeResolver,
             chatClient,
             new SemanticFindingDeduplicator(new AiFindingMergeJudge(aiRuntimeResolver)),
-            new ReviewFindingFinalizationPipeline([new RereadFinalizationCheck()], protocolRecorder));
+            new ReviewFindingFinalizationPipeline([new RereadFinalizationCheck()], protocolRecorder),
+            findingRootCauseGrouper: new AiFindingRootCauseGrouper(aiRuntimeResolver));
     }
 
     private CandidateFindingFactory GetCandidateFindingFactory()

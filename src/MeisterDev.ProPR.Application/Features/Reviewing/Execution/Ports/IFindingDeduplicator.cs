@@ -42,6 +42,12 @@ public sealed record FindingDeduplicationResult(IReadOnlyList<ReviewComment> Com
     public const string TokenSimilarityReason = "token_similarity";
 
     /// <summary>
+    ///     Merge reason of comments that report one root cause at several places. The kept comment stays at the location
+    ///     of the primary finding and lists the other places.
+    /// </summary>
+    public const string RootCauseReason = "root_cause";
+
+    /// <summary>
     ///     What the model calls of this deduplication consumed, one entry per call. Empty when no model was asked.
     ///     The synthesis adds these tokens to its protocol.
     /// </summary>
@@ -87,4 +93,11 @@ public sealed record FindingDeduplicationResult(IReadOnlyList<ReviewComment> Com
 /// <param name="Kept">The comments that represent the group after the merge.</param>
 /// <param name="Removed">The comments the merge removed.</param>
 /// <param name="Reason">Why the comments were merged.</param>
-public sealed record FindingMergeRecord(IReadOnlyList<ReviewComment> Kept, IReadOnlyList<ReviewComment> Removed, string Reason);
+public sealed record FindingMergeRecord(IReadOnlyList<ReviewComment> Kept, IReadOnlyList<ReviewComment> Removed, string Reason)
+{
+    /// <summary>
+    ///     The cause the merged comments share, in the words of the step that grouped them. <see langword="null" /> when the
+    ///     step names no cause.
+    /// </summary>
+    public string? Cause { get; init; }
+}

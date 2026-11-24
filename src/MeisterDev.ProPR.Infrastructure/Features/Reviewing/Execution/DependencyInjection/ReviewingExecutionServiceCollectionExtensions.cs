@@ -166,6 +166,10 @@ public static class ReviewingExecutionServiceCollectionExtensions
         // duplicates and never merges distinct bugs.
         services.AddScoped<IFindingMergeJudge, AiFindingMergeJudge>();
         services.AddScoped<IFindingDeduplicator, SemanticFindingDeduplicator>();
+
+        // Root-cause grouping runs for every review with one call on the verification model. Without a binding, or on any
+        // invalid answer, it returns no groups and every finding keeps its own comment.
+        services.AddScoped<IFindingRootCauseGrouper, AiFindingRootCauseGrouper>();
         services.AddScoped<ReviewSynthesisExecutor>();
         services.AddSingleton<ISummaryReconciliationService, SummaryReconciliationService>();
 

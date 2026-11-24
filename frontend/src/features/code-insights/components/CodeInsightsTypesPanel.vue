@@ -179,7 +179,7 @@ function countFor(key: string): number {
   gap: 0.45rem;
   padding: 0.35rem 0.7rem;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill, 999px);
+  border-radius: var(--radius-pill);
   background: var(--color-surface);
   color: var(--color-text);
   font-size: 0.8rem;

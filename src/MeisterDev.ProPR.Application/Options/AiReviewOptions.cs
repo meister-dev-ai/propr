@@ -172,6 +172,14 @@ public sealed class AiReviewOptions : IValidatableObject
     public bool EnableAcceptanceForecast { get; set; }
 
     /// <summary>
+    ///     Groups the findings of a pull request by root cause before the synthesis, with one model call on the model of the
+    ///     verification purpose, and posts one comment for each cause. The comment stays at the line of the finding where the
+    ///     cause is and lists the other places. On by default. Set to <see langword="false" /> to post every finding as its
+    ///     own comment. Bound to <c>AI_ROOT_CAUSE_GROUPING</c>.
+    /// </summary>
+    public bool EnableRootCauseGrouping { get; set; } = true;
+
+    /// <summary>
     ///     Maximum number of distinct tool-evidence entries retained across compaction when
     ///     <see cref="EnableRetainedToolEvidence" /> is enabled. Older entries beyond this count are not retained.
     /// </summary>
